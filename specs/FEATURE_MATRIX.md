@@ -44,7 +44,7 @@ This document compares **Plinky** against **PuTTY**, **KiTTY**, **MobaXterm**, a
      * Delta $\Delta = C_{target} - C_{cursor}$.
      * Emits calculated arrow movements (`\x1b[C` / `\x1b[D`) or word jumps (`Alt+F` / `Alt+B`).
 
-### 2.2. Multi-Channel Sync Input (Rust `SyncInputRouter`)
+### 2.2. Multi-Channel Sync Input (Rust `SyncInputRouter` - D6)
 * **WindTerm Behavior**: Users assign tabs to Channel A, B, C, or D. Keystrokes in any tab belonging to Channel A are mirrored to all other tabs in Channel A.
 * **Plinky Backend-Enforced Broadcast Architecture**:
   1. Keystroke fan-out is **never handled via multiple IPC roundtrips from the webview**. The frontend sends a single write payload to the backend session:
@@ -55,10 +55,11 @@ This document compares **Plinky** against **PuTTY**, **KiTTY**, **MobaXterm**, a
          protected_sessions: HashSet<SessionId>,
      }
      ```
-  2. **Trust Boundary Safety Rules**:
-     * **Multi-line Paste Guard**: When a multi-line string or command containing newlines is pasted into a broadcast channel, Plinky intercepts it and requires explicit user confirmation.
-     * **Protected Session Tagging**: Production servers tagged `protected` emit a prominent warning confirmation before accepting broadcast input.
-     * **Global Safety Lock**: Global shortcut (`Ctrl+Alt+S`) instantly disconnects broadcast routing with an onscreen HUD alert.
+  2. **D6: Strict State Filtering & Safety Gates**:
+     * **Filter by Session State (`Live` Only)**: The router broadcasts *strictly* to sessions in the `Live` state. It **never** broadcasts into a session that is in `PreAuth` (`HostKeyPending`, `PasswordPending`, `PassphrasePending`). Keystrokes meant for a remote bash cluster can never inadvertently be typed into an unauthenticated server's prompt.
+     * **Multi-Line Paste Confirmation**: A multi-line paste or command containing newline characters targeting a channel with **2 or more sessions** always prompts for explicit user confirmation with a diff modal showing the target sessions and payload.
+     * **Protected Session Tagging**: Sessions tagged `protected` (e.g. production servers) are excluded from broadcast by default and require explicit per-session opt-in before accepting synchronized input.
+     * **Global Emergency Disconnect**: A global hotkey (`Ctrl+Alt+S`) immediately disarms all sync channels with an onscreen HUD alert.
 
 ### 2.3. Integrated SFTP Explorer & Directory Following
 * **WindTerm Behavior**: Side pane displays remote directory and tracks the terminal's working directory automatically.
@@ -125,3 +126,10 @@ This document compares **Plinky** against **PuTTY**, **KiTTY**, **MobaXterm**, a
   * One-click navigation to previous command prompts (`Ctrl+Up` / `Ctrl+Down`).
   * Right-click *"Copy Command Output"*.
   * Desktop notification when a long-running command finishes with non-zero exit code.
+
+### 2.8. Storage & Configuration Persistence Invariants (R1 to R3)
+Derived directly from the bridge concurrency audits and fail-closed security invariants:
+* **R1 (Atomic Write & Fsync)**: Plinky configuration files (`settings.json`, `layout.json`, `snippets.json`, `markers.json`, `vault.bin`) are always written to a temporary sidecar file (`.tmp`), flushed, fsynced to disk (`os.fsync` / `File::sync_all`), and atomically renamed over the destination. Never report "saved" to the UI unless the atomic rename succeeded.
+* **R2 (Fail-Closed on Corrupt State)**: A missing file loads default configuration. A present but corrupted or unparseable file is immediately quarantined (`*.corrupt.<timestamp>`), an alert is logged/displayed, and it is **never** silently overwritten with defaults. Any read error aborts the write path.
+* **R3 (Schema Versioning & Unknown Field Preservation)**: All configuration files include a `schema_version` integer. Read-modify-write operations preserve unknown JSON fields so that upgrading/downgrading between versions never strips user settings.
+

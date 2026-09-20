@@ -11,6 +11,7 @@ This document tracks the directory architecture, file structure, component relat
 │
 ├── specs/                                # Technical Specifications & Proposal Suite
 │   ├── README.md                         # Overview of the research & specifications
+│   ├── SYSTEM_DESIGN.md                  # Comprehensive v1 System Design (M0-M7, IPC, security, threat model)
 │   ├── PROPOSAL.md                       # Comprehensive proposal: PuTTY Wrapper + WindTerm features
 │   ├── WINDTERM_ANALYSIS.md              # In-depth autopsy of kingToolbox/WindTerm & community requests
 │   ├── PUTTY_WRAPPER_SPEC.md             # Technical specification for PuTTY bridge & wrappers
@@ -24,35 +25,38 @@ This document tracks the directory architecture, file structure, component relat
 │
 ├── crates/
 │   ├── putty-compat/                     # Standalone PuTTY Compatibility Crate (Zero Tauri dependencies)
-│   │   ├── Cargo.toml                    # Dependencies: argon2, aes, cbc, hmac, sha1, sha2, winreg (Windows)
+│   │   │                                 # [D1 PROPOSED, PENDING OWNER DECISION: narrow v1 to session r/w,
+│   │   │                                 #  .ppk header inspection, and read-only hostkey listing; deferring full
+│   │   │                                 #  Argon2id .ppk decryption & agent client until needed]
+│   │   ├── Cargo.toml                    # Dependencies: winreg (Windows), serde, zeroize (argon2/aes if D1 keeps full crypto)
 │   │   ├── src/
 │   │   │   ├── lib.rs
-│   │   │   ├── sessions.rs               # PUTTYDIR / ~/.putty/sessions and WinReg parser
-│   │   │   ├── ppk.rs                    # Native .ppk v2/v3 parser with Argon2id decryption
-│   │   │   ├── hostkeys.rs               # ~/.putty/sshhostkeys verification and TOFU generator
-│   │   │   └── pageant.rs                # Unix Domain Socket ($SSH_AUTH_SOCK) & Windows Named Pipe IPC
-│   │   ├── tests/                        # Headless cross-platform integration tests
+│   │   │   ├── sessions.rs               # PUTTYDIR / ~/.putty/sessions and WinReg parser/writer
+│   │   │   ├── ppk.rs                    # .ppk v2/v3 header parsing & fingerprinting (decryption pending owner)
+│   │   │   ├── hostkeys.rs               # Read-only hostkey listing (~/.putty/sshhostkeys & WinReg)
+│   │   │   └── pageant.rs                # Pageant IPC bridge (pending owner / key manager phase)
+│   │   ├── tests/                        # Headless cross-platform integration tests (real puttygen 0.85 fixtures)
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
-│   └── plinky-core/                      # Core Terminal & Connection Engine
-│       ├── Cargo.toml                    # Dependencies: portable-pty, serialport, tokio, russh
+│   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
+│       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, tracing, zeroize, argon2, aes-gcm, winreg
 │       └── src/
 │           ├── lib.rs
 │           ├── transport/                # Unified Transport Abstraction
 │           │   ├── mod.rs                # Transport trait (read, write, resize, close)
-│           │   ├── plink.rs              # Primary: /usr/bin/plink under portable-pty with -share
+│           │   ├── plink.rs              # Primary: plink under portable-pty with -share
 │           │   ├── local_pty.rs          # Local shell PTY (bash, zsh, powershell)
-│           │   ├── serial.rs             # Hardware serial port (/dev/ttyUSB*, COM*)
-│           │   └── russh_fallback.rs     # In-process SSH fallback for dynamic port forwarding
-│           ├── session/                  # Session Lifecycle & State Persistence
+│           │   └── serial.rs             # Hardware serial port (via `plink -serial`)
+│           ├── session/                  # Session Lifecycle & State Persistence (D3 state machine)
 │           │   ├── mod.rs
 │           │   ├── manager.rs            # Active session registry (survives webview reload)
-│           │   └── ring_buffer.rs        # Scrollback memory buffer for fast re-attachment
-│           ├── sync/                     # Multi-Session Input Broadcasting
-│           │   └── router.rs             # SyncInputRouter (Rust-side fanout, paste guard, safety locks)
+│           │   ├── state_machine.rs      # PreAuth state machine (HostKeyPending, PasswordPending -> Live)
+│           │   └── ring_buffer.rs        # Scrollback memory buffer (2 MiB per session credit window)
+│           ├── sync/                     # Multi-Session Input Broadcasting (D6)
+│           │   └── router.rs             # SyncInputRouter (Rust fanout, Live-only filtering, paste guard)
 │           ├── tunnel/                   # Port Forwarding & Tunnels
 │           │   ├── mod.rs
-│           │   └── forwarder.rs          # Dynamic, Local, and Remote tunnel manager
+│           │   └── forwarder.rs          # Dynamic, Local, and Remote tunnel manager (via plink)
 │           └── shell_integration/        # Semantic Shell Support
 │               ├── mod.rs
 │               └── bootstrap.rs          # Auto-injection snippets for bash, zsh, fish (OSC 133 + OSC 7)
@@ -108,5 +112,19 @@ This document tracks the directory architecture, file structure, component relat
     │   └── useSFTP.ts                    # Remote filesystem navigation and directory following
     └── styles/                           # Styling & Theme Variables
         ├── themes/                       # WindTerm Dark, PuTTY Classic, Dracula, Nord
-        └── main.css                      # Global layout & docking styles
 ```
+
+---
+
+## Phased Implementation Milestones (D7: Vertical Slice Before Breadth)
+
+| Milestone | Deliverable | Acceptance Criteria |
+| :--- | :--- | :--- |
+| **M0** | **Phase 0 Spikes (S1–S4)**: WebGL throughput, plink under PTY (auth boundary, resize, exact prompt text), `-share` lifecycle, psftp parsing on Linux and Windows | Numeric thresholds fixed before spikes; results documented as ADRs; unknowns tagged `[?]` resolved. |
+| **M1** | **CI & Threat Model**: GitHub Actions CI (Linux + Windows), `cargo-deny`, threat-model doc, localhost `sshd` test fixture | All automated CI jobs green on both platforms. |
+| **M2** | **Walking Skeleton**: Hard-coded session, single tab, `tauri::ipc::Channel` + flow control + ring buffer, reload-and-reattach | Webview reload keeps session alive; keystroke latency & throughput meet M0 thresholds. |
+| **M3** | **`putty-compat` v1**: Sessions r/w, `.ppk` header parser/fingerprinter, read-only hostkey listing, session tree | Fixtures generated via real `/usr/bin/puttygen 0.85`; parser edge cases covered; `cargo-fuzz` clean. |
+| **M4** | **Pre-Auth State Machine & Vault**: State machine (D3), Argon2id vault (R1–R3), `putty_detect` command | Scripted host-key and password flows pass; hostile banner cannot trigger credential auto-fill. |
+| **M5** | **Docking Layout & Sync Router**: `dockview` multi-tab/split layout, layout persistence, `SyncInputRouter` (D6), shell integration bootstrap | Sync race conditions audited; state-filtering tests pass (`Live` sessions only). |
+| **M6** | **WindTerm Productivity Features**: Free Type Mode, regex markers/link provider, snippet bar | Gating tests pass (alternate buffer suppression, DECCKM, OSC 133 semantic region). |
+| **M7** | **SFTP & Port Forwarding**: Dual-pane file manager, directory following, visual tunnels (scoped by S3/S4) | Transfers resume; unsupported tunnel types cleanly documented. |

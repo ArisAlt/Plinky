@@ -89,3 +89,14 @@
   - S4: `psftp` batch parsing robustness (spaces, newlines, unicode, symlinks) vs `russh-sftp`.
 * Phased Plan Gateways: Phase 1 (CI & Threat Model) -> Phase 2 (`crates/putty-compat` with real oracle fixtures & fuzzing) -> Phase 3 (`crates/plinky-core`) -> Phase 4 (React 19 + dockview frontend) -> Phase 5 (SFTP & tunnels). Claude audits each phase diff before commit with explicit test coverage annotations.
 
+### 8. SYSTEM DESIGN V1 (CLAUDE MSG #105) & ARCHITECTURAL CONSENSUS
+* Document Landed: `specs/SYSTEM_DESIGN.md` (authored by Claude, landed at `25e482f` / `b907f02`).
+* D2 (Hostkey Ownership): Plinky never writes host keys directly. Plink owns verification & storage; Plinky presents fingerprint and answers plink prompt (`y`/`n`). Handles Linux file (`~/.putty/sshhostkeys`) and Windows registry (`HKCU\Software\SimonTatham\PuTTY\SshHostKeys` [?]).
+* D3 (Pre-Auth State Machine): `Created -> Spawning -> PreAuth{HostKeyPending | PasswordPending | PassphrasePending} -> Live -> Closing -> Closed`. Interceptors active strictly in `PreAuth`, match exact `plink 0.85` text, answer once, default to deny. Auto-fill only standard password prompt from vault bound to session; NEVER auto-fill keyboard-interactive challenges. No `-pw`. Open problem for Spike S2: detect `PreAuth -> Live` boundary without explicit plink delimiter.
+* D4 (Read-Only PuTTY Store): PuTTY store is read-only by default. Plinky metadata (folders, tags, colors, `protected`, sync channels) stored in Plinky config sidecar (`settings.json`). "Save back to PuTTY" is opt-in with backup, atomic write, and round-trip verification.
+* D5 (Minimal Dependencies v1): `tauri`, `portable-pty`, `tokio`, `serde`, `tracing`, `zeroize`, `argon2`, `aes-gcm`, `winreg`. No `russh`/`ssh2`. Serial through `plink -serial`.
+* D6 (SyncInputRouter Safety): Broadcast only to `Live` sessions (never into `PreAuth` prompts); honours `protected` tag; requires confirmation on multi-line paste to >= 2 sessions.
+* D7 (Vertical Slice Roadmap M0-M7): M0 Spikes -> M1 CI & Threat Model -> M2 Walking Skeleton (one session, one tab, `Channel` flow control + ring buffer, reload-reattach) before breadth/crates -> M3 `putty-compat` v1 -> M4 PreAuth/Vault -> M5 Dockview/Sync -> M6 FreeType/Markers -> M7 SFTP/Tunnels.
+* R1-R3 (Persistence Invariants): Atomic temp + fsync + rename (R1); corrupt state quarantined (`*.corrupt.<ts>`) & fail-closed on write (R2); schema versioning & unknown fields preserved (R3).
+* D1 (Owner Decision Flagged): Claude proposes narrowing `putty-compat` v1 to session r/w, `.ppk` header inspection, and read-only hostkey listing, deferring full Argon2id PPK decryption and agent client. Documented as proposed, pending owner decision.
+

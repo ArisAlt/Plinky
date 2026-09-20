@@ -71,19 +71,17 @@ flowchart TD
     subgraph Rust_Backend ["crates/plinky-core (Core Terminal Engine)"]
         ChannelStream["tauri::ipc::Channel (Binary Streaming & Watermarks)"]
         PTYMgr["PTY & Process Lifecycle (portable-pty)"]
-        SyncRouter["SyncInputRouter (Backend Fanout & Paste Guard)"]
+        SyncRouter["SyncInputRouter (Live-Only Filtering & Paste Guard)"]
         SessionMgr["Session Manager & Scrollback Ring Buffers"]
-        SerialEngine["Hardware Serial Port Manager (serialport)"]
         ShellBootstrap["Shell Integration Bootstrap (OSC 133 + OSC 7)"]
+        PlinkRunner["Plink Transport (/usr/bin/plink -share / -serial)"]
     end
 
     subgraph PuTTY_Subsystem ["crates/putty-compat (Standalone PuTTY Crate)"]
         LinuxReg["Linux PUTTYDIR / ~/.putty/sessions File Parser & Writer"]
         WinReg["Windows Registry Bridge (winreg crate)"]
-        PPKEngine[".ppk (v2/v3) Parser, Argon2id & AES-256-CBC"]
-        AgentBridge["Unix Domain Socket ($SSH_AUTH_SOCK) & Pageant Named Pipe"]
-        HostKeyVerifier["Host Key Verification (~/.putty/sshhostkeys + TOFU)"]
-        PlinkPrimary["Primary Transport: /usr/bin/plink (-share)"]
+        PPKEngine[".ppk (v2/v3) Header Parser & Fingerprinting"]
+        HostKeyVerifier["Host Key Listing (~/.putty/sshhostkeys & WinReg)"]
     end
 
     UI_Workbench <-->|tauri::ipc::Channel (Raw Binary)| Rust_Backend
@@ -93,20 +91,24 @@ flowchart TD
 
 ---
 
-## 5. Architectural Decisions (ADRs) & Roadmap
+## 5. Architectural Specifications & Milestones
 
-### Key Decisions
+### Core Technical Specifications
+* **[SYSTEM_DESIGN.md](file:///home/citizenzero/Dev/Plinky/specs/SYSTEM_DESIGN.md)**: **Master v1 System Design** (IPC contracts, data flow, pre-auth state machine, threat model, persistence rules R1–R3, milestones M0–M7).
 * **[ADR-001](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-001-primary-ssh-transport.md)**: **`plink` Only for v1**. `russh` is deferred behind empirical spike results to preserve single-stack auditability and 100% PuTTY fidelity.
 * **[ADR-002](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-002-putty-discovery-and-versioning.md)**: **System PuTTY Detection (Floor: 0.75+)**. No binary bundling in v1; Tier 1 platforms: Linux & Windows (macOS on hold).
 
-### Phased Implementation Roadmap
-1. **Phase 0: Empirical Spikes (Numeric Thresholds)**:
-   * **S1**: `xterm.js` WebGL throughput & keystroke latency on WebKitGTK (Wayland) and WebView2 (Windows) during saturated stream (`cat bigfile` / `yes`).
-   * **S2**: `plink` under `portable-pty`: terminal resize propagation (Linux vs Windows ConPTY) and exact host-key prompt text.
-   * **S3**: `plink -share` lifecycle (terminal tab closure vs active SFTP transfers; downstream port forwards).
-   * **S4**: `psftp` batch parsing robustness (spaces, newlines, Unicode, symlinks) vs `russh-sftp`.
-2. **Phase 1: CI & Threat Model**: Linux & Windows CI matrix, localhost `sshd` integration target, `cargo-deny`, and remote escape threat model.
-3. **Phase 2 (`crates/putty-compat`)**: Standalone PuTTY session parser (`PUTTYDIR`, `~/.putty`, WinReg), `.ppk` v2/v3 decryptor, and `sshhostkeys`. Real test vectors generated via `/usr/bin/puttygen 0.85` oracle; `cargo-fuzz` corpus.
-4. **Phase 3 (`crates/plinky-core`)**: `portable-pty` launcher, `plink -share` runner, `tauri::ipc::Channel` binary flow control, Rust `SyncInputRouter`, and shell integration bootstrap.
-5. **Phase 4 (Frontend Workbench)**: React 19 + `dockview` (`renderer: 'always'`) + `xterm.js` terminal workbench with reload-and-reattach, Free Type Mode, and regex markers.
-6. **Phase 5 (SFTP & Tunnels)**: Integrated SFTP dual-pane explorer via `psftp -share`, transfer queue, and visual tunnel manager (scoped by S3 & S4 findings).
+### Phased Implementation Milestones (D7: Vertical Slice Before Breadth)
+* **M0: Phase 0 Empirical Spikes (Numeric Thresholds)**:
+  * **S1**: `xterm.js` WebGL throughput & keystroke latency on WebKitGTK (Wayland) and WebView2 (Windows) during saturated stream (`cat bigfile` / `yes`).
+  * **S2**: `plink` under `portable-pty`: terminal resize propagation (Linux vs Windows ConPTY), pre-auth to live boundary detection, and exact prompt text matching.
+  * **S3**: `plink -share` lifecycle (terminal tab closure vs active SFTP transfers; downstream port forwards).
+  * **S4**: `psftp` batch parsing robustness (spaces, newlines, Unicode, symlinks) vs `russh-sftp`.
+* **M1: CI & Threat Model**: Linux & Windows CI matrix, localhost `sshd` integration target, `cargo-deny`, remote escape threat model.
+* **M2: Walking Skeleton**: Single end-to-end session, single tab, `tauri::ipc::Channel` binary flow control, scrollback ring buffer, reload-and-reattach survival.
+* **M3: `putty-compat` v1**: Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), `.ppk` header parser/fingerprinter, read-only hostkey listing, real `/usr/bin/puttygen 0.85` test oracle fixtures, `cargo-fuzz` corpus. *(D1: full Argon2id decryption pending owner decision)*.
+* **M4: Pre-Auth State Machine & Vault**: Pre-auth prompt state machine (D3), Argon2id vault (R1–R3), `putty_detect` command.
+* **M5: Docking Layout & Sync Router**: `dockview` multi-tab/split layout, layout persistence, `SyncInputRouter` (D6: `Live`-only broadcast, paste guard), shell integration bootstrap.
+* **M6: WindTerm Productivity**: Gated Free Type Mode (OSC 133 prompt regions, DECCKM aware), regex markers & link provider, parameterized snippet bar.
+* **M7: SFTP & Port Forwarding**: Dual-pane file manager, directory following (OSC 7), visual tunnel manager (scoped by S3 & S4 findings).
+

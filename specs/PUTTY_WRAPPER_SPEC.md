@@ -51,8 +51,11 @@ SerialFlowControl=1
 PublicKeyFile=/home/user/.ssh/key.ppk
 ```
 
-### 1.2. Host Key Verification (`sshhostkeys`) & TOFU State Machine
-PuTTY on Linux verifies host keys using `~/.putty/sshhostkeys` (or `$PUTTYDIR/sshhostkeys`).
+### 1.2. Host Key Verification & Pre-Auth Prompt State Machine (D2, D3)
+PuTTY stores verified host keys in:
+- **Linux**: `~/.putty/sshhostkeys` (or `$PUTTYDIR/sshhostkeys`)
+- **Windows**: Windows Registry under `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\SshHostKeys` **[?]**
+
 Each entry follows the PuTTY format:
 ```
 <key-type>@<port>:<hostname> <key-data-hex>
@@ -64,11 +67,23 @@ ssh-ed25519@22:10.10.10.10 0x28b56069f86246d18d5ff08c40029803e298d3f5d21cb1b6157
 ecdsa-sha2-nistp256@22:host 0x...
 ```
 
-* **Strict TOFU Security State Machine**:
-  Scraping prompts out of an unconstrained PTY stream creates a severe security hazard where a compromised remote server could emit synthetic prompt strings to manipulate local trust state. Plinky enforces a strict pre-authentication state machine:
-  1. **State `Connecting`**: The session launches in pre-auth mode. The TOFU listener is armed exclusively during this window.
-  2. **Fail-Closed Strategy (`plink -batch`)**: Alternatively, Plinky can run `plink -batch` initially. If the host key is unknown or mismatched, `plink` terminates immediately with exit code 1, emitting the key fingerprint in stderr. Plinky catches this failure, shows an authenticated native GUI dialog with the key fingerprint, and upon user confirmation re-launches with `-hostkey <fingerprint>`.
-  3. **State `Authenticated`**: As soon as the terminal transitions to `Authenticated`, the TOFU handler is permanently disarmed for the remainder of the session. In-session terminal output can **never** trigger trust dialogs or write to `sshhostkeys`.
+* **D2: Plinky Never Writes Host Keys Directly**:
+  `plink` owns host key verification and storage. Plinky never writes or appends directly to `sshhostkeys` or the registry. Plinky presents the host key fingerprint to the user via a native UI dialog and feeds `plink`'s interactive prompt (`y`/`n`). This avoids divergent host-key formats, race conditions with external PuTTY processes, and cross-platform registry/file store discrepancies.
+
+* **D3: Per-Session Pre-Authentication State Machine**:
+  Scraping prompts out of an unconstrained PTY stream creates a severe security hazard where a compromised remote server could emit synthetic prompt strings to manipulate local trust or capture credentials. Plinky enforces a strict per-session lifecycle:
+  ```
+  Created -> Spawning -> PreAuth{HostKeyPending | PasswordPending | PassphrasePending} -> Live -> Closing -> Closed{exit | error}
+  ```
+  1. **Prompt Interceptors Armed Exclusively in `PreAuth`**: Interceptors exist only while in `PreAuth`. They match exact `plink 0.85` text, answer once, and default to deny on anything unparsed.
+  2. **Hostile Banner & Challenge Defense**: A hostile remote server controls its pre-authentication banner and keyboard-interactive challenge text. Plinky auto-fills only the standard password prompt, once, from the vault credential bound to that session. Plinky **never** auto-fills a keyboard-interactive challenge.
+  3. **No Auth in Process Arguments**: `plink -pw` is strictly prohibited to prevent credential exposure in `ps` and task managers.
+  4. **Open Problem for Spike S2 [?]**: `plink` emits no explicit "authenticated" delimiter upon completing the handshake. Spike S2 evaluates candidate markers: verbose output (`-v`) lines, first prompt detection / OSC 133 semantic prompt marker, or an initial post-handshake timeout.
+  5. **Disarmed in `Live`**: As soon as the session transitions to `Live`, all interceptors are permanently destroyed. In-session terminal output can **never** trigger trust dialogs, password auto-fills, or vault reads.
+
+* **D4: Read-Only PuTTY Session Store by Default**:
+  PuTTY's session store is treated as read-only by default. Plinky-specific metadata (hierarchical folders, tags, tab colors, `protected` server flags, default sync channel) lives in Plinky's dedicated configuration store (`$XDG_CONFIG_HOME/plinky/settings.json` / `%APPDATA%\Plinky\settings.json`) keyed by session name. PuTTY rewrites session files in full and drops unknown keys, so Plinky fields are never stored in PuTTY's files.
+  "Save back to PuTTY" is an explicit user opt-in: writes a backup first, writes atomically (temp file + `fsync` + rename), and requires passing a round-trip test on real session files.
 
 ### 1.3. Windows PuTTY Storage (Registry)
 On Windows, PuTTY persists sessions in the Windows Registry under:
