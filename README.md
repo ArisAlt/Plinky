@@ -93,11 +93,20 @@ flowchart TD
 
 ---
 
-## 5. Getting Started & Roadmap
+## 5. Architectural Decisions (ADRs) & Roadmap
 
-1. **Phase 0**: WebKitGTK + xterm.js WebGL throughput spike on Wayland/Linux (`cat bigfile`).
-2. **Phase 1 (Current)**: Research, WindTerm autopsy, and hardened technical specifications (`specs/`).
-3. **Phase 2 (`crates/putty-compat`)**: Standalone PuTTY session parser, `.ppk` v2/v3 decryptor, `sshhostkeys` TOFU, and Pageant bridge with fuzzing harness.
-4. **Phase 3 (`crates/plinky-core`)**: `portable-pty` launcher, `plink -share` runner, binary IPC channels, and Rust `SyncInputRouter`.
-5. **Phase 4 (Frontend Workbench)**: React 19 + `dockview` + `xterm.js` terminal workbench with Free Type Mode and regex markers.
-6. **Phase 5 (SFTP & Tunnels)**: Integrated SFTP dual-pane explorer via `psftp -share`, transfer queue, and visual tunnel manager.
+### Key Decisions
+* **[ADR-001](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-001-primary-ssh-transport.md)**: **`plink` Only for v1**. `russh` is deferred behind empirical spike results to preserve single-stack auditability and 100% PuTTY fidelity.
+* **[ADR-002](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-002-putty-discovery-and-versioning.md)**: **System PuTTY Detection (Floor: 0.75+)**. No binary bundling in v1; Tier 1 platforms: Linux & Windows (macOS on hold).
+
+### Phased Implementation Roadmap
+1. **Phase 0: Empirical Spikes (Numeric Thresholds)**:
+   * **S1**: `xterm.js` WebGL throughput & keystroke latency on WebKitGTK (Wayland) and WebView2 (Windows) during saturated stream (`cat bigfile` / `yes`).
+   * **S2**: `plink` under `portable-pty`: terminal resize propagation (Linux vs Windows ConPTY) and exact host-key prompt text.
+   * **S3**: `plink -share` lifecycle (terminal tab closure vs active SFTP transfers; downstream port forwards).
+   * **S4**: `psftp` batch parsing robustness (spaces, newlines, Unicode, symlinks) vs `russh-sftp`.
+2. **Phase 1: CI & Threat Model**: Linux & Windows CI matrix, localhost `sshd` integration target, `cargo-deny`, and remote escape threat model.
+3. **Phase 2 (`crates/putty-compat`)**: Standalone PuTTY session parser (`PUTTYDIR`, `~/.putty`, WinReg), `.ppk` v2/v3 decryptor, and `sshhostkeys`. Real test vectors generated via `/usr/bin/puttygen 0.85` oracle; `cargo-fuzz` corpus.
+4. **Phase 3 (`crates/plinky-core`)**: `portable-pty` launcher, `plink -share` runner, `tauri::ipc::Channel` binary flow control, Rust `SyncInputRouter`, and shell integration bootstrap.
+5. **Phase 4 (Frontend Workbench)**: React 19 + `dockview` (`renderer: 'always'`) + `xterm.js` terminal workbench with reload-and-reattach, Free Type Mode, and regex markers.
+6. **Phase 5 (SFTP & Tunnels)**: Integrated SFTP dual-pane explorer via `psftp -share`, transfer queue, and visual tunnel manager (scoped by S3 & S4 findings).

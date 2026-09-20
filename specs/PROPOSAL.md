@@ -161,31 +161,54 @@ Unlike WindTerm's controversial closed-source core:
 
 | Component | Selected Technology | Rationale |
 | :--- | :--- | :--- |
-| **Desktop Runtime** | **Tauri v2 (Rust)** | Ultra-low memory usage, instantaneous startup, native machine code security. |
-| **PTY Management** | **`portable-pty` (Rust)** | Battle-tested cross-platform PTY engine supporting Unix PTY on Linux/macOS and ConPTY on Windows. |
-| **Primary Transport** | **`/usr/bin/plink` with `-share`** | Full PuTTY parity: honours `-load`, `sshhostkeys`, Pageant, proxies. Multiplexes SFTP (`psftp -share`) without redundant SSH handshakes. |
-| **Auxiliary Transport** | **`russh` (Rust)** | In-process SSH fallback specifically for dynamic runtime port forwarding (`-L`, `-R`, `-D`). |
+| **Desktop Runtime** | **Tauri v2 (Rust)** | Linux & Windows Tier 1 targets (macOS on hold per ADR-002). Minimal memory footprint, native security. |
+| **PTY Management** | **`portable-pty` (Rust)** | Battle-tested cross-platform PTY engine supporting Unix PTY on Linux and ConPTY on Windows. |
+| **Primary Transport** | **`/usr/bin/plink` with `-share`** | Full PuTTY fidelity (ADR-001): honours `-load`, `sshhostkeys`, Pageant, proxies. Multiplexes SFTP (`psftp -share`). |
+| **Auxiliary Transport** | **Deferred behind spikes** | `russh` is deferred per ADR-001; evaluated only if Phase 0 spikes prove a feature cannot be achieved via `plink`. |
 | **IPC Streaming** | **`tauri::ipc::Channel`** | High-throughput binary streaming with backpressure watermarks. Session state & ring buffers live in Rust core. |
 | **Terminal Core** | **`xterm.js` + `@xterm/addon-webgl`** | Hardware-accelerated terminal renderer with direct buffer access for Free Type Mode and regex markers. |
 | **UI Framework & Docking** | **React 19 + TypeScript + `dockview`** | Professional IDE docking framework; supports `renderer: 'always'` to prevent tab destruction during layout manipulation. |
 | **PuTTY Subsystem** | **`crates/putty-compat`** | Standalone Rust crate (no Tauri dependencies) parsing `PUTTYDIR` / `~/.putty/sessions`, Windows Registry, and `.ppk` (v2/v3). |
-| **Agent IPC** | **Rust `tokio::net` / Windows Pipes** | Native Unix Domain Sockets (`$SSH_AUTH_SOCK`) on Linux/macOS and Named Pipes (`\\.\pipe\pageant.*`) on Windows. |
-| **Host Key TOFU** | **Rust `hostkeys` module** | Strict verification against `~/.putty/sshhostkeys` with interactive Trust-On-First-Use prompts. |
+| **Agent IPC** | **Rust `tokio::net` / Windows Pipes** | Native Unix Domain Sockets (`$SSH_AUTH_SOCK`) on Linux and Named Pipes (`\\.\pipe\pageant.*`) on Windows. |
+| **Host Key TOFU** | **Rust `hostkeys` module** | Strict pre-authentication state machine against `~/.putty/sshhostkeys` or fail-closed `plink -batch` pattern. |
+| **PuTTY Discovery** | **System Detection (ADR-002)** | Detects installed PuTTY (PATH / Program Files); enforces 0.75+ version floor; no binary bundling in v1. |
 | **Serial Communication** | **`serialport` (Rust)** | Direct communication with embedded hardware and USB consoles (`/dev/ttyUSB*`, `COM*`). |
 | **Credential Vault** | **Rust `aes-gcm` + `argon2`** | Memory-safe, audited cryptographic primitives for master password vault. |
 
 ---
 
-## 6. Implementation Phasing
+## 6. Implementation Phasing & Formal Plan (Linux + Windows)
 
-* **Phase 0: Architecture, Wayland & Connection Sharing Spike**:
-  * Verify WebKitGTK + xterm.js WebGL performance on Wayland/Linux under high-throughput `cat bigfile` load.
-  * Empirically test `plink -share` / `psftp -share` connection sharing lifecycle on Linux (e.g. upstream terminal tab closure vs active downstream SFTP transfers; reverse teardown).
-* **Phase 1: Specs & Architecture Consolidation (Current)**: Formalize Cargo workspace, PuTTY wrapper specs, and dual-agent Writer/Critic loop with Claude Desktop.
-* **Phase 2: PuTTY Compatibility Crate (`crates/putty-compat`)**:
-  * Implement standalone parsers for `PUTTYDIR`/`~/.putty/sessions`, `sshhostkeys` (with pre-auth TOFU state machine), and `.ppk` v2/v3 keys.
-  * Generate test fixtures using real oracle (`/usr/bin/puttygen 0.85` on host) for RSA, ECDSA, and Ed25519 (unencrypted + passphrase-protected), cross-checked against `puttygen -O private-openssh`.
-  * Tampered-MAC, truncated-file, and escaped session file test suites under `cargo-fuzz`.
-* **Phase 3: Core Runtime & Transport (`crates/plinky-core`)**: `portable-pty` process launcher, `plink -share` runner, `tauri::ipc::Channel` binary streaming, and Rust `SyncInputRouter`.
-* **Phase 4: Terminal UI & Free Type Mode**: React 19 + `dockview` + `xterm.js` workspace with OSC 133 semantic prompt navigation and Free Type Mode.
-* **Phase 5: Sync Broadcast, SFTP Explorer & Tunneling**: 4-channel sync input, dual-pane SFTP via `psftp -share`, and visual tunnel manager.
+### Phase 0: Empirical Spikes (Numeric Pass/Fail Thresholds)
+Before committing to implementation details, four concrete spikes with predefined thresholds must be executed on Linux (CachyOS Wayland) and Windows (owner test script):
+* **Spike S1 (Renderer & Latency)**: Measure `xterm.js` WebGL throughput and keystroke-echo latency (p95 target $\le 16\text{ms}$) while running saturated stream output (`cat bigfile` / `yes`) on WebKitGTK and WebView2, with automatic DOM-renderer fallback.
+* **Spike S2 (PTY & Resize)**: Verify `plink` under `portable-pty`: test terminal resize signal propagation on Linux PTY and Windows ConPTY; record exact `plink 0.85` host-key prompt text and `-batch` fail-closed / `-hostkey` behavior.
+* **Spike S3 (`-share` Lifecycle)**: Test upstream `plink -share` terminal tab closure while downstream `psftp -share` transfer is active; test reverse teardown; verify whether downstream connections can carry `-L` and `-R` port forwards.
+* **Spike S4 (`psftp` Parsing Robustness)**: Evaluate robustness of parsing `psftp` batch listings containing spaces, newlines, Unicode, and symlinks vs `russh-sftp`.
+* **Phase 0 Gate**: Record all empirical results as ADRs; finalize the `russh` decision (ADR-001).
+
+### Phase 1: CI & Threat Model
+* Setup GitHub Actions CI matrix for Linux and Windows runners.
+* Configure localhost `sshd` integration test target.
+* Enforce `cargo-deny` (license compliance and vulnerability audit).
+* Draft comprehensive threat model document covering remote-controlled terminal escapes (OSC 52, OSC 8, synthetic prompt injection).
+
+### Phase 2: PuTTY Compatibility Crate (`crates/putty-compat`)
+* Implement standalone session parsers (`PUTTYDIR`, `XDG_CONFIG_HOME`, `~/.putty/sessions`, Windows Registry), `.ppk` v2/v3 decryptor, `sshhostkeys`, and Pageant IPC.
+* **Gate**: Real test vectors generated via host oracle (`/usr/bin/puttygen 0.85`) across RSA, ECDSA, Ed25519 (unencrypted + passphrase-protected), cross-checked against `puttygen -O private-openssh`.
+* Fuzz corpus clean (`cargo-fuzz`) for tampered-MAC, truncated-file, and escaped session strings (`uxstore.c`).
+* Diff audit by Claude with explicit test coverage annotations.
+
+### Phase 3: Core Runtime & Connection Engine (`crates/plinky-core`)
+* Implement `Transport` trait, `plink` process manager, session lifecycle registry with scrollback ring buffer, `tauri::ipc::Channel` binary flow control, and Rust `SyncInputRouter` (multi-line paste guard, protected session tags).
+* Implement shell integration bootstrap (`OSC 133` + `OSC 7` snippets for bash/zsh/fish).
+* **Gate**: Headless integration tests against localhost `sshd`; Claude race review of sync broadcast.
+
+### Phase 4: Frontend UI Workbench (`src/`)
+* React 19 + `dockview` (configured with `renderer: 'always'`) + `xterm.js` terminal tabs.
+* External `xtermRegistry` outside React lifecycle for tab-drag persistence.
+* Gated Free Type Mode (alternate buffer suppression, DECCKM cursor keys, OSC 133 B..C prompt gating) and real-time regex markers (color decorations + `registerLinkProvider`).
+* **Gate**: Window reload-and-reattach preserves active sessions; Free Type gating tests pass.
+
+### Phase 5: SFTP Explorer & Port Forwarding
+* Dual-pane SFTP file manager and visual tunnel monitor, scoped according to S3 and S4 spike findings.

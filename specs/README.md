@@ -21,3 +21,9 @@ This directory contains the in-depth architectural breakdown, community feature 
 
 4. **[FEATURE_MATRIX.md](file:///home/citizenzero/Dev/Plinky/specs/FEATURE_MATRIX.md)**
    * Feature-by-feature breakdown comparing WindTerm, PuTTY, and Plinky, including concrete implementation mechanisms for every signature WindTerm feature.
+
+5. **[adr/ (Architecture Decision Records)](file:///home/citizenzero/Dev/Plinky/specs/adr/)**
+   * Formal Architectural Decision Records:
+     * **[ADR-001](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-001-primary-ssh-transport.md)**: Primary SSH Transport Architecture (`plink` only in v1, `russh` deferred behind spikes).
+     * **[ADR-002](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-002-putty-discovery-and-versioning.md)**: PuTTY Discovery, Version Floor (0.75+), and No Bundling.
+

@@ -14,7 +14,11 @@ This document tracks the directory architecture, file structure, component relat
 │   ├── PROPOSAL.md                       # Comprehensive proposal: PuTTY Wrapper + WindTerm features
 │   ├── WINDTERM_ANALYSIS.md              # In-depth autopsy of kingToolbox/WindTerm & community requests
 │   ├── PUTTY_WRAPPER_SPEC.md             # Technical specification for PuTTY bridge & wrappers
-│   └── FEATURE_MATRIX.md                 # Detailed feature comparison: WindTerm vs PuTTY vs Plinky
+│   ├── FEATURE_MATRIX.md                 # Detailed feature comparison: WindTerm vs PuTTY vs Plinky
+│   └── adr/                              # Architecture Decision Records
+│       ├── README.md                     # ADR index and status table
+│       ├── ADR-001-primary-ssh-transport.md # Decision: plink-only in v1, russh deferred
+│       └── ADR-002-putty-discovery-and-versioning.md # Decision: detect installed PuTTY (0.75+), no bundling
 │
 ├── Cargo.toml                            # Root Cargo Workspace definition
 │

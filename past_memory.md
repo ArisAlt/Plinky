@@ -78,3 +78,14 @@
 * `-share` Lifecycle in Phase 0: Test upstream terminal tab closure vs active downstream SFTP transfers; decouple master connection owner in Rust (`crates/plinky-core`) so closing terminal does not kill SFTP.
 * Real Oracle Test Vectors (R1): Fixtures must be generated via `/usr/bin/puttygen 0.85` (RSA, ECDSA, Ed25519; unencrypted + passphrase-protected) and cross-checked against `puttygen -O private-openssh`. Tampered MAC, truncated file, and escaped sessions (`uxstore.c`) added to `cargo-fuzz` harness.
 
+### 7. ADRS ACCEPTED & FORMAL PHASED PLAN (MSG #98)
+* ADR-001 Accepted (Owner): Primary SSH transport is `plink` only in v1. `russh` is deferred behind empirical spike results (S3/S4) to ensure single-stack auditability and eliminate dual host-key stores.
+* ADR-002 Accepted (Owner): System PuTTY auto-discovery with minimum version floor (PuTTY >= 0.75 for PPK v3 Argon2id support). No binary bundling in v1 to avoid shipping/signing/CVE maintenance liabilities. Diagnostic logging of detected version. User custom path override.
+* Scope Bound: Tier 1 targets are Linux and Windows. macOS is on hold for v1. Windows verification uses the owner's Windows machine (with test harness scripts) + GitHub Actions CI.
+* Phase 0 Spikes (Numeric Thresholds):
+  - S1: xterm.js WebGL throughput & keystroke latency on WebKitGTK (Wayland) and WebView2 (Windows) during saturated stream (`cat bigfile` / `yes`), p95 <= 16ms, DOM fallback.
+  - S2: `plink` under `portable-pty`: resize propagation (Linux vs Windows ConPTY), exact host-key prompt text, `-batch` & `-hostkey`.
+  - S3: `plink -share` lifecycle (terminal closure vs active SFTP; downstream -L and -R forwarding).
+  - S4: `psftp` batch parsing robustness (spaces, newlines, unicode, symlinks) vs `russh-sftp`.
+* Phased Plan Gateways: Phase 1 (CI & Threat Model) -> Phase 2 (`crates/putty-compat` with real oracle fixtures & fuzzing) -> Phase 3 (`crates/plinky-core`) -> Phase 4 (React 19 + dockview frontend) -> Phase 5 (SFTP & tunnels). Claude audits each phase diff before commit with explicit test coverage annotations.
+
