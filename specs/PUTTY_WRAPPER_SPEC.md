@@ -51,18 +51,24 @@ SerialFlowControl=1
 PublicKeyFile=/home/user/.ssh/key.ppk
 ```
 
-### 1.2. Host Key Verification (`sshhostkeys`)
+### 1.2. Host Key Verification (`sshhostkeys`) & TOFU State Machine
 PuTTY on Linux verifies host keys using `~/.putty/sshhostkeys` (or `$PUTTYDIR/sshhostkeys`).
 Each entry follows the PuTTY format:
 ```
 <key-type>@<port>:<hostname> <key-data-hex>
 ```
-Example:
+Canonical format examples (verified from PuTTY 0.85 on Linux):
 ```
 rsa2@22:10.10.10.10 0x10001,0x9f4a12...
-ed25519@22:prod.server.net 0x3d...
+ssh-ed25519@22:10.10.10.10 0x28b56069f86246d18d5ff08c40029803e298d3f5d21cb1b615792024cf0c8711,0x7cadb38df766f23fda4f284a023dce62099329de4693c01852ff997703cbd588
+ecdsa-sha2-nistp256@22:host 0x...
 ```
-* **Strict TOFU Policy**: When connecting via `plink`, `plink` prompts through the PTY on host key mismatch or unknown host. Plinky intercepts this TOFU (Trust On First Use) prompt, rendering a native GUI confirmation dialog showing the fingerprint, key type, and remote host before appending confirmed keys to `sshhostkeys`.
+
+* **Strict TOFU Security State Machine**:
+  Scraping prompts out of an unconstrained PTY stream creates a severe security hazard where a compromised remote server could emit synthetic prompt strings to manipulate local trust state. Plinky enforces a strict pre-authentication state machine:
+  1. **State `Connecting`**: The session launches in pre-auth mode. The TOFU listener is armed exclusively during this window.
+  2. **Fail-Closed Strategy (`plink -batch`)**: Alternatively, Plinky can run `plink -batch` initially. If the host key is unknown or mismatched, `plink` terminates immediately with exit code 1, emitting the key fingerprint in stderr. Plinky catches this failure, shows an authenticated native GUI dialog with the key fingerprint, and upon user confirmation re-launches with `-hostkey <fingerprint>`.
+  3. **State `Authenticated`**: As soon as the terminal transitions to `Authenticated`, the TOFU handler is permanently disarmed for the remainder of the session. In-session terminal output can **never** trigger trust dialogs or write to `sshhostkeys`.
 
 ### 1.3. Windows PuTTY Storage (Registry)
 On Windows, PuTTY persists sessions in the Windows Registry under:
@@ -226,8 +232,13 @@ flowchart LR
     Plink <-->|"Encrypted SSH Protocol"| Remote["Remote SSH Server"]
 ```
 
-### 4.5. `psftp` File System Bridge (Shared Connection)
+### 4.5. `psftp` File System Bridge & Connection Sharing Lifecycle
 For graphical SFTP file exploration:
 * Spawns `psftp -load "<SessionName>" -share`.
 * Because `-share` is enabled, `psftp` connects instantaneously over the active `plink` master connection without reconnecting or re-authenticating.
 * Plinky interacts via standard SFTP batch commands or native binary SFTP channel, feeding directory hierarchies directly into the dual-pane file manager.
+
+#### Lifecycle & Teardown Boundary (`-share` Ownership)
+Under PuTTY's connection sharing model, the process that opened the master connection (`plink -share`) owns the Unix domain sharing socket. If that process exits, all downstream sharers (`psftp -share`, secondary terminal tabs) are abruptly disconnected.
+* **Phase 0 Empirical Spike Requirement**: Test downstream behavior on Linux when upstream terminates, and test reverse teardown (closing SFTP while terminal continues).
+* **Architecture Solution**: In Plinky, the Rust backend (`crates/plinky-core`) owns the process lifecycle. To prevent premature SFTP termination when a user closes a terminal tab, the connection master can be decoupled into a Rust-managed background master process, with both the interactive terminal PTY and the SFTP client attaching as sharers. Alternatively, closing a terminal tab with active SFTP transfers prompts the user or detaches the master PTY gracefully.

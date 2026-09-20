@@ -178,9 +178,14 @@ Unlike WindTerm's controversial closed-source core:
 
 ## 6. Implementation Phasing
 
-* **Phase 0: Architecture & Wayland/WebKitGTK Spike**: Verify WebKitGTK + xterm.js WebGL performance on Wayland/Linux under high-throughput `cat bigfile` load.
+* **Phase 0: Architecture, Wayland & Connection Sharing Spike**:
+  * Verify WebKitGTK + xterm.js WebGL performance on Wayland/Linux under high-throughput `cat bigfile` load.
+  * Empirically test `plink -share` / `psftp -share` connection sharing lifecycle on Linux (e.g. upstream terminal tab closure vs active downstream SFTP transfers; reverse teardown).
 * **Phase 1: Specs & Architecture Consolidation (Current)**: Formalize Cargo workspace, PuTTY wrapper specs, and dual-agent Writer/Critic loop with Claude Desktop.
-* **Phase 2: PuTTY Compatibility Crate (`crates/putty-compat`)**: Implement standalone parsers for `~/.putty/sessions`, `sshhostkeys`, and `.ppk` v2/v3 keys with comprehensive unit tests and fuzzing harness.
+* **Phase 2: PuTTY Compatibility Crate (`crates/putty-compat`)**:
+  * Implement standalone parsers for `PUTTYDIR`/`~/.putty/sessions`, `sshhostkeys` (with pre-auth TOFU state machine), and `.ppk` v2/v3 keys.
+  * Generate test fixtures using real oracle (`/usr/bin/puttygen 0.85` on host) for RSA, ECDSA, and Ed25519 (unencrypted + passphrase-protected), cross-checked against `puttygen -O private-openssh`.
+  * Tampered-MAC, truncated-file, and escaped session file test suites under `cargo-fuzz`.
 * **Phase 3: Core Runtime & Transport (`crates/plinky-core`)**: `portable-pty` process launcher, `plink -share` runner, `tauri::ipc::Channel` binary streaming, and Rust `SyncInputRouter`.
 * **Phase 4: Terminal UI & Free Type Mode**: React 19 + `dockview` + `xterm.js` workspace with OSC 133 semantic prompt navigation and Free Type Mode.
 * **Phase 5: Sync Broadcast, SFTP Explorer & Tunneling**: 4-channel sync input, dual-pane SFTP via `psftp -share`, and visual tunnel manager.

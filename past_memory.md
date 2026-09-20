@@ -71,3 +71,10 @@
 * Feature Gating: Free Type Mode disabled in alternate buffer (`vim`, `htop`), handles `DECCKM` application cursor keys, requires verified OSC 133 B..C command region. `xterm.js` `IDecorationOptions` constrained to color styling; clickable IPs/URLs handled via `registerLinkProvider`.
 * Layout: Dockview terminal panels use `renderer: 'always'` with external `xtermRegistry` outside React.
 * Standalone MCP Bridge: Extracted from ABtools into `/home/citizenzero/Dev/mcp_dual_agent/` with passing pytest suite and client configs.
+
+### 6. CLAUDE REVIEW ROUND 2 (MSG #95) & PROTOCOL RIGOR
+* Empirical Hostkey Verification: Confirmed `~/.putty/sshhostkeys` on host uses `ssh-ed25519@22:<host>` (with `ssh-` prefix) and `rsa2@22:<host>`. Fixed spec.
+* TOFU Trust Boundary: Strict pre-auth state machine (`Connecting` -> `Authenticated`) prevents rogue host in-session prompt injection. Fallback: `plink -batch` fails closed, parses fingerprint, and re-launches with `-hostkey <fp>` on user confirmation.
+* `-share` Lifecycle in Phase 0: Test upstream terminal tab closure vs active downstream SFTP transfers; decouple master connection owner in Rust (`crates/plinky-core`) so closing terminal does not kill SFTP.
+* Real Oracle Test Vectors (R1): Fixtures must be generated via `/usr/bin/puttygen 0.85` (RSA, ECDSA, Ed25519; unencrypted + passphrase-protected) and cross-checked against `puttygen -O private-openssh`. Tampered MAC, truncated file, and escaped sessions (`uxstore.c`) added to `cargo-fuzz` harness.
+
