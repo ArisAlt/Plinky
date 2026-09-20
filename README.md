@@ -43,12 +43,12 @@ On the other end of the spectrum is **PuTTY**:
 
 ## 3. Documentation Index
 
-The complete proposal, analysis, and technical specifications are structured in the [`windterm/`](file:///home/citizenzero/Dev/WinPutty/windterm) directory:
+The complete proposal, analysis, and technical specifications are structured in the [`windterm/`](file:///home/citizenzero/Dev/Plinky/windterm) directory:
 
-* 📄 **[PROPOSAL.md](file:///home/citizenzero/Dev/WinPutty/windterm/PROPOSAL.md)**: The end-to-end architectural and functional proposal for the PuTTY wrapper and feature expansion.
-* 📄 **[WINDTERM_ANALYSIS.md](file:///home/citizenzero/Dev/WinPutty/windterm/WINDTERM_ANALYSIS.md)**: Deep forensic analysis of WindTerm, GitHub issue backlog, community pain points, and why it stalled.
-* 📄 **[PUTTY_WRAPPER_SPEC.md](file:///home/citizenzero/Dev/WinPutty/windterm/PUTTY_WRAPPER_SPEC.md)**: Technical protocol specification for interfacing with PuTTY sessions, `.ppk` keys, Pageant IPC, and `plink`/`psftp`.
-* 📄 **[FEATURE_MATRIX.md](file:///home/citizenzero/Dev/WinPutty/windterm/FEATURE_MATRIX.md)**: Comprehensive breakdown of WindTerm community feature requests and their implementation design.
+* 📄 **[PROPOSAL.md](file:///home/citizenzero/Dev/Plinky/windterm/PROPOSAL.md)**: The end-to-end architectural and functional proposal for the PuTTY wrapper and feature expansion.
+* 📄 **[WINDTERM_ANALYSIS.md](file:///home/citizenzero/Dev/Plinky/windterm/WINDTERM_ANALYSIS.md)**: Deep forensic analysis of WindTerm, GitHub issue backlog, community pain points, and why it stalled.
+* 📄 **[PUTTY_WRAPPER_SPEC.md](file:///home/citizenzero/Dev/Plinky/windterm/PUTTY_WRAPPER_SPEC.md)**: Technical protocol specification for interfacing with PuTTY sessions, `.ppk` keys, Pageant IPC, and `plink`/`psftp`.
+* 📄 **[FEATURE_MATRIX.md](file:///home/citizenzero/Dev/Plinky/windterm/FEATURE_MATRIX.md)**: Comprehensive breakdown of WindTerm community feature requests and their implementation design.
 
 ---
 

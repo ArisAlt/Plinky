@@ -1,5 +1,5 @@
 [PROJECT]: Plinky (PuTTY Modern Wrapper & IDE-grade Terminal Emulator, named after 'plink')
-[ROOT]: /home/citizenzero/Dev/WinPutty (symlinked /home/citizenzero/Dev/Plinky)
+[ROOT]: /home/citizenzero/Dev/Plinky
 [WORKSPACE_ALT]: /home/citizenzero/Documents/antigravity/modest-darwin
 [DATE_INIT]: 2026-09-20
 [STATUS]: Scaffolding & Specifications Complete; Name Finalized as Plinky

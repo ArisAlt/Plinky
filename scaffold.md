@@ -3,7 +3,7 @@
 This document tracks the directory architecture, file structure, component relationships, and implementation boundaries of **Plinky** (PuTTY Modern Wrapper & IDE-Grade Terminal Emulator).
 
 ```
-/home/citizenzero/Dev/WinPutty/
+/home/citizenzero/Dev/Plinky/
 ├── GEMINI.md                             # AI operational rules, project overview, memory governance
 ├── past_memory.md                        # Dense ledger of architectural decisions and context
 ├── README.md                             # Master user guide, project vision, feature breakdown
@@ -14,7 +14,7 @@ This document tracks the directory architecture, file structure, component relat
 │   ├── PROPOSAL.md                       # Comprehensive proposal: PuTTY Wrapper + WindTerm features
 │   ├── WINDTERM_ANALYSIS.md              # In-depth autopsy of kingToolbox/WindTerm & community requests
 │   ├── PUTTY_WRAPPER_SPEC.md             # Technical specification for PuTTY bridge & wrappers
-│   └── FEATURE_MATRIX.md                 # Detailed feature comparison: WindTerm vs PuTTY vs WinPutty
+│   └── FEATURE_MATRIX.md                 # Detailed feature comparison: WindTerm vs PuTTY vs Plinky
 │
 └── src/                                  # Planned Implementation Codebase
     ├── main/                             # Desktop Runtime / Backend Process
