@@ -25,10 +25,12 @@ On the other end of the spectrum is **PuTTY**:
 | Feature | Classic PuTTY | MobaXterm | WindTerm | **WinPutty (Proposed)** |
 | :--- | :---: | :---: | :---: | :---: |
 | **Open Source** | ✅ (MIT) | ❌ (Proprietary / Free tier limits) | ⚠️ (Partial / Core closed) | ✅ **100% Open Source** |
-| **Cross-Platform** | ⚠️ (Ports exist) | ❌ (Windows only) | ✅ (Win/Mac/Linux) | ✅ **Win / Mac / Linux** |
-| **PuTTY Registry / Sessions** | ✅ Native | ⚠️ Import only | ⚠️ Import only | ✅ **Native Read & Write** |
+| **Linux Native PuTTY (`~/.putty/sessions`)** | ✅ Native | ❌ | ⚠️ Import only | ✅ **100% Native Read/Write** |
+| **Windows PuTTY Registry** | ✅ Native | ⚠️ Import only | ⚠️ Import only | ✅ **Native Read & Write** |
+| **Linux PuTTY Toolchain (`plink`, etc.)** | ✅ Native | ❌ | ❌ | ✅ **Auto-detected & Wrapped** |
+| **Linux Serial Devices (`/dev/ttyUSB*`)** | ✅ Native | ❌ | ⚠️ Manual | ✅ **Direct Enumeration** |
 | **PuTTY .ppk v2/v3 Keys** | ✅ Native | ⚠️ Converted | ⚠️ Partial | ✅ **Native Support** |
-| **Pageant SSH Agent** | ✅ Native | ❌ Own agent | ❌ Separate | ✅ **Native Named Pipe IPC** |
+| **Linux SSH Agent (`$SSH_AUTH_SOCK`)** | ✅ Native | ❌ | ⚠️ Partial | ✅ **Native Unix Socket IPC** |
 | **Free Type Mode** (Click to edit) | ❌ | ❌ | ✅ | ✅ **Implemented** |
 | **Sync Input Channels** (Broadcast) | ❌ | ✅ (All tabs only) | ✅ (4 discrete channels) | ✅ **4 Discrete Channels** |
 | **Integrated SFTP Pane** | ❌ | ✅ (Embedded) | ✅ (Dual Pane / Dockable) | ✅ **Dual Pane / Dockable** |
