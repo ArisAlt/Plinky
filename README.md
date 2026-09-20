@@ -54,36 +54,38 @@ The complete proposal, analysis, and technical specifications are structured in 
 
 ## 4. Architectural Overview
 
-Plinky adopts a modular two-tier architecture:
+Plinky adopts a high-performance, memory-safe architecture powered by **Rust (Tauri v2)** and modern web technologies:
 
 ```mermaid
 flowchart TD
-    subgraph UI_Workbench ["UI Workbench (Renderer: React + xterm.js + WebGL)"]
-        TabManager["Multi-Tab & Split Pane Manager"]
-        FreeType["Free Type Mode Engine"]
+    subgraph UI_Workbench ["UI Workbench (Tauri Webview: TypeScript + React + xterm.js)"]
+        Docking["Multi-Tab & Split Pane Docking (dockview)"]
+        FreeType["Free Type Mode Engine (DOM Click Interceptor)"]
         SyncManager["Sync Input Broadcast Router (Channels A-D)"]
-        RegexEngine["Regex Syntax & Marker Decorator"]
-        SFTPPane["Dual-Pane SFTP Explorer & Queue"]
+        RegexEngine["Regex Token Decorator (xterm.js buffer parser)"]
+        SFTPPane["Dual-Pane SFTP Explorer & Transfer Queue"]
         SnippetBar["Quick Command / Snippet Palette"]
-        TunnelGUI["SSH Tunnel / Port Forwarding GUI"]
+        TunnelGUI["Visual SSH Tunnel Manager"]
     end
 
-    subgraph Core_Backend ["Core Backend (Node.js / Electron / Tauri)"]
-        PTYMgr["PTY & Stream Manager"]
-        SFTPClient["Embedded SFTP Engine (SSH2)"]
-        MasterVault["AES-GCM Encrypted Vault"]
+    subgraph Rust_Backend ["Core Backend (Rust / Tauri v2 Native Engine)"]
+        PTYMgr["PTY & Process Lifecycle (portable-pty)"]
+        SFTPClient["Async SFTP Client (russh / ssh2)"]
+        SerialEngine["Hardware Serial Port Manager (serialport)"]
+        MasterVault["AES-256-GCM Credential Vault (Argon2id)"]
     end
 
-    subgraph PuTTY_Subsystem ["PuTTY Compatibility Subsystem"]
-        RegBridge["PuTTY Registry & File Session Reader"]
-        PPKEngine[".ppk v2/v3 Key Parser & Decryptor"]
-        PageantIPC["Pageant IPC Client (Named Pipe / Shared Mem)"]
-        PlinkRunner["PuTTY CLI Spawner (plink / psftp / pscp)"]
+    subgraph PuTTY_Subsystem ["PuTTY Native Subsystem (Rust)"]
+        LinuxReg["Linux ~/.putty/sessions File Parser & Writer"]
+        WinReg["Windows Registry Bridge (winreg crate)"]
+        PPKEngine[".ppk (v2/v3) Parser, Argon2id & AES Decryptor"]
+        AgentBridge["Unix Domain Socket ($SSH_AUTH_SOCK) & Pageant Named Pipe"]
+        PlinkRunner["Subprocess Stream Wrapper (/usr/bin/plink & plink.exe)"]
     end
 
-    UI_Workbench <--> Core_Backend
-    Core_Backend <--> PuTTY_Subsystem
-    Core_Backend <--> RemoteServers["Remote SSH Servers / Local Shells"]
+    UI_Workbench <-->|Typed Tauri IPC Events & Streams| Rust_Backend
+    Rust_Backend <--> PuTTY_Subsystem
+    Rust_Backend <--> RemoteServers["Remote SSH Servers / Serial Consoles"]
 ```
 
 ---
