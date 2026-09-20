@@ -59,3 +59,15 @@
 * `specs/WINDTERM_ANALYSIS.md`: Exhaustive dissection of WindTerm, GitHub issue metrics, and community feature requests.
 * `specs/PUTTY_WRAPPER_SPEC.md`: Low-level protocol and interface specification for PuTTY session importing, PPK parsing, Pageant IPC, and Plink piping.
 * `specs/FEATURE_MATRIX.md`: Side-by-side feature comparison table and implementation strategy.
+
+### 5. CLAUDE CRITIC REVIEW (MSG #91) & ARCHITECTURAL CONSENSUS
+* Empirical Corrections: GitHub API check on `kingToolbox/WindTerm` verified 2,450 open issues/PRs (not "over 3,000"). Real top issues: #1596 (abandoned, +152), #2106 (large file download bug, +18), #2238 (closed core, +14). Non-existent citations (#1850, #2910, #1204) eliminated.
+* Primary Transport: `/usr/bin/plink` under `portable-pty` with `-share` connection sharing is primary. `psftp -share` multiplexes on the active pipe without duplicate auth. `russh` preserved strictly for dynamic runtime port forwarding.
+* IPC Streaming: Switched from Tauri events to `tauri::ipc::Channel` with raw binary bytes and watermark flow control. Sessions & scrollback ring buffers live in Rust core so webview reloads do not terminate connections.
+* Cargo Workspace: Refactored to `crates/putty-compat` (zero Tauri dependency, fully fuzzable), `crates/plinky-core`, and `src-tauri`.
+* Missing Modules Added: Rust `tunnel/` module, `sshhostkeys` TOFU verification, shell integration bootstrap (`shell_integration/` for OSC 133 + OSC 7), unified `Transport` trait, Rust `SyncInputRouter`.
+* Precedence: PuTTY session lookup checks `$PUTTYDIR` first, `$XDG_CONFIG_HOME/putty`, then `~/.putty`.
+* Security Hardening: Prohibited `plink -pw` (ps leak); Expect triggers require session binding + explicit user confirmation; OSC 52 clipboard access gated; Vault KDF unified to Argon2id.
+* Feature Gating: Free Type Mode disabled in alternate buffer (`vim`, `htop`), handles `DECCKM` application cursor keys, requires verified OSC 133 B..C command region. `xterm.js` `IDecorationOptions` constrained to color styling; clickable IPs/URLs handled via `registerLinkProvider`.
+* Layout: Dockview terminal panels use `renderer: 'always'` with external `xtermRegistry` outside React.
+* Standalone MCP Bridge: Extracted from ABtools into `/home/citizenzero/Dev/mcp_dual_agent/` with passing pytest suite and client configs.

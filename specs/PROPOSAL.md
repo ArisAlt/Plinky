@@ -21,49 +21,51 @@ Modern operations engineers face a frustrating dichotomy:
                \                                    /
                 \                                  /
                  ▼                                ▼
-            ═════════════════════════════════════════════
-                       Plinky (OpenWind)
-            • 100% Genuine Open Source (MIT/Apache 2.0)
-            • Cross-Platform (Win / Mac / Linux)
-            • IDE-Grade Terminal Workbench
-            ═════════════════════════════════════════════
+             ═════════════════════════════════════════════
+                        Plinky
+             • 100% Genuine Open Source (MIT/Apache 2.0)
+             • Cross-Platform (Win / Mac / Linux)
+             • IDE-Grade Terminal Workbench
+             ═════════════════════════════════════════════
 ```
 
 ---
 
 ## 2. System Architecture
 
-Plinky follows a high-performance modular architecture separating the **UI Terminal Workbench**, the **Core Runtime / PTY Manager**, and the **PuTTY Subsystem**:
+Plinky follows a high-performance modular architecture separating the **UI Terminal Workbench**, the **Rust Core Runtime & Session Router**, and the **PuTTY Subsystem**:
 
 ```mermaid
 flowchart TD
     subgraph UI_Workbench ["UI Workbench (Renderer: React + xterm.js + WebGL)"]
-        TabDock["Docking Tab & Split Pane System"]
-        FreeTypeCanvas["Free Type Mode Interceptor"]
-        SyncBroadcast["Sync Input Channels (A, B, C, D)"]
-        RegexDecorator["Real-time Regex Syntax Decorator"]
-        SFTPDualPane["Dual-Pane SFTP Explorer"]
+        TabDock["Docking Tab & Split Pane System (dockview)"]
+        FreeTypeCanvas["Free Type Mode (OSC 133 prompt gated)"]
+        SyncBroadcast["Sync Input Channels (A, B, C, D UI)"]
+        RegexDecorator["Real-time Regex Syntax Decorator (Color + LinkProvider)"]
+        SFTPDualPane["Dual-Pane SFTP Explorer (psftp -share)"]
         SnippetBar["Snippet & Quick Command Palette"]
         TunnelVisualizer["Visual SSH Tunnel Manager"]
     end
 
-    subgraph Backend_Runtime ["Core Desktop Backend (Node.js / Electron / Tauri)"]
-        IPCBridge["Typed IPC Event Bus"]
-        PTYSessionMgr["PTY & Stream Session Manager"]
+    subgraph Backend_Runtime ["Core Desktop Backend (Rust + Tauri v2)"]
+        IPCChannel["tauri::ipc::Channel (Raw Binary + Watermark Flow Control)"]
+        PTYSessionMgr["Session Manager & Scrollback Ring Buffers"]
+        SyncRouter["SyncInputRouter (Rust Keystroke Broadcast & Safety Guard)"]
         SFTPService["SFTP Transfer & Queue Service"]
-        CredentialVault["AES-256-GCM Session Vault"]
+        CredentialVault["Argon2id + AES-256-GCM Session Vault"]
     end
 
-    subgraph PuTTY_Compatibility ["PuTTY Compatibility Subsystem"]
-        RegParser["PuTTY Registry & .reg File Deserializer"]
-        PPKEngine[".ppk (v2/v3) Key Parser & Decryptor"]
+    subgraph PuTTY_Compatibility ["PuTTY Subsystem (crates/putty-compat)"]
+        RegParser["PuTTY Sessions (PUTTYDIR / ~/.putty & WinReg)"]
+        PPKEngine[".ppk (v2/v3) Key Parser & Decryptor (Argon2id)"]
         PageantClient["Pageant IPC Client (Named Pipe / Unix Socket)"]
-        PlinkProcessBridge["Plink / PSFTP / PSCP Process Runner"]
+        HostKeyVerifier["Host Key Verification (~/.putty/sshhostkeys + TOFU)"]
+        PlinkPrimary["Primary: /usr/bin/plink under portable-pty (-share)"]
     end
 
-    UI_Workbench <-->|Bidirectional IPC Streams| Backend_Runtime
+    UI_Workbench <-->|tauri::ipc::Channel (Raw Binary)| Backend_Runtime
     Backend_Runtime <--> PuTTY_Compatibility
-    Backend_Runtime <-->|SSH / Telnet / Serial / Local PTY| RemoteEndpoints["Remote Infrastructure / Servers"]
+    Backend_Runtime <-->|SSH via plink -share / Serial / russh fallback| RemoteEndpoints["Remote Infrastructure / Servers"]
 ```
 
 ---
@@ -146,9 +148,12 @@ flowchart TD
 ## 4. Security & Trust Architecture
 
 Unlike WindTerm's controversial closed-source core:
-1. **Zero Proprietary Binary Blobs**: The entire codebase is 100% open-source TypeScript, Rust/C++, and HTML/CSS. Anyone can inspect, build, and verify reproducible binaries.
-2. **Master Key AES-GCM Vault**: Saved credentials and passwords are encrypted using **AES-256-GCM** derived with **PBKDF2** (or Argon2id) from a user-supplied master password.
+1. **Zero Proprietary Binary Blobs**: The entire codebase is 100% open-source TypeScript, Rust, and HTML/CSS. Anyone can inspect, build, and verify reproducible binaries.
+2. **Master Key Argon2id Vault**: Saved credentials and passwords are encrypted using **AES-256-GCM** derived with **Argon2id** (matching PPK v3 key derivation parameters) from a user-supplied master password.
 3. **Agent Isolation**: When using PuTTY's Pageant or system SSH agents, private keys never enter Plinky's memory space—cryptographic signing is performed securely inside Pageant.
+4. **No Plaintext Passwords in Process Lists**: Plinky strictly prohibits `plink -pw` invocation. Credentials are never exposed in `/proc` or `ps aux`. Authentication is handled exclusively via Pageant, PPK keys, or interactive PTY password prompts.
+5. **Prompt Confirmation for Automated Triggers**: Expect-style response hooks never auto-dispatch credentials without session identity verification and explicit user authorization, preventing rogue-host prompt-baiting attacks.
+6. **Strict Remote Escape Policies**: Remote clipboard read/write via OSC 52 requires explicit permission dialogs. OSC 8 clickable hyperlinks undergo strict scheme filtering (HTTP/HTTPS only).
 
 ---
 
@@ -156,22 +161,26 @@ Unlike WindTerm's controversial closed-source core:
 
 | Component | Selected Technology | Rationale |
 | :--- | :--- | :--- |
-| **Desktop Runtime** | **Tauri v2 (Rust)** | Ultra-low memory usage (~35–50 MB RAM vs 150MB+ in Electron), instantaneous startup, native machine code security. |
+| **Desktop Runtime** | **Tauri v2 (Rust)** | Ultra-low memory usage, instantaneous startup, native machine code security. |
 | **PTY Management** | **`portable-pty` (Rust)** | Battle-tested cross-platform PTY engine supporting Unix PTY on Linux/macOS and ConPTY on Windows. |
-| **Terminal Core** | **`xterm.js` + `@xterm/addon-webgl`** | High-performance 60 FPS terminal renderer with direct buffer access for Free Type Mode and regex markers. |
-| **UI Framework & Docking** | **React + TypeScript + `dockview`** | Professional IDE docking framework (used in VS Code clones), supporting drag-and-drop tabs, split panes, and floating docks. |
-| **PuTTY Subsystem** | **Custom Rust Crates** | Zero-dependency native parsing of `~/.putty/sessions`, Windows `winreg`, and `.ppk` keys using `argon2` and `aes`. |
+| **Primary Transport** | **`/usr/bin/plink` with `-share`** | Full PuTTY parity: honours `-load`, `sshhostkeys`, Pageant, proxies. Multiplexes SFTP (`psftp -share`) without redundant SSH handshakes. |
+| **Auxiliary Transport** | **`russh` (Rust)** | In-process SSH fallback specifically for dynamic runtime port forwarding (`-L`, `-R`, `-D`). |
+| **IPC Streaming** | **`tauri::ipc::Channel`** | High-throughput binary streaming with backpressure watermarks. Session state & ring buffers live in Rust core. |
+| **Terminal Core** | **`xterm.js` + `@xterm/addon-webgl`** | Hardware-accelerated terminal renderer with direct buffer access for Free Type Mode and regex markers. |
+| **UI Framework & Docking** | **React 19 + TypeScript + `dockview`** | Professional IDE docking framework; supports `renderer: 'always'` to prevent tab destruction during layout manipulation. |
+| **PuTTY Subsystem** | **`crates/putty-compat`** | Standalone Rust crate (no Tauri dependencies) parsing `PUTTYDIR` / `~/.putty/sessions`, Windows Registry, and `.ppk` (v2/v3). |
 | **Agent IPC** | **Rust `tokio::net` / Windows Pipes** | Native Unix Domain Sockets (`$SSH_AUTH_SOCK`) on Linux/macOS and Named Pipes (`\\.\pipe\pageant.*`) on Windows. |
-| **SSH & SFTP Engine** | **`russh` / `ssh2` + `/usr/bin/plink`** | Dual-mode: Direct async SSH/SFTP streaming in Rust, plus capability to execute system PuTTY CLI toolchain. |
-| **Serial Communication** | **`serialport` (Rust)** | Direct communication with embedded hardware, USB consoles (`/dev/ttyUSB*`, `COM*`). |
+| **Host Key TOFU** | **Rust `hostkeys` module** | Strict verification against `~/.putty/sshhostkeys` with interactive Trust-On-First-Use prompts. |
+| **Serial Communication** | **`serialport` (Rust)** | Direct communication with embedded hardware and USB consoles (`/dev/ttyUSB*`, `COM*`). |
 | **Credential Vault** | **Rust `aes-gcm` + `argon2`** | Memory-safe, audited cryptographic primitives for master password vault. |
 
 ---
 
 ## 6. Implementation Phasing
 
-* **Phase 1: Research & Documentation (Current)**: Forensic analysis of WindTerm, PuTTY interface specifications, and architectural documentation.
-* **Phase 2: PuTTY Bridge & Key Engine**: Registry reader, `.ppk` parser, and Pageant IPC integration.
-* **Phase 3: Terminal Core & Free Type Mode**: Tabbed terminal workspace with xterm.js and mouse-driven Free Type Mode.
-* **Phase 4: Multi-Session Sync Input & Regex Markers**: 4-channel broadcast system and real-time regex highlighting.
-* **Phase 5: SFTP Explorer & Port Forwarding**: Dual-pane file manager, transfer queue, and visual tunnel configuration.
+* **Phase 0: Architecture & Wayland/WebKitGTK Spike**: Verify WebKitGTK + xterm.js WebGL performance on Wayland/Linux under high-throughput `cat bigfile` load.
+* **Phase 1: Specs & Architecture Consolidation (Current)**: Formalize Cargo workspace, PuTTY wrapper specs, and dual-agent Writer/Critic loop with Claude Desktop.
+* **Phase 2: PuTTY Compatibility Crate (`crates/putty-compat`)**: Implement standalone parsers for `~/.putty/sessions`, `sshhostkeys`, and `.ppk` v2/v3 keys with comprehensive unit tests and fuzzing harness.
+* **Phase 3: Core Runtime & Transport (`crates/plinky-core`)**: `portable-pty` process launcher, `plink -share` runner, `tauri::ipc::Channel` binary streaming, and Rust `SyncInputRouter`.
+* **Phase 4: Terminal UI & Free Type Mode**: React 19 + `dockview` + `xterm.js` workspace with OSC 133 semantic prompt navigation and Free Type Mode.
+* **Phase 5: Sync Broadcast, SFTP Explorer & Tunneling**: 4-channel sync input, dual-pane SFTP via `psftp -share`, and visual tunnel manager.

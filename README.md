@@ -43,7 +43,7 @@ On the other end of the spectrum is **PuTTY**:
 
 ## 3. Documentation Index
 
-The complete proposal, analysis, and technical specifications are structured in the [`specs/`](file:///home/citizenzero/Dev/Plinky/windterm) directory:
+The complete proposal, analysis, and technical specifications are structured in the [`specs/`](file:///home/citizenzero/Dev/Plinky/specs) directory:
 
 * 📄 **[PROPOSAL.md](file:///home/citizenzero/Dev/Plinky/specs/PROPOSAL.md)**: The end-to-end architectural and functional proposal for the PuTTY wrapper and feature expansion.
 * 📄 **[WINDTERM_ANALYSIS.md](file:///home/citizenzero/Dev/Plinky/specs/WINDTERM_ANALYSIS.md)**: Deep forensic analysis of WindTerm, GitHub issue backlog, community pain points, and why it stalled.
@@ -54,36 +54,39 @@ The complete proposal, analysis, and technical specifications are structured in 
 
 ## 4. Architectural Overview
 
-Plinky adopts a high-performance, memory-safe architecture powered by **Rust (Tauri v2)** and modern web technologies:
+Plinky adopts a high-performance, memory-safe architecture organized as a Cargo workspace with Tauri v2 and modern web technologies:
 
 ```mermaid
 flowchart TD
-    subgraph UI_Workbench ["UI Workbench (Tauri Webview: TypeScript + React + xterm.js)"]
+    subgraph UI_Workbench ["UI Workbench (Tauri Webview: TypeScript + React 19 + xterm.js)"]
         Docking["Multi-Tab & Split Pane Docking (dockview)"]
-        FreeType["Free Type Mode Engine (DOM Click Interceptor)"]
-        SyncManager["Sync Input Broadcast Router (Channels A-D)"]
-        RegexEngine["Regex Token Decorator (xterm.js buffer parser)"]
-        SFTPPane["Dual-Pane SFTP Explorer & Transfer Queue"]
+        FreeType["Free Type Mode Engine (OSC 133 prompt gated)"]
+        SyncManager["Sync Input Broadcast UI (Channels A-D)"]
+        RegexEngine["Regex Token Decorator (IDecoration + registerLinkProvider)"]
+        SFTPPane["Dual-Pane SFTP Explorer (psftp -share)"]
         SnippetBar["Quick Command / Snippet Palette"]
         TunnelGUI["Visual SSH Tunnel Manager"]
     end
 
-    subgraph Rust_Backend ["Core Backend (Rust / Tauri v2 Native Engine)"]
+    subgraph Rust_Backend ["crates/plinky-core (Core Terminal Engine)"]
+        ChannelStream["tauri::ipc::Channel (Binary Streaming & Watermarks)"]
         PTYMgr["PTY & Process Lifecycle (portable-pty)"]
-        SFTPClient["Async SFTP Client (russh / ssh2)"]
+        SyncRouter["SyncInputRouter (Backend Fanout & Paste Guard)"]
+        SessionMgr["Session Manager & Scrollback Ring Buffers"]
         SerialEngine["Hardware Serial Port Manager (serialport)"]
-        MasterVault["AES-256-GCM Credential Vault (Argon2id)"]
+        ShellBootstrap["Shell Integration Bootstrap (OSC 133 + OSC 7)"]
     end
 
-    subgraph PuTTY_Subsystem ["PuTTY Native Subsystem (Rust)"]
-        LinuxReg["Linux ~/.putty/sessions File Parser & Writer"]
+    subgraph PuTTY_Subsystem ["crates/putty-compat (Standalone PuTTY Crate)"]
+        LinuxReg["Linux PUTTYDIR / ~/.putty/sessions File Parser & Writer"]
         WinReg["Windows Registry Bridge (winreg crate)"]
-        PPKEngine[".ppk (v2/v3) Parser, Argon2id & AES Decryptor"]
+        PPKEngine[".ppk (v2/v3) Parser, Argon2id & AES-256-CBC"]
         AgentBridge["Unix Domain Socket ($SSH_AUTH_SOCK) & Pageant Named Pipe"]
-        PlinkRunner["Subprocess Stream Wrapper (/usr/bin/plink & plink.exe)"]
+        HostKeyVerifier["Host Key Verification (~/.putty/sshhostkeys + TOFU)"]
+        PlinkPrimary["Primary Transport: /usr/bin/plink (-share)"]
     end
 
-    UI_Workbench <-->|Typed Tauri IPC Events & Streams| Rust_Backend
+    UI_Workbench <-->|tauri::ipc::Channel (Raw Binary)| Rust_Backend
     Rust_Backend <--> PuTTY_Subsystem
     Rust_Backend <--> RemoteServers["Remote SSH Servers / Serial Consoles"]
 ```
@@ -92,8 +95,9 @@ flowchart TD
 
 ## 5. Getting Started & Roadmap
 
-1. **Phase 1 (Current)**: Research, WindTerm autopsy, and technical specifications (`specs/` documentation).
-2. **Phase 2**: Core PuTTY session importer, `.ppk` parser, and Pageant bridge.
-3. **Phase 3**: Terminal workbench with xterm.js, multi-tab docking, and Free Type Mode.
-4. **Phase 4**: Sync Input multi-channel broadcasting and real-time regex text highlighters.
-5. **Phase 5**: Integrated SFTP dual-pane explorer, transfer queue, and visual tunnel manager.
+1. **Phase 0**: WebKitGTK + xterm.js WebGL throughput spike on Wayland/Linux (`cat bigfile`).
+2. **Phase 1 (Current)**: Research, WindTerm autopsy, and hardened technical specifications (`specs/`).
+3. **Phase 2 (`crates/putty-compat`)**: Standalone PuTTY session parser, `.ppk` v2/v3 decryptor, `sshhostkeys` TOFU, and Pageant bridge with fuzzing harness.
+4. **Phase 3 (`crates/plinky-core`)**: `portable-pty` launcher, `plink -share` runner, binary IPC channels, and Rust `SyncInputRouter`.
+5. **Phase 4 (Frontend Workbench)**: React 19 + `dockview` + `xterm.js` terminal workbench with Free Type Mode and regex markers.
+6. **Phase 5 (SFTP & Tunnels)**: Integrated SFTP dual-pane explorer via `psftp -share`, transfer queue, and visual tunnel manager.

@@ -24,80 +24,71 @@ This document compares **Plinky** against **PuTTY**, **KiTTY**, **MobaXterm**, a
 | **Snippet & Quick Macro Bar** | ❌ | ⚠️ (Basic) | ⚠️ (Basic) | ✅ (Parameterized) | **✅ Parameterized Macros** |
 | **Visual Port Forwarding GUI** | ❌ | ❌ | ⚠️ (Dialog) | ✅ (Visual manager) | **✅ Live Tunnel Monitor** |
 | **OSC 133 Shell Integration** | ❌ | ❌ | ❌ | ⚠️ (Incomplete) | **✅ Semantic Prompt Markers** |
-| **Master Password Encrypted Vault** | ❌ | ❌ | ✅ (Master pass) | ✅ (AES-256) | **✅ PBKDF2 + AES-GCM Vault** |
+| **Master Password Encrypted Vault** | ❌ | ❌ | ✅ (Master pass) | ✅ (AES-256) | **✅ Argon2id + AES-GCM Vault** |
 | **Zmodem (rz / sz) Support** | ❌ | ✅ | ✅ | ✅ | **✅ Zmodem Protocol Parser** |
 
 ---
 
 ## 2. Deep-Dive Implementation Blueprints
 
-### 2.1. Free Type Mode
-* **WindTerm Behavior**: Allows clicking anywhere on the terminal screen to move the cursor to that text position, type text, or drag-and-drop arguments without pressing backspace or arrow keys.
-* **Plinky Implementation Design**:
-  1. `FreeTypeMode` class attaches an event listener to the `xterm.js` viewport DOM element.
-  2. On `Alt+Click` or click event:
+### 2.1. Free Type Mode (Gated Semantic Canvas)
+* **WindTerm Behavior**: Allows clicking anywhere on the terminal screen to move the cursor to that text position and edit command text directly.
+* **Plinky Implementation Design & Guardrails**:
+  1. **Strict State Gating**:
+     * **Disabled in Alternate Screen Buffer**: When `terminal.buffer.active.type === 'alternate'` (e.g., inside `vim`, `nano`, `htop`, `less`, `tmux`), Free Type Mode is completely suppressed to prevent buffer corruption.
+     * **Application Cursor Mode (`DECCKM`)**: Inspects terminal state; emits `\x1bOC` / `\x1bOD` when application cursor keys are active, and standard `\x1b[C` / `\x1b[D` otherwise.
+     * **OSC 133 Semantic Region Gating**: Strictly requires a verified command input region between `OSC 133 ; B` (Command Start) and `OSC 133 ; C` (Command Executed). If shell integration is not active or cursor is outside the command region, Free Type does nothing rather than guessing coordinates.
+  2. **Coordinate & Delta Calculation**:
      * Calculates grid column $C_{target}$ and row $R_{target}$ relative to the terminal buffer.
-     * Checks if the clicked coordinate falls within the active command prompt line (detected via OSC 133 marker or current cursor line $R_{cursor}$).
+     * Accounts for Unicode double-width characters (CJK, emojis) and soft-wrapped multi-line commands.
      * Delta $\Delta = C_{target} - C_{cursor}$.
-     * If $\Delta > 0$: Sends $\Delta$ right-arrow escape codes (`\x1b[C`) or word jumps (`\x1b[1;5C` / `Alt+F`).
-     * If $\Delta < 0$: Sends $|\Delta|$ left-arrow escape codes (`\x1b[D`) or word jumps (`\x1b[1;5D` / `Alt+B`).
-  3. Drag-and-drop text manipulation:
-     * Selected text range can be dragged and dropped into any position on the command line, generating the appropriate shell input sequence.
+     * Emits calculated arrow movements (`\x1b[C` / `\x1b[D`) or word jumps (`Alt+F` / `Alt+B`).
 
-### 2.2. Multi-Channel Sync Input (Broadcast Channels)
-* **WindTerm Behavior**: Users assign tabs to Channel A, B, C, or D. Keystrokes in any tab belonging to Channel A are instantly forwarded to all other tabs in Channel A.
-* **Plinky Implementation Design**:
-  1. `SyncInputManager` state machine maintains session sets:
-     $$\mathcal{C}_A, \mathcal{C}_B, \mathcal{C}_C, \mathcal{C}_D \subset \mathcal{S}_{\text{active}}$$
-  2. In the `TerminalTab` input pipeline:
-     ```typescript
-     terminal.onData((data: string) => {
-       const activeChannels = syncManager.getChannelsForSession(sessionId);
-       if (activeChannels.length > 0) {
-         for (const channel of activeChannels) {
-           const recipientSessions = syncManager.getSessionsInChannel(channel);
-           for (const targetSessionId of recipientSessions) {
-             if (targetSessionId !== sessionId) {
-               ipcRenderer.send('terminal:write', { sessionId: targetSessionId, data });
-             }
-           }
-         }
-       }
-       // Send to current session
-       ipcRenderer.send('terminal:write', { sessionId, data });
-     });
+### 2.2. Multi-Channel Sync Input (Rust `SyncInputRouter`)
+* **WindTerm Behavior**: Users assign tabs to Channel A, B, C, or D. Keystrokes in any tab belonging to Channel A are mirrored to all other tabs in Channel A.
+* **Plinky Backend-Enforced Broadcast Architecture**:
+  1. Keystroke fan-out is **never handled via multiple IPC roundtrips from the webview**. The frontend sends a single write payload to the backend session:
+     ```rust
+     // Rust backend owns broadcast channels and session fan-out
+     pub struct SyncInputRouter {
+         channels: HashMap<ChannelId, HashSet<SessionId>>,
+         protected_sessions: HashSet<SessionId>,
+     }
      ```
-  3. Visual badge indicates channel assignment on tabs (e.g., Red badge for Channel A).
-  4. Global safety lock: Toggle shortcut (`Ctrl+Alt+S`) enables or disables broadcast instantly with an on-screen HUD alert.
+  2. **Trust Boundary Safety Rules**:
+     * **Multi-line Paste Guard**: When a multi-line string or command containing newlines is pasted into a broadcast channel, Plinky intercepts it and requires explicit user confirmation.
+     * **Protected Session Tagging**: Production servers tagged `protected` emit a prominent warning confirmation before accepting broadcast input.
+     * **Global Safety Lock**: Global shortcut (`Ctrl+Alt+S`) instantly disconnects broadcast routing with an onscreen HUD alert.
 
 ### 2.3. Integrated SFTP Explorer & Directory Following
 * **WindTerm Behavior**: Side pane displays remote directory and tracks the terminal's working directory automatically.
 * **Plinky Implementation Design**:
-  1. Spawns an SFTP subsystem channel on the existing SSH connection (or parallel connection if using `plink`).
-  2. **Directory Synchronization**:
-     * Implements OSC 7 escape sequence parser (`\x1b]7;file://hostname/path\x07`).
-     * Fallback: Monitors terminal command output for `cd <path>` executions.
-     * Automatically requests remote directory listing `sftp.readdir(targetPath)` and updates the GUI tree.
+  1. Reuses the active `plink` master connection via `psftp -share` (no redundant authentication or duplicate SSH handshakes).
+  2. **Strict Semantic Directory Tracking**:
+     * Listens for `OSC 7` shell integration escape sequences (`\x1b]7;file://<hostname>/<path>\x07`).
+     * Automatically prompts user to inject or enable shell integration (OSC 7 + OSC 133) on first connect.
+     * Avoids brittle stdout scraping of `cd` commands (which breaks on aliases, subshells, and relative paths).
   3. **Transfer Queue Manager**:
-     * Chunked pipeline with configurable concurrency (1–8 parallel streams).
-     * Calculates transfer speed (KB/s), estimated completion time (ETA), and progress bar.
-     * Resumes interrupted transfers using SFTP offset writes.
+     * Background transfers with bandwidth throttling, progress telemetry, and resume capabilities.
 
 ### 2.4. Real-Time Regex Text Highlighters & Markers
 * **WindTerm Behavior**: Automatically colors IP addresses, timestamps, error keywords, and user patterns in real-time.
 * **Plinky Implementation Design**:
-  1. Integrates with `xterm.js` Decoration API or custom canvas rendering overlay.
-  2. Main line buffer parser compiles user rules into high-speed regular expressions:
+  1. **xterm.js Decoration Boundaries**:
+     * `xterm.js` `IDecorationOptions` supports background and foreground color styling only (it does not support dynamic bold/italic/underline).
+     * Plinky uses `IDecoration` for real-time token background/foreground coloring.
+     * Plinky uses `terminal.registerLinkProvider()` for clickable interactive elements (IP addresses, URLs, error hashes).
+  2. **Tightened Pattern Matching**:
      ```typescript
-     const BUILTIN_RULES = [
+     export const BUILTIN_RULES = [
        { id: 'ipv4', regex: /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g, color: '#38bdf8' },
-       { id: 'error', regex: /\b(ERROR|FATAL|CRITICAL|FAIL|FAILED)\b/gi, color: '#ef4444', bold: true },
-       { id: 'warning', regex: /\b(WARN|WARNING)\b/gi, color: '#f59e0b', bold: true },
-       { id: 'success', regex: /\b(SUCCESS|OK|200 OK)\b/gi, color: '#10b981', bold: true },
-       { id: 'url', regex: /https?:\/\/[^\s/$.?#].[^\s]*/gi, color: '#6366f1', underline: true }
+       { id: 'error', regex: /\b(ERROR|FATAL|CRITICAL|FAIL|FAILED)\b/g, color: '#ef4444' },
+       { id: 'warning', regex: /\b(WARN|WARNING)\b/g, color: '#f59e0b' },
+       { id: 'http_status_ok', regex: /\bHTTP\/\d(?:\.\d)?\s+200\b|\bstatus[:=]\s*200\b/gi, color: '#10b981' },
+       { id: 'url', regex: /https?:\/\/[^\s/$.?#].[^\s]*/g, color: '#6366f1', isLink: true }
      ];
      ```
-  3. Interactive markers: Clicking a highlighted IP opens a quick action menu (*"Ping", "SSH to this IP", "Copy"*). Clicking a URL opens it in the default browser.
+  3. Interactive context menu on link click: *"Ping host", "SSH to IP", "Open URL in Browser", "Copy Token"*.
 
 ### 2.5. Snippet & Quick Command Bar
 * **WindTerm Behavior**: Dockable buttons running common commands with macro parameter prompts.

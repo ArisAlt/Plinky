@@ -8,10 +8,14 @@ This document defines the low-level protocols, data schemas, and IPC mechanisms 
 
 PuTTY uses different storage backends depending on the operating system. Plinky natively supports both:
 
-### 1.1. Linux / Unix PuTTY Storage (`~/.putty/`)
-On Linux (such as Arch, Debian, Ubuntu, Fedora), PuTTY stores all configurations in plaintext files inside the user's home directory:
+### 1.1. Linux / Unix PuTTY Storage Directory Lookup Precedence
+On Linux systems, PuTTY binaries (such as `/usr/bin/putty`, `plink`, `psftp`) resolve the configuration directory using the following strict precedence:
+1. `$PUTTYDIR/sessions` (if environment variable `PUTTYDIR` is defined and non-empty).
+2. `$XDG_CONFIG_HOME/putty/sessions` (if `XDG_CONFIG_HOME` is set).
+3. `$HOME/.putty/sessions` (default canonical Unix location).
+
 ```
-~/.putty/
+~/.putty/ (or $PUTTYDIR/)
 ├── sessions/             # Directory containing individual session files
 │   ├── Default%20Settings
 │   ├── 10.10.10.10%20
@@ -47,47 +51,49 @@ SerialFlowControl=1
 PublicKeyFile=/home/user/.ssh/key.ppk
 ```
 
-### 1.2. Windows PuTTY Storage (Registry)
+### 1.2. Host Key Verification (`sshhostkeys`)
+PuTTY on Linux verifies host keys using `~/.putty/sshhostkeys` (or `$PUTTYDIR/sshhostkeys`).
+Each entry follows the PuTTY format:
+```
+<key-type>@<port>:<hostname> <key-data-hex>
+```
+Example:
+```
+rsa2@22:10.10.10.10 0x10001,0x9f4a12...
+ed25519@22:prod.server.net 0x3d...
+```
+* **Strict TOFU Policy**: When connecting via `plink`, `plink` prompts through the PTY on host key mismatch or unknown host. Plinky intercepts this TOFU (Trust On First Use) prompt, rendering a native GUI confirmation dialog showing the fingerprint, key type, and remote host before appending confirmed keys to `sshhostkeys`.
+
+### 1.3. Windows PuTTY Storage (Registry)
 On Windows, PuTTY persists sessions in the Windows Registry under:
 ```
 HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\[Session%20Name]
 ```
 
-### 1.3. Unified Cross-Platform Storage Adapter (Rust)
-Plinky provides a unified Rust session adapter:
-* Detects runtime platform (`cfg!(target_os = "linux")` vs `cfg!(target_os = "windows")`).
-* On Linux: Reads and writes directly to `$HOME/.putty/sessions/` using Rust `std::fs` and line-by-line key-value parsers.
-* On Windows: Queries and writes to the Windows Registry using the `winreg` crate.
-* Enables zero-friction migration: sessions created on Linux PuTTY are immediately visible and editable in Plinky.
+### 1.4. Key Registry / Session Attributes to Parse & Replicate
 
-### 1.2. Key Registry Attributes to Parse & Replicate
-
-| Registry Field | Type | PuTTY Default | Description |
+| Session / Registry Field | Type | PuTTY Default | Description |
 | :--- | :--- | :--- | :--- |
-| `HostName` | `REG_SZ` | `""` | Target server hostname or IP address |
-| `PortNumber` | `REG_DWORD` | `22` | Connection port |
-| `Protocol` | `REG_SZ` | `"ssh"` | Protocol (`"ssh"`, `"telnet"`, `"rlogin"`, `"raw"`, `"serial"`) |
-| `UserName` | `REG_SZ` | `""` | Auto-login username |
-| `PublicKeyFile` | `REG_SZ` | `""` | Absolute path to `.ppk` private key file |
-| `PortForwardings` | `REG_SZ` | `""` | Comma-delimited list of tunnels (e.g. `L8080=127.0.0.1:80,D1080`) |
-| `RemoteCommand` | `REG_SZ` | `""` | Command to execute immediately upon connection |
-| `TerminalType` | `REG_SZ` | `"xterm"` | Terminal emulation type string |
-| `AgentFwd` | `REG_DWORD` | `0` or `1` | Enable/disable Pageant SSH agent forwarding |
-| `Compression` | `REG_DWORD` | `0` or `1` | Enable zlib compression |
-| `Colour0` – `Colour21` | `REG_SZ` | RGB CSV | Custom RGB color palette entries (e.g. `"187,187,187"`) |
-| `FontName` / `FontSize` | `REG_SZ` / `REG_DWORD` | `"Courier New"` / `10` | Session font configuration |
+| `HostName` | `String` | `""` | Target server hostname or IP address |
+| `PortNumber` | `Integer` | `22` | Connection port |
+| `Protocol` | `String` | `"ssh"` | Protocol (`"ssh"`, `"telnet"`, `"rlogin"`, `"raw"`, `"serial"`) |
+| `UserName` | `String` | `""` | Auto-login username |
+| `PublicKeyFile` | `String` | `""` | Absolute path to `.ppk` private key file |
+| `PortForwardings` | `String` | `""` | Comma-delimited list of tunnels (e.g. `L8080=127.0.0.1:80,D1080`) |
+| `RemoteCommand` | `String` | `""` | Command to execute immediately upon connection |
+| `TerminalType` | `String` | `"xterm"` | Terminal emulation type string |
+| `AgentFwd` | `Integer` | `0` or `1` | Enable/disable Pageant SSH agent forwarding |
+| `Compression` | `Integer` | `0` or `1` | Enable zlib compression |
+| `Colour0` – `Colour21` | `String` | RGB CSV | Custom RGB color palette entries (e.g. `"187,187,187"`) |
+| `FontName` / `FontSize` | `String` / `Int` | `"Courier New"` / `10` | Session font configuration |
 
-### 1.3. Portable Session File Format
-Plinky supports reading `.reg` file exports and portable INI-based PuTTY session files (from portable distributions like PuTTY Portable or KiTTY):
-```ini
-[Sessions\MyProductionServer]
-HostName=prod.example.com
-PortNumber=22
-Protocol=ssh
-UserName=admin
-PublicKeyFile=C:\keys\id_prod.ppk
-PortForwardings=L8080=127.0.0.1:8080,D1080
-```
+### 1.5. Unified Cross-Platform Storage Adapter (`crates/putty-compat`)
+Plinky provides a standalone Rust crate (`crates/putty-compat`) with zero Tauri dependencies:
+* Detects runtime platform (`cfg!(target_os = "linux")` vs `cfg!(target_os = "windows")`).
+* On Linux: Checks `PUTTYDIR` first, then `XDG_CONFIG_HOME`, then `$HOME/.putty/sessions/` using `std::fs`.
+* On Windows: Queries and writes to the Windows Registry using the `winreg` crate.
+* Also supports reading `.reg` exports and portable INI session files (e.g., KiTTY / PuTTY Portable).
+* Fully fuzzable and testable headless in CI across operating systems.
 
 ---
 
@@ -177,41 +183,51 @@ Plinky integrates natively with SSH key agents across platforms:
 
 ## 4. PuTTY CLI Process Wrapper (`plink`, `psftp`, `pscp`, `puttygen`)
 
-When users select **PuTTY CLI Subprocess Mode**, Plinky spawns the official PuTTY executables under a pseudo-terminal (PTY) interface.
+Plinky uses `/usr/bin/plink` running under `portable-pty` as its primary transport engine. This provides 100% bug-for-bug fidelity with PuTTY's session loading, proxy chains, host key caching, and Pageant authentication.
 
-### 4.1. Linux Binary Detection
-Plinky automatically scans standard paths:
-* Linux: `/usr/bin/plink`, `/usr/bin/psftp`, `/usr/bin/pscp`, `/usr/bin/puttygen`, `/usr/bin/pageant`
-* Windows: `C:\Program Files\PuTTY\plink.exe`, `PATH`
+### 4.1. Binary Detection
+Plinky automatically scans standard paths on startup:
+* **Linux**: `/usr/bin/plink`, `/usr/bin/psftp`, `/usr/bin/pscp`, `/usr/bin/puttygen`, `/usr/bin/pageant`
+* **Windows**: `C:\Program Files\PuTTY\plink.exe`, `PATH`
 
 ### 4.2. Linux Serial Port Support (`/dev/ttyUSB*`, `/dev/ttyACM*`)
-PuTTY for Linux is widely used for hardware debugging and embedded serial consoles (e.g. `SerialLine=/dev/ttyUSB0`, `SerialSpeed=115200`).
-* Plinky provides direct serial communication via `node-serialport` or by launching `plink -serial /dev/ttyUSB0 -sercfg 115200,8,n,1,N`.
+PuTTY for Linux is widely used for embedded serial consoles (e.g. `SerialLine=/dev/ttyUSB0`, `SerialSpeed=115200`).
+* Plinky provides direct serial communication via the Rust `serialport` crate or by launching `plink -serial /dev/ttyUSB0 -sercfg 115200,8,n,1,N`.
 * Full support for hardware flow control (RTS/CTS, DTR/DSR, XON/XOFF).
-```bash
-plink.exe -load "<SessionName>" \
-          -P <Port> \
-          -l <Username> \
-          -i "<PPK_Path>" \
-          -agent \
-          -t \
-          <HostName>
-```
-* **Flags**:
-  * `-load "<SessionName>"`: Applies all configured registry settings.
-  * `-agent`: Enables Pageant forwarding.
-  * `-t`: Forces allocation of a remote pseudo-terminal (crucial for interactive applications like `htop`, `vim`, `tmux`).
-  * `-L`, `-R`, `-D`: Forward port tunnels dynamically.
 
-### 4.2. Stream Piping to `xterm.js`
+### 4.3. `plink` Execution Protocol & Connection Sharing
+Plinky invokes `plink` inside a `portable-pty` pseudo-terminal instance:
+```bash
+plink -load "<SessionName>" \
+      -P <Port> \
+      -l <Username> \
+      -i "<PPK_Path>" \
+      -agent \
+      -share \
+      -t \
+      <HostName>
+```
+
+#### Command Line Flags & Operational Rules:
+* `-load "<SessionName>"`: Applies session configurations directly from `PUTTYDIR` / `~/.putty/sessions/`.
+* `-share`: **Connection Sharing**. Creates a shared master SSH connection socket. Secondary terminals and SFTP (`psftp -share`) reuse this encrypted pipe without redundant TCP handshakes or credential re-authentication.
+* `-agent`: Enables Pageant / `$SSH_AUTH_SOCK` forwarding.
+* `-t`: Forces remote pseudo-terminal allocation (vital for full-screen curses apps like `vim`, `htop`, `tmux`).
+* `-L`, `-R`, `-D`: Forward port tunnels statically defined in the session.
+* **CRITICAL SECURITY RULE: NO `-pw` FLAG**: Plinky strictly **prohibits passing passwords via `plink -pw`**. Arguments passed on the command line are visible to all users via `ps aux` and `/proc/<pid>/cmdline`. Plinky supplies credentials exclusively via Pageant agent, PPK private keys, or interactive PTY prompt injection.
+
+### 4.4. Stream Piping via `tauri::ipc::Channel`
+Rather than inundating Tauri's event system with high-frequency ANSI terminal streams, Plinky uses Tauri v2's high-throughput `tauri::ipc::Channel` with raw binary slices:
+
 ```mermaid
 flowchart LR
-    UI["xterm.js Viewport"] <-->|"WebSocket / Typed IPC"| Backend["Node-PTY Process Manager"]
-    Backend <-->|"stdin / stdout / stderr"| Plink["plink.exe Process"]
+    UI["xterm.js Viewport (WebGL)"] <-->|"tauri::ipc::Channel (Raw Binary)"| Backend["Rust SessionManager (crates/plinky-core)"]
+    Backend <-->|"Raw PTY Master (portable-pty)"| Plink["plink Process (-share)"]
     Plink <-->|"Encrypted SSH Protocol"| Remote["Remote SSH Server"]
 ```
 
-### 4.3. `psftp` File System Bridge
-For file transfers when using strict PuTTY toolchains:
-* Spawns `psftp.exe -load "<SessionName>"` in batch mode (`-b <script>`) or interactive coprocess mode.
-* Parses directory listings from `ls -la` output and feeds data directly into the Plinky SFTP GUI tree.
+### 4.5. `psftp` File System Bridge (Shared Connection)
+For graphical SFTP file exploration:
+* Spawns `psftp -load "<SessionName>" -share`.
+* Because `-share` is enabled, `psftp` connects instantaneously over the active `plink` master connection without reconnecting or re-authenticating.
+* Plinky interacts via standard SFTP batch commands or native binary SFTP channel, feeding directory hierarchies directly into the dual-pane file manager.

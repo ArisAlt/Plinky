@@ -73,26 +73,29 @@ Despite its technical brilliance, WindTerm is now widely avoided or deemed aband
 
 ### Factor 3: Single-Maintainer Burnout & Repository Paralysis
 * WindTerm was developed by a single individual (`kingToolbox`).
-* In 2024–2026, development slowed to a near-total standstill.
-* **Over 3,000 issues and hundreds of pull requests went unreviewed**.
+* In 2024–2026, development slowed to a near-total standstill (last release was v2.7.0 on 2025-03-11).
+* **2,450 open issues and PRs remain unaddressed** on GitHub.
 * Minor bugs, Linux Wayland display glitches, and HiDPI scaling issues remained unpatched for months and years.
 * Users recognized that relying on a closed tool with a single MIA maintainer was an unacceptable operational risk.
 
 ---
 
-## 4. Top Feature Requests from WindTerm's Issue Tracker
+## 4. Community Sentiment & Real Top Issues from WindTerm's Issue Tracker
 
-An analysis of WindTerm’s most-upvoted issues reveals what power users still desperately want:
+An audit of the most-reacted open issues on `kingToolbox/WindTerm` (checked against the GitHub API, Sept 2026) highlights the community's primary pain points and stagnation:
 
-| Rank | GitHub Issue Topic | Community Need |
-| :---: | :--- | :--- |
-| **#1** | **Full Open Source Core** (#2238) | Transparent, community-maintained codebase with no proprietary binary blobs. |
-| **#2** | **Full PuTTY & OpenSSH Key Interoperability** (#1420, #2119) | Native reading of PuTTY sessions, `.ppk` v2/v3 keys, and Pageant agent without constant re-importing. |
-| **#3** | **OSC 133 Shell Integration** (#3542) | Semantic prompt markers: jump between prompts, copy output of last command, exit code notifications. |
-| **#4** | **Cloud & Git-backed Profile Sync** (#1850) | Synchronize sessions, snippets, and highlighters via Git repo or encrypted cloud storage without manual file copying. |
-| **#5** | **Wayland & Native Linux Windowing** (#2910) | Modern Wayland client without XWayland blurring or clipboard desynchronization. |
-| **#6** | **Plugin & Extension Architecture** (#1204) | Ability for third parties to add custom protocols (RDP, VNC, Kubernetes pod exec) via TypeScript/Python. |
-| **#7** | **Zmodem & Modern SFTP Progress** (#980) | Resumable background SFTP transfers with bandwidth throttling and inline file viewer. |
+| Issue # | Reactions | Community Sentiment / Topic | Real Impact & Context |
+| :---: | :---: | :--- | :--- |
+| **#1596** | **+152** | *"This project has been abandoned"* | Overwhelming community consensus that the project is unmaintained after a year without commits. |
+| **#2106** | **+18** | Large file download bug in v2.6.0 | Critical transfer reliability bug left unpatched in the core engine. |
+| **#2238** | **+14** | *"Why isn't WindTerm fully open-sourced?"* | Resistance to proprietary binary blobs handling sensitive infrastructure credentials. |
+| **#1459** | **+13** | Community pleas for continued maintenance | User community asking if development will ever resume. |
+| **#1918** | **+11** | Community offers of sponsorship / donations | Maintainer inactive even when community offered funding. |
+| **#3688** | **+10** | *"Please Keep WindTerm Alive and Continue Its Development"* | Continued desperation for maintenance updates. |
+| **#3622** | **+9** | Native Apple Silicon macOS support | Stalled architecture support. |
+| **#1788** | **+8** | *"completely open source"* | Demands for licensing transparency and community-driven maintenance. |
+| **#3542** | **+6** | OSC 133 Shell Integration | Request for semantic prompt markers and exit code hooks. |
+| **#2119** | **+1** | Session import friction | Inconvenience of re-importing external shell sessions. |
 
 ---
 
