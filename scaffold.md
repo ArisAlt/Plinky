@@ -1,6 +1,6 @@
 # Project Scaffold (`scaffold.md`)
 
-This document tracks the directory architecture, file structure, component relationships, and implementation boundaries of **WinPutty**.
+This document tracks the directory architecture, file structure, component relationships, and implementation boundaries of **Plinky** (PuTTY Modern Wrapper & IDE-Grade Terminal Emulator).
 
 ```
 /home/citizenzero/Dev/WinPutty/

@@ -6,7 +6,7 @@ This document defines the low-level protocols, data schemas, and IPC mechanisms 
 
 ## 1. PuTTY Session Storage Architecture (Cross-Platform)
 
-PuTTY uses different storage backends depending on the operating system. WinPutty natively supports both:
+PuTTY uses different storage backends depending on the operating system. Plinky natively supports both:
 
 ### 1.1. Linux / Unix PuTTY Storage (`~/.putty/`)
 On Linux (such as Arch, Debian, Ubuntu, Fedora), PuTTY stores all configurations in plaintext files inside the user's home directory:
@@ -54,11 +54,11 @@ HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\[Session%20Name]
 ```
 
 ### 1.3. Unified Cross-Platform Storage Adapter
-WinPutty provides a unified TypeScript session adapter:
+Plinky provides a unified TypeScript session adapter:
 * Detects runtime platform (`process.platform === 'linux'` vs `'win32'`).
 * On Linux: Reads and writes directly to `path.join(os.homedir(), '.putty', 'sessions')`.
 * On Windows: Queries and writes to the Windows Registry.
-* Enables zero-friction migration: sessions created on Linux PuTTY are immediately visible and editable in WinPutty.
+* Enables zero-friction migration: sessions created on Linux PuTTY are immediately visible and editable in Plinky.
 
 ### 1.2. Key Registry Attributes to Parse & Replicate
 
@@ -78,7 +78,7 @@ WinPutty provides a unified TypeScript session adapter:
 | `FontName` / `FontSize` | `REG_SZ` / `REG_DWORD` | `"Courier New"` / `10` | Session font configuration |
 
 ### 1.3. Portable Session File Format
-WinPutty supports reading `.reg` file exports and portable INI-based PuTTY session files (from portable distributions like PuTTY Portable or KiTTY):
+Plinky supports reading `.reg` file exports and portable INI-based PuTTY session files (from portable distributions like PuTTY Portable or KiTTY):
 ```ini
 [Sessions\MyProductionServer]
 HostName=prod.example.com
@@ -93,7 +93,7 @@ PortForwardings=L8080=127.0.0.1:8080,D1080
 
 ## 2. PuTTY Private Key (`.ppk`) Specification
 
-PuTTY uses a custom container format for private keys (`.ppk`). WinPutty implements a native, zero-dependency parser supporting both **PPK v2** and **PPK v3**.
+PuTTY uses a custom container format for private keys (`.ppk`). Plinky implements a native, zero-dependency parser supporting both **PPK v2** and **PPK v3**.
 
 ### 2.1. PPK Version Differences
 
@@ -143,14 +143,14 @@ Private-MAC: e830... (HMAC-SHA-256)
 
 ## 3. PuTTY Pageant & SSH Agent IPC Protocol Specification
 
-WinPutty integrates natively with SSH key agents across platforms:
+Plinky integrates natively with SSH key agents across platforms:
 
 ### 3.1. Linux / Unix SSH Agent Protocol (`$SSH_AUTH_SOCK`)
 * On Linux, PuTTY's Pageant or system OpenSSH agent (`ssh-agent`, `gnome-keyring`, `gpg-agent`) exposes a Unix Domain Socket specified by the environment variable:
   ```bash
   $SSH_AUTH_SOCK (e.g. /tmp/ssh-XXXXXX/agent.<pid> or /run/user/1000/keyring/ssh)
   ```
-* WinPutty connects directly to this Unix Domain Socket using Node.js `net.connect(process.env.SSH_AUTH_SOCK)`.
+* Plinky connects directly to this Unix Domain Socket using Node.js `net.connect(process.env.SSH_AUTH_SOCK)`.
 * Communication adheres to the standard IETF SSH Agent Protocol (RFC draft):
   * Length prefix (4 bytes, big endian)
   * Message code (1 byte)
@@ -163,7 +163,7 @@ WinPutty integrates natively with SSH key agents across platforms:
   ```
   \\.\pipe\pageant.<UserName>.<RandomHex>
   ```
-* WinPutty opens the pipe stream directly using standard Windows asynchronous I/O.
+* Plinky opens the pipe stream directly using standard Windows asynchronous I/O.
 
 #### Method B: Win32 Shared Memory & `WM_COPYDATA` (Classic Pageant)
 * Find Window handle `HWND hwnd = FindWindow("Pageant", "Pageant")`.
@@ -177,16 +177,16 @@ WinPutty integrates natively with SSH key agents across platforms:
 
 ## 4. PuTTY CLI Process Wrapper (`plink`, `psftp`, `pscp`, `puttygen`)
 
-When users select **PuTTY CLI Subprocess Mode**, WinPutty spawns the official PuTTY executables under a pseudo-terminal (PTY) interface.
+When users select **PuTTY CLI Subprocess Mode**, Plinky spawns the official PuTTY executables under a pseudo-terminal (PTY) interface.
 
 ### 4.1. Linux Binary Detection
-WinPutty automatically scans standard paths:
+Plinky automatically scans standard paths:
 * Linux: `/usr/bin/plink`, `/usr/bin/psftp`, `/usr/bin/pscp`, `/usr/bin/puttygen`, `/usr/bin/pageant`
 * Windows: `C:\Program Files\PuTTY\plink.exe`, `PATH`
 
 ### 4.2. Linux Serial Port Support (`/dev/ttyUSB*`, `/dev/ttyACM*`)
 PuTTY for Linux is widely used for hardware debugging and embedded serial consoles (e.g. `SerialLine=/dev/ttyUSB0`, `SerialSpeed=115200`).
-* WinPutty provides direct serial communication via `node-serialport` or by launching `plink -serial /dev/ttyUSB0 -sercfg 115200,8,n,1,N`.
+* Plinky provides direct serial communication via `node-serialport` or by launching `plink -serial /dev/ttyUSB0 -sercfg 115200,8,n,1,N`.
 * Full support for hardware flow control (RTS/CTS, DTR/DSR, XON/XOFF).
 ```bash
 plink.exe -load "<SessionName>" \
@@ -214,4 +214,4 @@ flowchart LR
 ### 4.3. `psftp` File System Bridge
 For file transfers when using strict PuTTY toolchains:
 * Spawns `psftp.exe -load "<SessionName>"` in batch mode (`-b <script>`) or interactive coprocess mode.
-* Parses directory listings from `ls -la` output and feeds data directly into the WinPutty SFTP GUI tree.
+* Parses directory listings from `ls -la` output and feeds data directly into the Plinky SFTP GUI tree.

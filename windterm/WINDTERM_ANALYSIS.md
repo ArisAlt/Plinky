@@ -96,7 +96,7 @@ An analysis of WindTerm’s most-upvoted issues reveals what power users still d
 
 ---
 
-## 5. Strategic Takeaways for WinPutty
+## 5. Strategic Takeaways for Plinky
 
 1. **100% Genuine Open Source**: No closed binaries. Every line of frontend, PTY management, SFTP, and PuTTY integration must be MIT or Apache-2.0 licensed.
 2. **Anchor to PuTTY’s Foundation**: PuTTY has 25+ years of security auditing, zero-dependency portability, and universal adoption. Making PuTTY the backbone provides instant trust that WindTerm lacked.

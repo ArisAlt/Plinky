@@ -1,12 +1,12 @@
 # Feature Matrix & Implementation Blueprint (`FEATURE_MATRIX.md`)
 
-This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**, and **WindTerm**, detailing how each signature capability from WindTerm and top community requests is engineered.
+This document compares **Plinky** against **PuTTY**, **KiTTY**, **MobaXterm**, and **WindTerm**, detailing how each signature capability from WindTerm and top community requests is engineered.
 
 ---
 
 ## 1. Comprehensive Feature Comparison Table
 
-| Capability | PuTTY | KiTTY | MobaXterm | WindTerm | **WinPutty** |
+| Capability | PuTTY | KiTTY | MobaXterm | WindTerm | **Plinky** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **License & Auditing** | MIT (Open) | GPL (Open) | Commercial / Proprietary | Apache-2.0 (Core Closed) | **MIT (100% Transparent)** |
 | **Cross-Platform** | Partial (Ports) | Windows only | Windows only | Win / Mac / Linux | **Linux & Windows Native** |
@@ -33,7 +33,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.1. Free Type Mode
 * **WindTerm Behavior**: Allows clicking anywhere on the terminal screen to move the cursor to that text position, type text, or drag-and-drop arguments without pressing backspace or arrow keys.
-* **WinPutty Implementation Design**:
+* **Plinky Implementation Design**:
   1. `FreeTypeMode` class attaches an event listener to the `xterm.js` viewport DOM element.
   2. On `Alt+Click` or click event:
      * Calculates grid column $C_{target}$ and row $R_{target}$ relative to the terminal buffer.
@@ -46,7 +46,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.2. Multi-Channel Sync Input (Broadcast Channels)
 * **WindTerm Behavior**: Users assign tabs to Channel A, B, C, or D. Keystrokes in any tab belonging to Channel A are instantly forwarded to all other tabs in Channel A.
-* **WinPutty Implementation Design**:
+* **Plinky Implementation Design**:
   1. `SyncInputManager` state machine maintains session sets:
      $$\mathcal{C}_A, \mathcal{C}_B, \mathcal{C}_C, \mathcal{C}_D \subset \mathcal{S}_{\text{active}}$$
   2. In the `TerminalTab` input pipeline:
@@ -72,7 +72,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.3. Integrated SFTP Explorer & Directory Following
 * **WindTerm Behavior**: Side pane displays remote directory and tracks the terminal's working directory automatically.
-* **WinPutty Implementation Design**:
+* **Plinky Implementation Design**:
   1. Spawns an SFTP subsystem channel on the existing SSH connection (or parallel connection if using `plink`).
   2. **Directory Synchronization**:
      * Implements OSC 7 escape sequence parser (`\x1b]7;file://hostname/path\x07`).
@@ -85,7 +85,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.4. Real-Time Regex Text Highlighters & Markers
 * **WindTerm Behavior**: Automatically colors IP addresses, timestamps, error keywords, and user patterns in real-time.
-* **WinPutty Implementation Design**:
+* **Plinky Implementation Design**:
   1. Integrates with `xterm.js` Decoration API or custom canvas rendering overlay.
   2. Main line buffer parser compiles user rules into high-speed regular expressions:
      ```typescript
@@ -101,7 +101,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.5. Snippet & Quick Command Bar
 * **WindTerm Behavior**: Dockable buttons running common commands with macro parameter prompts.
-* **WinPutty Implementation Design**:
+* **Plinky Implementation Design**:
   1. JSON snippet store supporting parameter syntax:
      ```json
      {
@@ -115,7 +115,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.6. Visual SSH Tunneling & Port Forwarding
 * **WindTerm Behavior**: Visual table of active Local, Remote, and Dynamic tunnels with state lights.
-* **WinPutty Implementation Design**:
+* **Plinky Implementation Design**:
   1. Visual configuration builder for:
      * **Local (-L)**: `[Listen Port]` $\rightarrow$ `[Remote Host:Port]`
      * **Remote (-R)**: `[Remote Listen Port]` $\rightarrow$ `[Local Host:Port]`
@@ -125,7 +125,7 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 
 ### 2.7. OSC 133 Semantic Shell Integration
 * Top requested feature in WindTerm (#3542) that remained unfinished.
-* WinPutty adds native support for OSC 133 semantic prompt escapes:
+* Plinky adds native support for OSC 133 semantic prompt escapes:
   * `OSC 133 ; A ST`: Prompt start
   * `OSC 133 ; B ST`: Command start (user pressed enter)
   * `OSC 133 ; C ST`: Command executed (output start)

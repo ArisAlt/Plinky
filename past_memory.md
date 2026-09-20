@@ -1,10 +1,8 @@
-# Dense Past Memory
-
-[PROJECT]: WinPutty (PuTTY Modern Wrapper + WindTerm IDE-grade Terminal Emulator)
-[ROOT]: /home/citizenzero/Dev/WinPutty
+[PROJECT]: Plinky (PuTTY Modern Wrapper & IDE-grade Terminal Emulator, named after 'plink')
+[ROOT]: /home/citizenzero/Dev/WinPutty (symlinked /home/citizenzero/Dev/Plinky)
 [WORKSPACE_ALT]: /home/citizenzero/Documents/antigravity/modest-darwin
 [DATE_INIT]: 2026-09-20
-[STATUS]: Scaffolding & Comprehensive Documentation Suite Phase
+[STATUS]: Scaffolding & Specifications Complete; Name Finalized as Plinky
 
 ### 1. WINDTERM FORENSIC ANALYSIS & FAILURE REASONS
 * Target: kingToolbox/WindTerm (C++/Qt terminal emulator).
@@ -26,6 +24,8 @@
   - Unified Session Provider: platform-aware, bi-directionally syncs `~/.putty/sessions/` on Linux and Registry on Windows.
   - Frontend: TypeScript + xterm.js + WebGL. Full buffer access for Free Type Mode, 4-channel sync input, and live regex markers.
   - Subprocess engine: Auto-wraps `/usr/bin/plink` or native SSH2.
+* Naming Resolution:
+  - Selected name: **Plinky** (homage to `/usr/bin/plink`; friendly, memorable, cross-platform, eliminating the "Win" Windows-only connotation).
 
 ### 3. MANDATORY DIRECTIVES & GOVERNANCE
 * User Global Rules:

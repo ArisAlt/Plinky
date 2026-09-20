@@ -1,7 +1,7 @@
 # GEMINI.md - Project Overview & AI Operational Guidelines
 
 ## Project Description
-**WinPutty (WindPutty / OpenWind)** is an open-source, modern terminal emulator and session manager designed to serve as a high-powered wrapper and successor to **PuTTY**, embedding the beloved IDE-like features of **WindTerm** (kingToolbox/WindTerm) while resolving WindTerm's critical shortcomings (abandoned/slow updates, proprietary closed-source core, security transparency concerns).
+**Plinky** is an open-source, modern terminal emulator and session manager designed as a high-powered wrapper and successor to **PuTTY** (named after PuTTY's iconic `plink` CLI tool), embedding the beloved IDE-like features of **WindTerm** (kingToolbox/WindTerm) while resolving WindTerm's critical shortcomings (abandoned updates, closed-source core binary blobs, security transparency concerns).
 
 It combines the rock-solid reliability, profile compatibility, and credential protocols of PuTTY/Pageant with the advanced productivity features of WindTerm:
 - **Free Type Mode**: Arbitrary cursor placement and text editing directly in the terminal canvas.

@@ -1,4 +1,4 @@
-# Comprehensive Technical Proposal: WinPutty
+# Comprehensive Technical Proposal: Plinky
 
 > **Project Vision**: An open-source, modern, IDE-grade terminal emulator and session manager engineered as an advanced wrapper and successor to **PuTTY**, embedding the beloved capabilities of **WindTerm** (Free Type Mode, Sync Input, Integrated SFTP, Regex Markers) while providing 100% transparent open-source security.
 
@@ -10,7 +10,7 @@ Modern operations engineers face a frustrating dichotomy:
 * **The Legacy Trust Camp (PuTTY, KiTTY)**: Flawless security track record, ultra-fast, native `.ppk` and Pageant support. But the user interface is stuck in 1999—no native tabs, no split panes, no SFTP file explorer, no command broadcasting, and no modern text handling.
 * **The Modern UX Camp (WindTerm, Termius, MobaXterm)**: Feature-rich and IDE-like, but marred by closed-source proprietary cores, vendor lock-in, commercial paywalls, or maintainer abandonment (as seen in WindTerm).
 
-**WinPutty** bridges this divide by using **PuTTY** as its cryptographic and session bedrock while offering an open-source, modern desktop frontend delivering WindTerm's exact feature set.
+**Plinky** bridges this divide by using **PuTTY** as its cryptographic and session bedrock while offering an open-source, modern desktop frontend delivering WindTerm's exact feature set.
 
 ```
        [ PuTTY Foundation ]                  [ WindTerm Innovation ]
@@ -22,7 +22,7 @@ Modern operations engineers face a frustrating dichotomy:
                 \                                  /
                  ▼                                ▼
             ═════════════════════════════════════════════
-                       WinPutty (OpenWind)
+                       Plinky (OpenWind)
             • 100% Genuine Open Source (MIT/Apache 2.0)
             • Cross-Platform (Win / Mac / Linux)
             • IDE-Grade Terminal Workbench
@@ -33,7 +33,7 @@ Modern operations engineers face a frustrating dichotomy:
 
 ## 2. System Architecture
 
-WinPutty follows a high-performance modular architecture separating the **UI Terminal Workbench**, the **Core Runtime / PTY Manager**, and the **PuTTY Subsystem**:
+Plinky follows a high-performance modular architecture separating the **UI Terminal Workbench**, the **Core Runtime / PTY Manager**, and the **PuTTY Subsystem**:
 
 ```mermaid
 flowchart TD
@@ -73,7 +73,7 @@ flowchart TD
 ### 3.1. PuTTY Ecosystem Native Bridge (Linux & Windows)
 * **Linux PuTTY Native Storage (`~/.putty/sessions`)**:
   * On Linux systems, PuTTY stores sessions directly under `~/.putty/sessions/` in percent-encoded filenames (e.g. `10.10.10.10%20`, `COM%20USB0`).
-  * WinPutty reads and parses these session files directly, giving Linux users instant zero-setup access to all their existing PuTTY profiles.
+  * Plinky reads and parses these session files directly, giving Linux users instant zero-setup access to all their existing PuTTY profiles.
   * Writes and modifications sync back to `~/.putty/sessions/`, ensuring 100% interoperability with `/usr/bin/putty`.
 * **Windows PuTTY Registry**:
   * On Windows, automatically reads and writes `HKCU\Software\SimonTatham\PuTTY\Sessions`.
@@ -148,7 +148,7 @@ flowchart TD
 Unlike WindTerm's controversial closed-source core:
 1. **Zero Proprietary Binary Blobs**: The entire codebase is 100% open-source TypeScript, Rust/C++, and HTML/CSS. Anyone can inspect, build, and verify reproducible binaries.
 2. **Master Key AES-GCM Vault**: Saved credentials and passwords are encrypted using **AES-256-GCM** derived with **PBKDF2** (or Argon2id) from a user-supplied master password.
-3. **Agent Isolation**: When using PuTTY's Pageant or system SSH agents, private keys never enter WinPutty's memory space—cryptographic signing is performed securely inside Pageant.
+3. **Agent Isolation**: When using PuTTY's Pageant or system SSH agents, private keys never enter Plinky's memory space—cryptographic signing is performed securely inside Pageant.
 
 ---
 

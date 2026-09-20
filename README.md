@@ -1,7 +1,7 @@
-# WinPutty (OpenWind)
+# Plinky
 
 > **The Open-Source PuTTY Wrapper with WindTerm's IDE Superpowers.**
-> Combining PuTTY's battle-tested security, registry sessions, `.ppk` keys, and Pageant with WindTerm's beloved features: Free Type Mode, Multi-Session Sync Input, Integrated SFTP Pane, Real-time Regex Syntax Highlighting, and Visual SSH Tunneling.
+> Named after PuTTY's iconic workhorse CLI tool `plink`. Combining PuTTY's battle-tested security, Linux `~/.putty/sessions`, Windows registry sessions, `.ppk` keys, and Pageant with WindTerm's beloved features: Free Type Mode, Multi-Session Sync Input, Integrated SFTP Pane, Real-time Regex Syntax Highlighting, and Visual SSH Tunneling.
 
 ---
 
@@ -13,16 +13,16 @@
 3. **Security Impediments**: Enterprise and security-minded users cannot safely run closed-source binaries that handle production SSH keys, passwords, and server root access.
 
 On the other end of the spectrum is **PuTTY**:
-* Universally trusted, audited, MIT-licensed, and practically omnipresent on Windows and Unix.
+* Universally trusted, audited, MIT-licensed, and practically omnipresent on Linux (`/usr/bin/plink`) and Windows.
 * However, PuTTY lacks modern conveniences: no native tabs, no integrated SFTP, no broadcast input, no regex highlighting, and no modern session management.
 
-**WinPutty (OpenWind)** solves both problems: it provides an open-source, modern desktop workbench that uses PuTTY’s ecosystem (reading PuTTY sessions, `.ppk` keys, Pageant agent, and `plink`/`psftp`) while implementing the full suite of WindTerm features.
+**Plinky** solves both problems: it provides an open-source, modern desktop workbench that uses PuTTY’s ecosystem (reading Linux `~/.putty/sessions`, Windows registry, `.ppk` keys, SSH Agent, and `plink`/`psftp`) while implementing the full suite of WindTerm features.
 
 ---
 
 ## 2. Feature Comparison Matrix
 
-| Feature | Classic PuTTY | MobaXterm | WindTerm | **WinPutty (Proposed)** |
+| Feature | Classic PuTTY | MobaXterm | WindTerm | **Plinky (Proposed)** |
 | :--- | :---: | :---: | :---: | :---: |
 | **Open Source** | ✅ (MIT) | ❌ (Proprietary / Free tier limits) | ⚠️ (Partial / Core closed) | ✅ **100% Open Source** |
 | **Linux Native PuTTY (`~/.putty/sessions`)** | ✅ Native | ❌ | ⚠️ Import only | ✅ **100% Native Read/Write** |
@@ -54,7 +54,7 @@ The complete proposal, analysis, and technical specifications are structured in 
 
 ## 4. Architectural Overview
 
-WinPutty adopts a modular two-tier architecture:
+Plinky adopts a modular two-tier architecture:
 
 ```mermaid
 flowchart TD
