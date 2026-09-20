@@ -24,3 +24,10 @@ It combines the rock-solid reliability, profile compatibility, and credential pr
 - **Always use and update `README.md`**: Reflect the current state, capabilities, installation/usage instructions, and feature roadmap of the project.
 - **Always use and update `scaffold.md`**: Maintain an accurate, up-to-date map of directory structure, module responsibilities, and planned components.
 - **Always use an implementation plan**: Any non-trivial modification, architectural extension, or implementation phase must follow a structured plan before execution.
+
+---
+
+## Dual-Agent Division of Labor (Antigravity & Claude)
+- **Antigravity (Gemini 3.8 Flash High)**: Fast Implementer & Explorer — rapid codebase scaffolding, tool execution, terminal automation, file generation, test running, and live repository synchronization.
+- **Claude Sonnet 5**: Critic & Deep Architect — architectural review, logic auditing, edge-case detection (race conditions in PTY/crypto/sync broadcast), and code refinement.
+- **Workflow**: Writer / Critic loop via `abtools-bridge`. Antigravity generates implementations $\rightarrow$ dispatches to Claude for critical review $\rightarrow$ Antigravity incorporates fixes and executes verification.

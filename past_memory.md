@@ -39,8 +39,11 @@
   - Selected name: **Plinky** (homage to `/usr/bin/plink`; friendly, memorable, cross-platform, eliminating the "Win" Windows-only connotation).
 * Agent Collaboration Bridge:
   - Connected via `abtools-bridge` MCP server.
-  - Message #86 sent to Claude Desktop with structured payload `0086-plinky_project_briefing.json` containing project overview, confirmed Rust/Tauri stack, PuTTY Linux/Windows specs, and full documentation paths.
-  - Claude and Antigravity pair-programming channel active for Plinky.
+  - Message #86 sent to Claude Desktop with structured payload `0086-plinky_project_briefing.json`.
+  - Division of Labor Formally Adopted:
+    * Gemini (Antigravity): Explorer / Fast Implementer (large context ingestion, rapid scaffolding, tool execution, file edits, test running, live repo sync).
+    * Claude Sonnet 5: Deep Architect / Critic (code review, race condition detection, edge cases in PTY/crypto/sync protocols, structural validation).
+    * Pattern: Writer/Critic loop — Gemini writes implementation -> notifies Claude via bridge -> Claude reviews and spots subtle logic flaws -> Gemini integrates and verifies.
 
 ### 3. MANDATORY DIRECTIVES & GOVERNANCE
 * User Global Rules:
