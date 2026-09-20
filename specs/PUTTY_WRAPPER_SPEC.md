@@ -53,11 +53,11 @@ On Windows, PuTTY persists sessions in the Windows Registry under:
 HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\[Session%20Name]
 ```
 
-### 1.3. Unified Cross-Platform Storage Adapter
-Plinky provides a unified TypeScript session adapter:
-* Detects runtime platform (`process.platform === 'linux'` vs `'win32'`).
-* On Linux: Reads and writes directly to `path.join(os.homedir(), '.putty', 'sessions')`.
-* On Windows: Queries and writes to the Windows Registry.
+### 1.3. Unified Cross-Platform Storage Adapter (Rust)
+Plinky provides a unified Rust session adapter:
+* Detects runtime platform (`cfg!(target_os = "linux")` vs `cfg!(target_os = "windows")`).
+* On Linux: Reads and writes directly to `$HOME/.putty/sessions/` using Rust `std::fs` and line-by-line key-value parsers.
+* On Windows: Queries and writes to the Windows Registry using the `winreg` crate.
 * Enables zero-friction migration: sessions created on Linux PuTTY are immediately visible and editable in Plinky.
 
 ### 1.2. Key Registry Attributes to Parse & Replicate
@@ -150,11 +150,11 @@ Plinky integrates natively with SSH key agents across platforms:
   ```bash
   $SSH_AUTH_SOCK (e.g. /tmp/ssh-XXXXXX/agent.<pid> or /run/user/1000/keyring/ssh)
   ```
-* Plinky connects directly to this Unix Domain Socket using Node.js `net.connect(process.env.SSH_AUTH_SOCK)`.
-* Communication adheres to the standard IETF SSH Agent Protocol (RFC draft):
-  * Length prefix (4 bytes, big endian)
-  * Message code (1 byte)
-  * Payload
+* Plinky connects directly to this Unix Domain Socket using Rust's `tokio::net::UnixStream::connect(socket_path).await`.
+* Communication adheres to the standard IETF SSH Agent Protocol:
+  * Length prefix (4 bytes, big endian `u32`)
+  * Message code (1 byte `u8`)
+  * Payload bytes
 
 ### 3.2. Windows IPC Mechanisms
 

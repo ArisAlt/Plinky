@@ -20,10 +20,21 @@
 * Windows Compatibility:
   - Registry storage under `HKCU\Software\SimonTatham\PuTTY\Sessions`.
   - Named Pipe IPC `\\.\pipe\pageant.*` and Win32 `WM_COPYDATA`.
-* Selected Architecture:
-  - Unified Session Provider: platform-aware, bi-directionally syncs `~/.putty/sessions/` on Linux and Registry on Windows.
-  - Frontend: TypeScript + xterm.js + WebGL. Full buffer access for Free Type Mode, 4-channel sync input, and live regex markers.
-  - Subprocess engine: Auto-wraps `/usr/bin/plink` or native SSH2.
+* Confirmed Architecture: **Rust + Tauri v2 (with TypeScript & xterm.js)**
+  - Backend: Rust (Tauri v2)
+    * PTY Management: `portable-pty` crate (handles Unix PTYs on Linux/macOS and ConPTY on Windows).
+    * PuTTY Sessions: Native parser for `~/.putty/sessions/` on Linux and `winreg` on Windows.
+    * PuTTY Keys: `.ppk` v2 (SHA-1) and v3 (Argon2id + AES-256-CBC) native parser & decryptor.
+    * Agent Bridge: Unix Domain Socket (`$SSH_AUTH_SOCK`) on Linux/macOS, Windows Named Pipe (`\\.\pipe\pageant.*`).
+    * Subprocess Runner: Spawns `/usr/bin/plink` or `plink.exe` with async streaming.
+    * Serial Port: `serialport` crate for `/dev/ttyUSB*` on Linux and `COM*` on Windows.
+    * SFTP Subsystem: Async SFTP client via `russh` / `ssh2` with concurrent chunked transfers.
+  - Frontend: TypeScript + React/Vite + xterm.js
+    * Terminal Rendering: `xterm.js` with `@xterm/addon-webgl` for 60 FPS hardware acceleration.
+    * IDE Docking: `dockview` for multi-tab split panes, dockable SFTP sidebars, and session trees.
+    * Free Type Mode: DOM mouse event interceptor calculating cursor offsets and emitting navigation escapes.
+    * Sync Input: Multi-channel broadcast router (Channels A, B, C, D) over typed Tauri IPC events.
+    * Regex Markers: Real-time token decoration provider styling IPs, URLs, and log levels.
 * Naming Resolution:
   - Selected name: **Plinky** (homage to `/usr/bin/plink`; friendly, memorable, cross-platform, eliminating the "Win" Windows-only connotation).
 

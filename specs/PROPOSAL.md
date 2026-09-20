@@ -152,15 +152,19 @@ Unlike WindTerm's controversial closed-source core:
 
 ---
 
-## 5. Technology Stack Recommendation
+## 5. Technology Stack Architecture (Rust + Tauri v2)
 
 | Component | Selected Technology | Rationale |
 | :--- | :--- | :--- |
-| **App Framework** | Electron or Tauri (Rust) | Cross-platform, rich window management, high-performance native bridges. |
-| **Terminal Core** | `xterm.js` + WebGL Addon | Industry standard (used in VS Code), capable of 60 FPS rendering, full buffer access for Free Type Mode and regex markers. |
-| **PuTTY Subsystem** | Custom TypeScript / C++ Native Addon | High-speed parsing of PuTTY registry, PPK files, and Pageant Windows named pipe IPC. |
-| **SSH & SFTP Engine** | Dual: `plink.exe` wrapper + `ssh2` | Offers flexibility between genuine PuTTY execution and pure in-process SSH2 streams. |
-| **UI Framework** | React + Tailwind CSS + Lucide Icons | Clean, responsive, dark-mode native IDE layout with dockable panels. |
+| **Desktop Runtime** | **Tauri v2 (Rust)** | Ultra-low memory usage (~35–50 MB RAM vs 150MB+ in Electron), instantaneous startup, native machine code security. |
+| **PTY Management** | **`portable-pty` (Rust)** | Battle-tested cross-platform PTY engine supporting Unix PTY on Linux/macOS and ConPTY on Windows. |
+| **Terminal Core** | **`xterm.js` + `@xterm/addon-webgl`** | High-performance 60 FPS terminal renderer with direct buffer access for Free Type Mode and regex markers. |
+| **UI Framework & Docking** | **React + TypeScript + `dockview`** | Professional IDE docking framework (used in VS Code clones), supporting drag-and-drop tabs, split panes, and floating docks. |
+| **PuTTY Subsystem** | **Custom Rust Crates** | Zero-dependency native parsing of `~/.putty/sessions`, Windows `winreg`, and `.ppk` keys using `argon2` and `aes`. |
+| **Agent IPC** | **Rust `tokio::net` / Windows Pipes** | Native Unix Domain Sockets (`$SSH_AUTH_SOCK`) on Linux/macOS and Named Pipes (`\\.\pipe\pageant.*`) on Windows. |
+| **SSH & SFTP Engine** | **`russh` / `ssh2` + `/usr/bin/plink`** | Dual-mode: Direct async SSH/SFTP streaming in Rust, plus capability to execute system PuTTY CLI toolchain. |
+| **Serial Communication** | **`serialport` (Rust)** | Direct communication with embedded hardware, USB consoles (`/dev/ttyUSB*`, `COM*`). |
+| **Credential Vault** | **Rust `aes-gcm` + `argon2`** | Memory-safe, audited cryptographic primitives for master password vault. |
 
 ---
 
