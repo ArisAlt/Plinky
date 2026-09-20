@@ -25,16 +25,15 @@ This document tracks the directory architecture, file structure, component relat
 │
 ├── crates/
 │   ├── putty-compat/                     # Standalone PuTTY Compatibility Crate (Zero Tauri dependencies)
-│   │   │                                 # [D1 PROPOSED, PENDING OWNER DECISION: narrow v1 to session r/w,
-│   │   │                                 #  .ppk header inspection, and read-only hostkey listing; deferring full
-│   │   │                                 #  Argon2id .ppk decryption & agent client until needed]
-│   │   ├── Cargo.toml                    # Dependencies: winreg (Windows), serde, zeroize (argon2/aes if D1 keeps full crypto)
+│   │   │                                 # [D1 ACCEPTED BY OWNER - Option A: narrow v1 to session r/w,
+│   │   │                                 #  .ppk header inspection/fingerprinting, and read-only hostkey listing;
+│   │   │                                 #  deferring .ppk decryption & agent client to v2 / key manager]
+│   │   ├── Cargo.toml                    # Dependencies: winreg (Windows), serde, zeroize
 │   │   ├── src/
 │   │   │   ├── lib.rs
 │   │   │   ├── sessions.rs               # PUTTYDIR / ~/.putty/sessions and WinReg parser/writer
-│   │   │   ├── ppk.rs                    # .ppk v2/v3 header parsing & fingerprinting (decryption pending owner)
-│   │   │   ├── hostkeys.rs               # Read-only hostkey listing (~/.putty/sshhostkeys & WinReg)
-│   │   │   └── pageant.rs                # Pageant IPC bridge (pending owner / key manager phase)
+│   │   │   ├── ppk.rs                    # .ppk v2/v3 header parsing & fingerprinting (unencrypted metadata)
+│   │   │   └── hostkeys.rs               # Read-only hostkey listing (~/.putty/sshhostkeys & WinReg)
 │   │   ├── tests/                        # Headless cross-platform integration tests (real puttygen 0.85 fixtures)
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │

@@ -56,7 +56,7 @@ Output: transport read loop -> ring buffer append -> `Channel` chunk `{seq, byte
 
 ## 3. Design decisions (new or changed, with reasons)
 
-**D1. `putty-compat` v1 is smaller than the current scaffold.** With plink as the only transport, plink itself reads `.ppk` keys, talks to the agent, verifies and stores host keys. v1 needs only: session read/write, `.ppk` header parsing (list, fingerprint, encrypted?), and read-only host-key listing. **Defer `.ppk` decryption, the agent client and the hostkey writer** until a feature needs them (a key manager, or `russh`). This removes most of the attack surface of the hand-written crypto and parsers. *Owner call:* Antigravity's briefing lists `.ppk` Argon2id decryption as a headline feature.
+**D1. `putty-compat` v1 is smaller than the current scaffold (ACCEPTED BY OWNER - Option A).** With plink as the only transport, plink itself reads `.ppk` keys, talks to the agent, verifies and stores host keys. v1 implements: session read/write, `.ppk` header parsing (list, fingerprint, encryption check), and read-only host-key listing. **Deferred to v2 / key manager:** `.ppk` Argon2id decryption, the Pageant agent client, and the hostkey writer. This minimizes attack surface and avoids hand-written crypto in v1.
 
 **D2. Plinky never writes host keys.** Plink owns verification and storage. Plinky shows the fingerprint to the user and answers plink's own prompt (`y`/`n`). This supersedes `PUTTY_WRAPPER_SPEC` line 65, which has Plinky appending to `sshhostkeys`. On Windows PuTTY keeps host keys in the registry (I believe `HKCU\Software\SimonTatham\PuTTY\SshHostKeys` **[?]**), so any listing must handle both stores.
 

@@ -98,5 +98,5 @@
 * D6 (SyncInputRouter Safety): Broadcast only to `Live` sessions (never into `PreAuth` prompts); honours `protected` tag; requires confirmation on multi-line paste to >= 2 sessions.
 * D7 (Vertical Slice Roadmap M0-M7): M0 Spikes -> M1 CI & Threat Model -> M2 Walking Skeleton (one session, one tab, `Channel` flow control + ring buffer, reload-reattach) before breadth/crates -> M3 `putty-compat` v1 -> M4 PreAuth/Vault -> M5 Dockview/Sync -> M6 FreeType/Markers -> M7 SFTP/Tunnels.
 * R1-R3 (Persistence Invariants): Atomic temp + fsync + rename (R1); corrupt state quarantined (`*.corrupt.<ts>`) & fail-closed on write (R2); schema versioning & unknown fields preserved (R3).
-* D1 (Owner Decision Flagged): Claude proposes narrowing `putty-compat` v1 to session r/w, `.ppk` header inspection, and read-only hostkey listing, deferring full Argon2id PPK decryption and agent client. Documented as proposed, pending owner decision.
+* D1 (Owner Decision ACCEPTED - Option A): Owner officially accepted Option A to narrow `putty-compat` v1 to session read/write, `.ppk` header parsing/fingerprinting, and read-only host-key listing. Hand-written Argon2id `.ppk` decryption and Pageant agent client are deferred to v2 / key manager, removing attack surface and hand-written crypto in v1.
 
