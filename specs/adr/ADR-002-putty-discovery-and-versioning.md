@@ -44,4 +44,8 @@ We must decide how PuTTY is discovered, whether PuTTY binaries should be bundled
 
 ### Platform Target Scope:
 * **Linux and Windows are Tier 1**. macOS is explicitly placed on hold for v1 (no documentation or scaffolding effort allocated to macOS).
+* **Host-Key Store Compatibility**:
+  * **Linux**: File store at `~/.putty/sshhostkeys` (or `$PUTTYDIR/sshhostkeys`).
+  * **Windows**: Registry store under `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\SshHostKeys`.
+  * In accordance with D2, Plinky reads these stores for diagnostic listing but never writes host keys directly (plink handles verification and storage).
 * Verification uses local Linux workstation (CachyOS) and the owner's Windows machine, supported by GitHub Actions CI for both OSes.
