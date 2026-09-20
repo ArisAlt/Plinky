@@ -37,6 +37,10 @@
     * Regex Markers: Real-time token decoration provider styling IPs, URLs, and log levels.
 * Naming Resolution:
   - Selected name: **Plinky** (homage to `/usr/bin/plink`; friendly, memorable, cross-platform, eliminating the "Win" Windows-only connotation).
+* Agent Collaboration Bridge:
+  - Connected via `abtools-bridge` MCP server.
+  - Message #86 sent to Claude Desktop with structured payload `0086-plinky_project_briefing.json` containing project overview, confirmed Rust/Tauri stack, PuTTY Linux/Windows specs, and full documentation paths.
+  - Claude and Antigravity pair-programming channel active for Plinky.
 
 ### 3. MANDATORY DIRECTIVES & GOVERNANCE
 * User Global Rules:
