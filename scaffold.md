@@ -9,7 +9,7 @@ This document tracks the directory architecture, file structure, component relat
 ├── README.md                             # Master user guide, project vision, feature breakdown
 ├── scaffold.md                           # Living directory and module architecture map (this file)
 │
-├── windterm/                             # WindTerm Analysis, Proposal, & Technical Specifications
+├── specs/                             # WindTerm Analysis, Proposal, & Technical Specifications
 │   ├── README.md                         # Overview of the WindTerm research & specifications
 │   ├── PROPOSAL.md                       # Comprehensive proposal: PuTTY Wrapper + WindTerm features
 │   ├── WINDTERM_ANALYSIS.md              # In-depth autopsy of kingToolbox/WindTerm & community requests

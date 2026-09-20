@@ -43,12 +43,12 @@ On the other end of the spectrum is **PuTTY**:
 
 ## 3. Documentation Index
 
-The complete proposal, analysis, and technical specifications are structured in the [`windterm/`](file:///home/citizenzero/Dev/Plinky/windterm) directory:
+The complete proposal, analysis, and technical specifications are structured in the [`specs/`](file:///home/citizenzero/Dev/Plinky/windterm) directory:
 
-* 📄 **[PROPOSAL.md](file:///home/citizenzero/Dev/Plinky/windterm/PROPOSAL.md)**: The end-to-end architectural and functional proposal for the PuTTY wrapper and feature expansion.
-* 📄 **[WINDTERM_ANALYSIS.md](file:///home/citizenzero/Dev/Plinky/windterm/WINDTERM_ANALYSIS.md)**: Deep forensic analysis of WindTerm, GitHub issue backlog, community pain points, and why it stalled.
-* 📄 **[PUTTY_WRAPPER_SPEC.md](file:///home/citizenzero/Dev/Plinky/windterm/PUTTY_WRAPPER_SPEC.md)**: Technical protocol specification for interfacing with PuTTY sessions, `.ppk` keys, Pageant IPC, and `plink`/`psftp`.
-* 📄 **[FEATURE_MATRIX.md](file:///home/citizenzero/Dev/Plinky/windterm/FEATURE_MATRIX.md)**: Comprehensive breakdown of WindTerm community feature requests and their implementation design.
+* 📄 **[PROPOSAL.md](file:///home/citizenzero/Dev/Plinky/specs/PROPOSAL.md)**: The end-to-end architectural and functional proposal for the PuTTY wrapper and feature expansion.
+* 📄 **[WINDTERM_ANALYSIS.md](file:///home/citizenzero/Dev/Plinky/specs/WINDTERM_ANALYSIS.md)**: Deep forensic analysis of WindTerm, GitHub issue backlog, community pain points, and why it stalled.
+* 📄 **[PUTTY_WRAPPER_SPEC.md](file:///home/citizenzero/Dev/Plinky/specs/PUTTY_WRAPPER_SPEC.md)**: Technical protocol specification for interfacing with PuTTY sessions, `.ppk` keys, Pageant IPC, and `plink`/`psftp`.
+* 📄 **[FEATURE_MATRIX.md](file:///home/citizenzero/Dev/Plinky/specs/FEATURE_MATRIX.md)**: Comprehensive breakdown of WindTerm community feature requests and their implementation design.
 
 ---
 
@@ -90,7 +90,7 @@ flowchart TD
 
 ## 5. Getting Started & Roadmap
 
-1. **Phase 1 (Current)**: Research, WindTerm autopsy, and technical specifications (`windterm/` documentation).
+1. **Phase 1 (Current)**: Research, WindTerm autopsy, and technical specifications (`specs/` documentation).
 2. **Phase 2**: Core PuTTY session importer, `.ppk` parser, and Pageant bridge.
 3. **Phase 3**: Terminal workbench with xterm.js, multi-tab docking, and Free Type Mode.
 4. **Phase 4**: Sync Input multi-channel broadcasting and real-time regex text highlighters.

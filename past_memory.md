@@ -30,14 +30,14 @@
 ### 3. MANDATORY DIRECTIVES & GOVERNANCE
 * User Global Rules:
   - `GEMINI.md` in root with project description, dense `past_memory.md`, and instructions to always update `README.md` and `scaffold.md` with implementation plan.
-  - All documentation and architectural proposals housed in root and `windterm/` directory.
+  - All documentation and architectural proposals housed in root and `specs/` directory.
 
 ### 4. KEY DELIVERABLES (DOCS & PROPOSALS)
 * `GEMINI.md`: Governance and project definition.
 * `past_memory.md`: This dense memory ledger.
 * `README.md`: Master project guide, feature comparison matrix, installation and vision.
 * `scaffold.md`: Component layout, module boundaries, and file directory tree.
-* `windterm/PROPOSAL.md`: Deep technical proposal for the PuTTY wrapper and feature replication.
-* `windterm/WINDTERM_ANALYSIS.md`: Exhaustive dissection of WindTerm, GitHub issue metrics, and community feature requests.
-* `windterm/PUTTY_WRAPPER_SPEC.md`: Low-level protocol and interface specification for PuTTY session importing, PPK parsing, Pageant IPC, and Plink piping.
-* `windterm/FEATURE_MATRIX.md`: Side-by-side feature comparison table and implementation strategy.
+* `specs/PROPOSAL.md`: Deep technical proposal for the PuTTY wrapper and feature replication.
+* `specs/WINDTERM_ANALYSIS.md`: Exhaustive dissection of WindTerm, GitHub issue metrics, and community feature requests.
+* `specs/PUTTY_WRAPPER_SPEC.md`: Low-level protocol and interface specification for PuTTY session importing, PPK parsing, Pageant IPC, and Plink piping.
+* `specs/FEATURE_MATRIX.md`: Side-by-side feature comparison table and implementation strategy.
