@@ -9,11 +9,13 @@ This document compares **WinPutty** against **PuTTY**, **KiTTY**, **MobaXterm**,
 | Capability | PuTTY | KiTTY | MobaXterm | WindTerm | **WinPutty** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **License & Auditing** | MIT (Open) | GPL (Open) | Commercial / Proprietary | Apache-2.0 (Core Closed) | **MIT (100% Transparent)** |
-| **Cross-Platform** | Partial (Ports) | Windows only | Windows only | Win / Mac / Linux | **Win / Mac / Linux** |
-| **PuTTY Registry Sessions** | Native | Native | Import only | Import only | **Native (Read & Write)** |
+| **Cross-Platform** | Partial (Ports) | Windows only | Windows only | Win / Mac / Linux | **Linux & Windows Native** |
+| **Linux PuTTY Sessions (`~/.putty/sessions`)** | Native | ❌ | ❌ | ⚠️ Import only | **✅ 100% Native Read/Write** |
+| **Windows PuTTY Registry Sessions** | Native | Native | Import only | Import only | **✅ Native Read/Write** |
+| **Linux PuTTY Toolchain (`/usr/bin/plink`, etc.)**| Native | ❌ | ❌ | ❌ | **✅ Auto-detected & Wrapped** |
+| **Linux Serial Devices (`/dev/ttyUSB*`)** | Native | ❌ | ❌ | ⚠️ Manual | **✅ Direct Device Enumeration** |
 | **PuTTY .ppk Keys (v2/v3)** | Native | Native | Converted | Partial | **Native Parsing & Auth** |
-| **Pageant IPC Integration** | Native | Native | Proprietary | Separate | **Native (Pipes & Shared Mem)** |
-| **Plink / PSFTP Runner** | Native | Native | Custom Cygwin | ❌ | **Native Subprocess Mode** |
+| **Linux SSH Agent (`$SSH_AUTH_SOCK`)** | Native | ❌ | ❌ | ⚠️ Incomplete | **✅ Native Unix Domain Socket** |
 | **Free Type Mode (Click to edit)** | ❌ | ❌ | ❌ | ✅ | **✅ Implemented** |
 | **Multi-Channel Sync Input** | ❌ | ❌ | ⚠️ (All tabs) | ✅ (4 discrete channels) | **✅ 4 Discrete Channels** |
 | **Integrated SFTP Pane** | ❌ | ❌ | ✅ (Sidebar) | ✅ (Dual Pane / Dockable) | **✅ Dual Pane / Dockable** |

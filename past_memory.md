@@ -11,17 +11,21 @@
 * Core strengths: Free Type Mode (mouse click cursor placement & canvas edit), Sync Input (up to 4 broadcast channels), integrated SFTP file manager with drag & drop, real-time regex highlighting (IPs, errors, URLs, keywords), snippet bar, session hierarchy, local/remote/dynamic SSH tunnels, OSC 133 semantic prompt detection.
 * Community backlash & demise: Advertised Apache-2.0 license but kept terminal engine & networking backend closed-source binary blobs ("gradual open-sourcing" was never fulfilled). Single maintainer bottleneck. Updates ceased/stalled (>1 year silence). Over 3,000 issues left unattended. Enterprise & security users abandoned due to proprietary binary handling of SSH keys, passwords, and root credentials.
 
-### 2. PUTTY WRAPPER ARCHITECTURE SELECTION
-* Win32 HWND Reparenting (`SetParent` API) Rejected:
-  - Fails on Linux/macOS. Win32 repaint and focus-stealing bugs. Black box window prevents terminal DOM access, making Free Type Mode, custom regex highlighting, and inline triggers technically impossible.
-* PuTTY Compatibility Subsystem + Modern Terminal Engine Selected:
-  - Frontend: TypeScript + xterm.js + WebGL addon + Canvas. Full access to viewport buffer enables Free Type Mode, on-the-fly regex syntax tokenization, and multi-session sync input.
-  - PuTTY Integration Layer:
-    * Session Registry: Parse Windows Registry (`HKCU\Software\SimonTatham\PuTTY\Sessions`) and portable `.reg`/`.session` files.
-    * Key Engine: Native `.ppk` v2/v3 parser, decryptor, and OpenSSH/PuTTY cross-conversion.
-    * Agent Bridge: Named pipe IPC to PuTTY Pageant on Windows, Unix domain socket for SSH agent on Linux/macOS.
-    * Backend Runner: Dual-mode connection executor — (a) Native SSH2 engine with PPK/Pageant auth, or (b) PTY-wrapped `plink.exe` / `psftp.exe` / `pscp.exe` process execution.
-    * File Transfer: Embedded SFTP client mirroring WindTerm's dual-pane layout with transfer progress queue.
+### 2. PUTTY LINUX & WINDOWS ARCHITECTURE
+* Linux Host Environment Verified:
+  - System has full PuTTY 0.85 suite installed: `/usr/bin/putty`, `/usr/bin/plink`, `/usr/bin/pscp`, `/usr/bin/psftp`, `/usr/bin/puttygen`, `/usr/bin/pageant`.
+  - Local sessions verified at `~/.putty/sessions/`: `10.10.10.10%20`, `COM%20USB0`, `Default%20Settings`.
+  - Session format: Plaintext key-value pairs (`HostName=`, `PortNumber=`, `SerialLine=`, `PublicKeyFile=`), percent-encoded filenames.
+  - SSH Host keys: `~/.putty/sshhostkeys`.
+  - Agent protocol: Native Unix Domain Socket `$SSH_AUTH_SOCK` (standard on Linux).
+  - Serial protocol: Linux character devices (`/dev/ttyUSB0`, `/dev/ttyACM0`).
+* Windows Compatibility:
+  - Registry storage under `HKCU\Software\SimonTatham\PuTTY\Sessions`.
+  - Named Pipe IPC `\\.\pipe\pageant.*` and Win32 `WM_COPYDATA`.
+* Selected Architecture:
+  - Unified Session Provider: platform-aware, bi-directionally syncs `~/.putty/sessions/` on Linux and Registry on Windows.
+  - Frontend: TypeScript + xterm.js + WebGL. Full buffer access for Free Type Mode, 4-channel sync input, and live regex markers.
+  - Subprocess engine: Auto-wraps `/usr/bin/plink` or native SSH2.
 
 ### 3. MANDATORY DIRECTIVES & GOVERNANCE
 * User Global Rules:

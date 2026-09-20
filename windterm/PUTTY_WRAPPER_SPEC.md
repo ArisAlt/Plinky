@@ -4,19 +4,61 @@ This document defines the low-level protocols, data schemas, and IPC mechanisms 
 
 ---
 
-## 1. PuTTY Session Storage Architecture
+## 1. PuTTY Session Storage Architecture (Cross-Platform)
 
-PuTTY persists sessions in the Windows Registry under:
+PuTTY uses different storage backends depending on the operating system. WinPutty natively supports both:
+
+### 1.1. Linux / Unix PuTTY Storage (`~/.putty/`)
+On Linux (such as Arch, Debian, Ubuntu, Fedora), PuTTY stores all configurations in plaintext files inside the user's home directory:
 ```
-HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions
+~/.putty/
+├── sessions/             # Directory containing individual session files
+│   ├── Default%20Settings
+│   ├── 10.10.10.10%20
+│   └── COM%20USB0
+├── sshhostkeys           # Known SSH server host key fingerprints
+└── randomseed            # Cryptographic random seed entropy
 ```
 
-### 1.1. Registry Key Escaping Format
-Session names containing spaces, slashes, or special characters are percent-encoded by PuTTY:
-* Space `' '` $\rightarrow$ `%20`
-* Colon `':'` $\rightarrow$ `%3a`
-* Slash `'/'` $\rightarrow$ `%2f`
-* Percent `'%'` $\rightarrow$ `%25`
+#### Linux Session Filename Encoding
+Session names containing spaces or punctuation are percent-encoded directly in the filename:
+* `"10.10.10.10 "` $\rightarrow$ `~/.putty/sessions/10.10.10.10%20`
+* `"COM USB0"` $\rightarrow$ `~/.putty/sessions/COM%20USB0`
+* `"Default Settings"` $\rightarrow$ `~/.putty/sessions/Default%20Settings`
+
+#### Linux Session File Format
+Each file is a key-value format parsed line-by-line:
+```ini
+HostName=10.10.10.10
+PortNumber=22
+AddressFamily=0
+CloseOnExit=2
+WarnOnClose=1
+TCPNoDelay=1
+RemoteCommand=
+NoPTY=0
+Compression=0
+SerialLine=/dev/ttyUSB0
+SerialSpeed=9600
+SerialDataBits=8
+SerialStopHalfbits=2
+SerialParity=0
+SerialFlowControl=1
+PublicKeyFile=/home/user/.ssh/key.ppk
+```
+
+### 1.2. Windows PuTTY Storage (Registry)
+On Windows, PuTTY persists sessions in the Windows Registry under:
+```
+HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\[Session%20Name]
+```
+
+### 1.3. Unified Cross-Platform Storage Adapter
+WinPutty provides a unified TypeScript session adapter:
+* Detects runtime platform (`process.platform === 'linux'` vs `'win32'`).
+* On Linux: Reads and writes directly to `path.join(os.homedir(), '.putty', 'sessions')`.
+* On Windows: Queries and writes to the Windows Registry.
+* Enables zero-friction migration: sessions created on Linux PuTTY are immediately visible and editable in WinPutty.
 
 ### 1.2. Key Registry Attributes to Parse & Replicate
 
@@ -99,18 +141,28 @@ Private-MAC: e830... (HMAC-SHA-256)
 
 ---
 
-## 3. PuTTY Pageant IPC Protocol Specification
+## 3. PuTTY Pageant & SSH Agent IPC Protocol Specification
 
-**Pageant** is the PuTTY authentication agent. WinPutty natively connects to Pageant so users do not need to enter key passphrases repeatedly.
+WinPutty integrates natively with SSH key agents across platforms:
 
-### 3.1. Windows IPC Mechanisms
+### 3.1. Linux / Unix SSH Agent Protocol (`$SSH_AUTH_SOCK`)
+* On Linux, PuTTY's Pageant or system OpenSSH agent (`ssh-agent`, `gnome-keyring`, `gpg-agent`) exposes a Unix Domain Socket specified by the environment variable:
+  ```bash
+  $SSH_AUTH_SOCK (e.g. /tmp/ssh-XXXXXX/agent.<pid> or /run/user/1000/keyring/ssh)
+  ```
+* WinPutty connects directly to this Unix Domain Socket using Node.js `net.connect(process.env.SSH_AUTH_SOCK)`.
+* Communication adheres to the standard IETF SSH Agent Protocol (RFC draft):
+  * Length prefix (4 bytes, big endian)
+  * Message code (1 byte)
+  * Payload
+
+### 3.2. Windows IPC Mechanisms
 
 #### Method A: Named Pipe IPC (Modern Pageant / Windows 10 & 11)
 * Pageant exposes a named pipe at:
   ```
   \\.\pipe\pageant.<UserName>.<RandomHex>
   ```
-  or standard OpenSSH agent pipe `\\.\pipe\openssh-ssh-agent`.
 * WinPutty opens the pipe stream directly using standard Windows asynchronous I/O.
 
 #### Method B: Win32 Shared Memory & `WM_COPYDATA` (Classic Pageant)
@@ -119,30 +171,23 @@ Private-MAC: e830... (HMAC-SHA-256)
   ```c
   HANDLE hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 8192, mapName);
   ```
-* Populate the mapped buffer with the SSH Agent Request payload.
-* Send `WM_COPYDATA` to Pageant:
-  ```c
-  COPYDATASTRUCT cds;
-  cds.dwData = 0x804e50ba; // AGENT_COPYDATA_ID
-  cds.cbData = strlen(mapName) + 1;
-  cds.lpData = mapName;
-  SendMessage(hwnd, WM_COPYDATA, myHwnd, (LPARAM)&cds);
-  ```
-* Read the agent response from the shared memory buffer.
-
-### 3.2. Agent Message Types Handled
-* `SSH2_AGENTC_REQUEST_IDENTITIES (11)`: List all loaded public keys.
-* `SSH2_AGENT_IDENTITIES_ANSWER (12)`: Response with key blobs and comments.
-* `SSH2_AGENTC_SIGN_REQUEST (13)`: Request Pageant to sign an SSH authentication challenge.
-* `SSH2_AGENT_SIGN_RESPONSE (14)`: Return signature blob to complete SSH handshake.
+* Send `WM_COPYDATA` with `dwData = 0x804e50ba` (`AGENT_COPYDATA_ID`).
 
 ---
 
-## 4. PuTTY CLI Process Wrapper (`plink`, `psftp`, `pscp`)
+## 4. PuTTY CLI Process Wrapper (`plink`, `psftp`, `pscp`, `puttygen`)
 
-When users choose the **Strict PuTTY CLI Runner** mode, WinPutty spawns the official PuTTY executables under a pseudo-terminal (PTY) interface.
+When users select **PuTTY CLI Subprocess Mode**, WinPutty spawns the official PuTTY executables under a pseudo-terminal (PTY) interface.
 
-### 4.1. `plink` Execution Harness
+### 4.1. Linux Binary Detection
+WinPutty automatically scans standard paths:
+* Linux: `/usr/bin/plink`, `/usr/bin/psftp`, `/usr/bin/pscp`, `/usr/bin/puttygen`, `/usr/bin/pageant`
+* Windows: `C:\Program Files\PuTTY\plink.exe`, `PATH`
+
+### 4.2. Linux Serial Port Support (`/dev/ttyUSB*`, `/dev/ttyACM*`)
+PuTTY for Linux is widely used for hardware debugging and embedded serial consoles (e.g. `SerialLine=/dev/ttyUSB0`, `SerialSpeed=115200`).
+* WinPutty provides direct serial communication via `node-serialport` or by launching `plink -serial /dev/ttyUSB0 -sercfg 115200,8,n,1,N`.
+* Full support for hardware flow control (RTS/CTS, DTR/DSR, XON/XOFF).
 ```bash
 plink.exe -load "<SessionName>" \
           -P <Port> \

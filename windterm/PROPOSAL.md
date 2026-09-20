@@ -70,17 +70,22 @@ flowchart TD
 
 ## 3. Detailed Feature Specifications
 
-### 3.1. PuTTY Ecosystem Native Bridge
-* **Registry & Session Importer**:
-  * On Windows, automatically reads `HKCU\Software\SimonTatham\PuTTY\Sessions` to import all saved hostnames, ports, username configurations, color palettes, and port forwardings.
-  * On Linux/macOS, reads portable PuTTY session files or `.reg` registry dumps.
-  * Bi-directional export: Changes made in WinPutty can be saved back to PuTTY registry format.
+### 3.1. PuTTY Ecosystem Native Bridge (Linux & Windows)
+* **Linux PuTTY Native Storage (`~/.putty/sessions`)**:
+  * On Linux systems, PuTTY stores sessions directly under `~/.putty/sessions/` in percent-encoded filenames (e.g. `10.10.10.10%20`, `COM%20USB0`).
+  * WinPutty reads and parses these session files directly, giving Linux users instant zero-setup access to all their existing PuTTY profiles.
+  * Writes and modifications sync back to `~/.putty/sessions/`, ensuring 100% interoperability with `/usr/bin/putty`.
+* **Windows PuTTY Registry**:
+  * On Windows, automatically reads and writes `HKCU\Software\SimonTatham\PuTTY\Sessions`.
+* **Linux PuTTY Toolchain Integration**:
+  * Native execution of `/usr/bin/plink`, `/usr/bin/psftp`, `/usr/bin/pscp`, and `/usr/bin/puttygen`.
+  * Support for Linux hardware serial interfaces (`/dev/ttyUSB0`, `/dev/ttyACM0`).
 * **PPK Key Engine**:
-  * Native parsing of `.ppk` v2 (Argon2 / SHA-1) and `.ppk` v3 (Argon2id) keys without external dependencies.
+  * Native parsing of `.ppk` v2 (SHA-1) and `.ppk` v3 (Argon2id) keys without external dependencies.
   * In-memory key decryption with zero disk caching of unencrypted private keys.
-* **Pageant IPC Client**:
-  * Direct communication with running Pageant agent via Windows Named Pipe (`\\.\pipe\pageant.*`) or shared memory (`Pageant` window message loop).
-  * On Linux/macOS, seamlessly interfaces with OpenSSH `$SSH_AUTH_SOCK`.
+* **Linux SSH Agent & Pageant IPC**:
+  * On Linux, connects natively via Unix domain socket (`$SSH_AUTH_SOCK`) to Pageant or OpenSSH agent.
+  * On Windows, connects via Named Pipe (`\\.\pipe\pageant.*`) or shared memory.
 
 ### 3.2. WindTerm "Free Type Mode" Engine
 * **The Mechanism**:
