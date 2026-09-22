@@ -161,5 +161,19 @@
   - `SyncBroadcastBar.tsx`: Command broadcast UI and target selector (All, A-D).
   - `SftpDualPane.tsx`: Dual-pane local/remote filesystem visual shell and transfer queue mockup aligned with ADR-003 Option B (plain psftp).
   - `TunnelManager.tsx`: Visual SSH port forward visualizer (Local -L, Remote -R, Dynamic -D SOCKS5).
-* Tauri v2 Host: `src-tauri` workspace member with IPC commands (`list_putty_sessions`, `read_putty_session`, `write_putty_session`, `list_putty_hostkeys`, `inspect_ppk`), app icons, and `tauri.conf.json`.
 * Next Milestone: M2 Walking Skeleton — `crates/plinky-core` (Transport trait, `portable-pty`, `PlinkTransport`, D3/D9 PreAuth state machine) wired to ONE live terminal tab via `tauri::ipc::Channel` binary streaming.
+
+### 16. M2 WALKING SKELETON IMPLEMENTED & AUDIT HARDENED (CLAUDE MSG #168 RESOLUTIONS)
+* Crates/Plinky-Core Implemented:
+  - `Transport` trait: `write`, `resize`, `kill`, `is_alive` bound to `Send`.
+  - `LocalTransport`: native local shell spawned under `portable-pty`.
+  - `PlinkTransport`: ADR-002 PuTTY binary discovery, `plink -load <Session> -t` spawned under `portable-pty`. Omitted hardcoded `-agent` flag per Claude audit (deferring to session's native `AgentFwd`). Implemented `detect_putty()` probing `plink -V` against >= 0.75 floor.
+  - `PreAuthStateMachine`: Fixed host-key regex to match verbatim plink 0.85 text (`"The host key is not cached for this server:"`, `"Store key in cache? (y/n, Return cancels connection, i for more info)"`). Implemented strict 8 KiB buffer cap (`MAX_PREAUTH_BUFFER_LEN = 8192`) with default-deny (holds unmatched bytes, fails closed to `Closed{Error}` upon overflow). D9 boundary marker (`"Access granted"`) transitions to `Live` with zero post-auth regex overhead.
+  - `ScrollbackRingBuffer`: Monotonic sequence counter `total_bytes_written: usize`, O(1) unread replay via `get_since(from_seq) -> (Vec<u8>, bool)` with truncation detection.
+  - `SessionRegistry`: Thread-safe session management (`ActiveSession`), streaming reader task, and `attach_session(id, out_tx, from_seq) -> Result<AttachInfo>` enabling webview reload-and-reattach without losing PTY process.
+* Tauri v2 Streaming IPC (`src-tauri`):
+  - Added binary streaming IPC handlers: `start_terminal_session` using `tauri::ipc::Channel<Vec<u8>>`, `attach_terminal_session`, `write_terminal_input`, `resize_terminal`, `close_terminal_session`, and `putty_detect`.
+* Frontend Wiring:
+  - `src/services/tauriBridge.ts`: Added `detectPutty()`, `startTerminalSession()`, `attachTerminalSession()`, `writeTerminalInput()`, `resizeTerminal()`, and `closeTerminalSession()`.
+  - `TerminalView.tsx`: Live PTY binary channel connection with graceful browser-preview fallback banner.
+* Verification: 13/13 tests pass in `cargo test --workspace` (`putty-compat`: 7, `plinky-core`: 6). `npm run build` compiles 1,911 modules into `dist/` with 0 TS errors in 1.78s.

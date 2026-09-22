@@ -42,27 +42,20 @@ This document tracks the directory architecture, file structure, component relat
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
-│       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, tracing, zeroize, argon2, aes-gcm, winreg
+│       │                                 # ✅ IMPLEMENTED & VERIFIED (6/6 tests pass)
+│       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror
 │       └── src/
 │           ├── lib.rs
+│           ├── errors.rs                 # PlinkyError, Result
 │           ├── transport/                # Unified Transport Abstraction
-│           │   ├── mod.rs                # Transport trait (read, write, resize, close)
-│           │   ├── plink.rs              # Primary: plink under portable-pty with -share (D8: interactive, no -batch)
-│           │   ├── local_pty.rs          # Local shell PTY (bash, zsh, powershell)
-│           │   └── serial.rs             # Hardware serial port (via `plink -serial`)
-│           ├── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
-│           │   ├── mod.rs
-│           │   ├── manager.rs            # Active session registry (survives webview reload; owns -share master)
-│           │   ├── state_machine.rs      # PreAuth state machine (HostKeyPending -> Live on 'Access granted', display-only password)
-│           │   └── ring_buffer.rs        # Scrollback memory buffer (2 MiB per session credit window)
-│           ├── sync/                     # Multi-Session Input Broadcasting (D6)
-│           │   └── router.rs             # SyncInputRouter (Rust fanout, Live-only filtering, paste guard)
-│           ├── tunnel/                   # Port Forwarding & Tunnels
-│           │   ├── mod.rs
-│           │   └── forwarder.rs          # Dynamic, Local, and Remote tunnel manager (via plink)
-│           └── shell_integration/        # Semantic Shell Support
+│           │   ├── mod.rs                # Transport trait (write, resize, kill, is_alive) bound to Send
+│           │   ├── plink.rs              # Primary: plink under portable-pty, ADR-002 detect_putty probe
+│           │   └── local.rs              # Local shell PTY (sh, bash) under portable-pty
+│           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
-│               └── bootstrap.rs          # Auto-injection snippets for bash, zsh, fish (OSC 133 + OSC 7)
+│               ├── manager.rs            # Active session registry, attach_session reattach-with-replay
+│               ├── state_machine.rs      # PreAuth state machine (verbatim prompts, 8 KiB default-deny, D9 live marker)
+│               └── ring_buffer.rs        # Scrollback ring buffer with monotonic sequence tracking & get_since replay
 │
 ├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings (IMPLEMENTED)
 │   ├── Cargo.toml                        # Workspace member: tauri, putty-compat, tokio

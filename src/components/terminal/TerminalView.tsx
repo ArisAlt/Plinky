@@ -3,6 +3,12 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { TerminalTab, SyncChannel } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
+import { 
+  startTerminalSession, 
+  writeTerminalInput, 
+  resizeTerminal, 
+  closeTerminalSession 
+} from '../../services/tauriBridge';
 import { Radio, Edit3, Sparkles } from 'lucide-react';
 
 interface TerminalViewProps {
@@ -65,24 +71,49 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     terminalManager.registerTerminal(tab.id, term, tab.syncChannel);
     terminalManager.setActiveTab(tab.id);
 
-    // Initial Welcome and Session Connection Banner
-    term.writeln(`\x1b[36m╔══════════════════════════════════════════════════════════════════╗\x1b[0m`);
-    term.writeln(`\x1b[36m║\x1b[0m  \x1b[1mPlinky PuTTY Wrapper\x1b[0m — Connected to \x1b[33m${tab.sessionName}\x1b[0m (\x1b[32m${tab.hostname}:${tab.port}\x1b[0m)  \x1b[36m║\x1b[0m`);
-    term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Free Type Mode: \x1b[32mActive\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
-    term.writeln(`\x1b[36m╚══════════════════════════════════════════════════════════════════╝\x1b[0m\r\n`);
-    term.write(`\x1b[32m${tab.username || 'deploy'}@${tab.sessionName.toLowerCase().replace(/\s+/g, '-')}\x1b[0m:\x1b[34m~\x1b[0m$ `);
+    // Connect to live Tauri backend PTY session or fallback to preview
+    let isLivePty = false;
+    startTerminalSession(
+      tab.id,
+      tab.sessionName,
+      tab.hostname === 'localhost' || !tab.hostname,
+      term.cols,
+      term.rows,
+      (chunk) => {
+        isLivePty = true;
+        term.write(chunk);
+      }
+    ).then((started) => {
+      if (!started) {
+        // Browser development preview fallback banner
+        term.writeln(`\x1b[36m╔══════════════════════════════════════════════════════════════════╗\x1b[0m`);
+        term.writeln(`\x1b[36m║\x1b[0m  \x1b[1mPlinky PuTTY Wrapper (Preview)\x1b[0m — ${tab.sessionName} (${tab.hostname}:${tab.port})  \x1b[36m║\x1b[0m`);
+        term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Free Type: \x1b[32mActive\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
+        term.writeln(`\x1b[36m╚══════════════════════════════════════════════════════════════════╝\x1b[0m\r\n`);
+        term.write(`\x1b[32m${tab.username || 'deploy'}@${tab.sessionName.toLowerCase().replace(/\s+/g, '-')}\x1b[0m:\x1b[34m~\x1b[0m$ `);
+      }
+    });
 
     // Handle user keyboard input
     term.onData((data) => {
-      // Echo input locally for preview (in live PTY this streams to Rust plink process)
-      if (data === '\r') {
-        term.write('\r\n');
-        term.write(`\x1b[32m${tab.username || 'deploy'}@server\x1b[0m:\x1b[34m~\x1b[0m$ `);
-      } else if (data === '\u007F') {
-        // Backspace
-        term.write('\b \b');
+      if (isLivePty) {
+        writeTerminalInput(tab.id, new TextEncoder().encode(data));
       } else {
-        term.write(data);
+        // Echo input locally for browser preview
+        if (data === '\r') {
+          term.write('\r\n');
+          term.write(`\x1b[32m${tab.username || 'deploy'}@server\x1b[0m:\x1b[34m~\x1b[0m$ `);
+        } else if (data === '\u007F') {
+          term.write('\b \b');
+        } else {
+          term.write(data);
+        }
+      }
+    });
+
+    term.onResize(({ cols, rows }) => {
+      if (isLivePty) {
+        resizeTerminal(tab.id, cols, rows);
       }
     });
 
@@ -99,6 +130,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     return () => {
       window.removeEventListener('resize', handleResize);
       terminalManager.unregisterTerminal(tab.id);
+      if (isLivePty) {
+        closeTerminalSession(tab.id);
+      }
       term.dispose();
     };
   }, [tab.id, tab.sessionName, tab.hostname, tab.port, tab.username]);
