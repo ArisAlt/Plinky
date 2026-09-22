@@ -19,6 +19,19 @@ export interface AttachInfo {
   is_live: boolean;
 }
 
+export interface HostKeyPromptInfo {
+  host: string;
+  port: number;
+  key_type: string;
+  fingerprint: string;
+  raw_prompt: string;
+}
+
+export interface PromptEvent {
+  session_id: string;
+  prompt: HostKeyPromptInfo;
+}
+
 // Fallback demo sessions for browser development/preview mode
 const DEMO_SESSIONS: PuttySession[] = [
   {
@@ -305,4 +318,42 @@ export async function closeTerminalSession(sessionId: string): Promise<void> {
       console.warn("Failed to invoke close_terminal_session via Tauri:", e);
     }
   }
+}
+
+export async function answerHostKeyPrompt(
+  sessionId: string,
+  answer: 'store' | 'once' | 'reject'
+): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('answer_hostkey_prompt', {
+        sessionId,
+        answer,
+      });
+      return true;
+    } catch (e) {
+      console.warn("Failed to answer host key prompt via Tauri:", e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function listenHostKeyPrompts(
+  callback: (event: PromptEvent) => void
+): Promise<(() => void) | null> {
+  if (isTauriEnvironment()) {
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen<PromptEvent>('session:prompt', (event) => {
+        callback(event.payload);
+      });
+      return unlisten;
+    } catch (e) {
+      console.warn("Failed to listen for session:prompt via Tauri:", e);
+      return null;
+    }
+  }
+  return null;
 }

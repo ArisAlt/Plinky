@@ -1,6 +1,6 @@
 use plinky_core::session::ring_buffer::ScrollbackRingBuffer;
 use plinky_core::session::state_machine::{PreAuthStateMachine, SessionState, PreAuthAction, CloseReason};
-use plinky_core::session::manager::SessionRegistry;
+use plinky_core::session::manager::{SessionRegistry, PromptAnswer};
 use tokio::sync::mpsc;
 
 #[test]
@@ -73,20 +73,24 @@ fn test_preauth_state_machine_access_granted_marker() {
 fn test_preauth_hostkey_prompt_detection_verbatim() {
     let mut sm = PreAuthStateMachine::new();
     // Verbatim plink 0.85 prompt captured empirically in DEEP_DESIGN.md §2
-    let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+    let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nYou have no guarantee that the server is the computer you think it is.\r\nThe server's ssh-ed25519 key fingerprint is:\r\n  ssh-ed25519 255 SHA256:4t7E0k5M2ZgJ9V8W7K6L5X4Y3Z2A1B0C9D8E7F6G5H4\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
     let action = sm.feed_bytes(prompt_chunk);
 
     match action {
-        PreAuthAction::HostKeyPrompt(p) => {
-            assert!(p.contains("The host key is not cached for this server:"));
-            assert!(p.contains("Store key in cache?"));
+        PreAuthAction::HostKeyPrompt(info) => {
+            assert_eq!(info.host, "192.0.2.1");
+            assert_eq!(info.port, 22);
+            assert_eq!(info.key_type, "ssh-ed25519");
+            assert!(info.fingerprint.contains("SHA256:4t7E0k5M2ZgJ9V8W7K6L5X4Y3Z2A1B0C9D8E7F6G5H4"));
         }
         _ => panic!("Expected HostKeyPrompt"),
     }
 
     match sm.state() {
         SessionState::HostKeyPending { prompt } => {
-            assert!(prompt.contains("Store key in cache?"));
+            assert_eq!(prompt.host, "192.0.2.1");
+            assert_eq!(prompt.port, 22);
+            assert_eq!(prompt.key_type, "ssh-ed25519");
         }
         _ => panic!("Expected SessionState::HostKeyPending"),
     }
@@ -162,4 +166,28 @@ async fn test_session_registry_local_pty_lifecycle_and_reattach() {
 
     // Clean close
     registry.close_session("test-tab-1").expect("Close failed");
+}
+
+#[tokio::test]
+async fn test_write_input_blocked_during_hostkey_pending() {
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("test-prompt-sess", "Test", 80, 24, tx).unwrap();
+    registry.reset_session_preauth("test-prompt-sess").unwrap();
+
+    // Simulate arriving hostkey prompt
+    let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+    let action = registry.simulate_preauth_bytes("test-prompt-sess", prompt_chunk).unwrap();
+    assert!(matches!(action, PreAuthAction::HostKeyPrompt(_)));
+
+    // 1. Raw terminal keystroke must be BLOCKED
+    let write_res = registry.write_input("test-prompt-sess", b"y\n");
+    assert!(write_res.is_err(), "write_input should be rejected while HostKeyPending");
+    assert!(write_res.unwrap_err().to_string().contains("Terminal input blocked"));
+
+    // 2. Answering via answer_prompt must SUCCEED
+    let answer_res = registry.answer_prompt("test-prompt-sess", PromptAnswer::AcceptAndStore);
+    assert!(answer_res.is_ok(), "answer_prompt should succeed");
+
+    registry.close_session("test-prompt-sess").unwrap();
 }

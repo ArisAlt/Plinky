@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, broadcast};
 use crate::errors::{PlinkyError, Result};
 use crate::transport::Transport;
 use crate::transport::local::LocalTransport;
 use crate::transport::plink::PlinkTransport;
-use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction};
+use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo};
 use crate::session::ring_buffer::ScrollbackRingBuffer;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -14,6 +14,19 @@ pub struct AttachInfo {
     pub replay_data: Vec<u8>,
     pub truncated: bool,
     pub is_live: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum PromptAnswer {
+    AcceptAndStore,
+    AcceptOnce,
+    Reject,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PromptEvent {
+    pub session_id: String,
+    pub prompt: HostKeyPromptInfo,
 }
 
 pub struct ActiveSession {
@@ -28,13 +41,21 @@ pub struct ActiveSession {
 #[derive(Clone)]
 pub struct SessionRegistry {
     sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
+    prompt_tx: broadcast::Sender<PromptEvent>,
 }
 
 impl SessionRegistry {
     pub fn new() -> Self {
+        let (prompt_tx, _) = broadcast::channel(64);
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            prompt_tx,
         }
+    }
+
+    /// Subscribes to host key prompt events across all active sessions.
+    pub fn subscribe_prompts(&self) -> broadcast::Receiver<PromptEvent> {
+        self.prompt_tx.subscribe()
     }
 
     /// Spawns a local shell session.
@@ -55,7 +76,6 @@ impl SessionRegistry {
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
 
-        // Background worker inspecting bytes through state machine and saving to scrollback
         tokio::spawn(async move {
             while let Some(chunk) = raw_rx.recv().await {
                 let action = {
@@ -75,10 +95,13 @@ impl SessionRegistry {
                             let _ = tx.send(bytes);
                         }
                     }
-                    PreAuthAction::HostKeyPrompt(_) => {
-                        if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(chunk);
-                        }
+                    PreAuthAction::HostKeyPrompt(info) => {
+                        // Priority 1 security fix: DO NOT forward raw chunk to terminal.
+                        // Broadcast structured prompt event for native UI dialog.
+                        let _ = registry_clone.prompt_tx.send(PromptEvent {
+                            session_id: id_for_task.clone(),
+                            prompt: info,
+                        });
                     }
                     PreAuthAction::Closed(reason) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
@@ -125,7 +148,6 @@ impl SessionRegistry {
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
 
-        // Background worker piping stream through PreAuth state machine
         tokio::spawn(async move {
             while let Some(chunk) = raw_rx.recv().await {
                 let action = {
@@ -145,10 +167,13 @@ impl SessionRegistry {
                             let _ = tx.send(bytes);
                         }
                     }
-                    PreAuthAction::HostKeyPrompt(_) => {
-                        if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(chunk);
-                        }
+                    PreAuthAction::HostKeyPrompt(info) => {
+                        // Priority 1 security fix: DO NOT forward raw chunk to terminal.
+                        // Broadcast structured prompt event for native UI dialog.
+                        let _ = registry_clone.prompt_tx.send(PromptEvent {
+                            session_id: id_for_task.clone(),
+                            prompt: info,
+                        });
                     }
                     PreAuthAction::Closed(reason) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
@@ -198,10 +223,37 @@ impl SessionRegistry {
         })
     }
 
+    /// Answers a pending host key confirmation dialog safely via transport write.
+    pub fn answer_prompt(&self, id: &str, answer: PromptAnswer) -> Result<()> {
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+
+        if !matches!(session.state_machine.state(), SessionState::HostKeyPending { .. }) {
+            return Err(PlinkyError::ProcessError(
+                "Session is not awaiting host key confirmation".into(),
+            ));
+        }
+
+        let bytes: &[u8] = match answer {
+            PromptAnswer::AcceptAndStore => b"y\n",
+            PromptAnswer::AcceptOnce => b"n\n",
+            PromptAnswer::Reject => b"\n",
+        };
+        session.transport.write(bytes)
+    }
+
     /// Writes raw input directly into session PTY master.
+    /// Explicitly blocks raw terminal keystrokes if the session is awaiting a trust decision.
     pub fn write_input(&self, id: &str, data: &[u8]) -> Result<()> {
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+
+        if matches!(session.state_machine.state(), SessionState::HostKeyPending { .. }) {
+            return Err(PlinkyError::ProcessError(
+                "Terminal input blocked: session is awaiting host key trust approval via dialog".into(),
+            ));
+        }
+
         session.transport.write(data)
     }
 
@@ -226,5 +278,20 @@ impl SessionRegistry {
         let lock = self.sessions.lock().unwrap();
         let session = lock.get(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
         Ok(session.scrollback.to_vec())
+    }
+
+    /// Resets a session's state machine to PreAuth (useful for testing prompt flows).
+    pub fn reset_session_preauth(&self, id: &str) -> Result<()> {
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        session.state_machine = PreAuthStateMachine::new();
+        Ok(())
+    }
+
+    /// Simulates feeding bytes into a session's state machine (useful for tests and mock injections).
+    pub fn simulate_preauth_bytes(&self, id: &str, chunk: &[u8]) -> Result<PreAuthAction> {
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        Ok(session.state_machine.feed_bytes(chunk))
     }
 }

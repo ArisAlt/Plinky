@@ -179,3 +179,17 @@
   - **Free Type Mode (M6 Verified)**: Implemented coordinate delta calculation $\Delta = C_{target} - C_{cursor}$ emitting right/left arrow sequences (`\x1b[C` / `\x1b[D`), gated by alternate screen buffer suppression (`terminal.buffer.active.type !== 'alternate'`) and active line boundaries.
   - **Regex Token Decorator (M6 Verified)**: Integrated `@xterm/xterm` `registerLinkProvider` for real-time IPv4 and URL token identification with click-to-copy and browser-open actions.
 * Verification: 13/13 tests pass in `cargo test --workspace` (`putty-compat`: 7, `plinky-core`: 6). `npm run build` compiles 1,911 modules into `dist/` with 0 TS errors in 1.94s.
+
+### 17. PREAUTH HOST KEY PROMPT MEDIATION & SECURITY ISOLATION (CLAUDE MSG #172 RESOLUTIONS)
+* Structured Prompt Parsing & Security Boundary:
+  - `HostKeyPromptInfo`: Parses `host`, `port`, `key_type`, `fingerprint` (SHA256), and `raw_prompt` from raw plink prompt text.
+  - Zero Terminal Leakage: `HostKeyPrompt` action never sends raw bytes to the terminal `out_tx` channel. Prompts are broadcast exclusively via `SessionRegistry.prompt_tx` broadcast channel.
+  - Isolated Tauri Event: App setup forwards `subscribe_prompts()` to Tauri `session:prompt` event with structured payload.
+* Dedicated Response Command & Keystroke Blocking:
+  - `answer_prompt(id, PromptAnswer::AcceptAndStore | AcceptOnce | Reject)`: The ONLY authority writing `y\n`, `n\n`, or `\n` to PTY.
+  - Keystroke Guard: `write_input()` explicitly checks state and rejects terminal keystrokes with an error if the session is `HostKeyPending`. Users cannot accidentally answer or bypass trust prompts via terminal typing.
+  - Tauri Command: Registered `answer_hostkey_prompt` in `src-tauri`.
+* Frontend Native Trust Dialog (`TerminalView.tsx`):
+  - Subscribes to `session:prompt` via `listenHostKeyPrompts()`.
+  - Renders secure modal displaying Host, Port, Key Type, and Fingerprint with explicit action buttons: "Store Key in Cache & Connect", "Connect Just Once", "Abandon Connection".
+* Verification: 14/14 tests pass in `cargo test --workspace` (`test_write_input_blocked_during_hostkey_pending` verified). `npm run build` compiles 1,912 modules with 0 TS errors in 1.91s.

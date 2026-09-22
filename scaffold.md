@@ -42,7 +42,7 @@ This document tracks the directory architecture, file structure, component relat
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
-│       │                                 # ✅ IMPLEMENTED & VERIFIED (6/6 tests pass)
+│       │                                 # ✅ IMPLEMENTED & VERIFIED (7/7 tests pass)
 │       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror
 │       └── src/
 │           ├── lib.rs
@@ -53,8 +53,8 @@ This document tracks the directory architecture, file structure, component relat
 │           │   └── local.rs              # Local shell PTY (sh, bash) under portable-pty
 │           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
-│               ├── manager.rs            # Active session registry, attach_session reattach-with-replay
-│               ├── state_machine.rs      # PreAuth state machine (verbatim prompts, 8 KiB default-deny, D9 live marker)
+│               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events
+│               ├── state_machine.rs      # PreAuth state machine (HostKeyPromptInfo, verbatim prompts, 8 KiB default-deny, D9 marker)
 │               └── ring_buffer.rs        # Scrollback ring buffer with monotonic sequence tracking & get_since replay
 │
 ├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings (IMPLEMENTED)
