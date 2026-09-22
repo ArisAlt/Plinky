@@ -173,7 +173,9 @@
   - `SessionRegistry`: Thread-safe session management (`ActiveSession`), streaming reader task, and `attach_session(id, out_tx, from_seq) -> Result<AttachInfo>` enabling webview reload-and-reattach without losing PTY process.
 * Tauri v2 Streaming IPC (`src-tauri`):
   - Added binary streaming IPC handlers: `start_terminal_session` using `tauri::ipc::Channel<Vec<u8>>`, `attach_terminal_session`, `write_terminal_input`, `resize_terminal`, `close_terminal_session`, and `putty_detect`.
-* Frontend Wiring:
+* Frontend Wiring & WindTerm Superpowers:
   - `src/services/tauriBridge.ts`: Added `detectPutty()`, `startTerminalSession()`, `attachTerminalSession()`, `writeTerminalInput()`, `resizeTerminal()`, and `closeTerminalSession()`.
-  - `TerminalView.tsx`: Live PTY binary channel connection with graceful browser-preview fallback banner.
-* Verification: 13/13 tests pass in `cargo test --workspace` (`putty-compat`: 7, `plinky-core`: 6). `npm run build` compiles 1,911 modules into `dist/` with 0 TS errors in 1.78s.
+  - `TerminalView.tsx`: Live PTY binary channel connection with graceful browser-preview fallback banner. Integrated `attachTerminalSession` for reload reattachment.
+  - **Free Type Mode (M6 Verified)**: Implemented coordinate delta calculation $\Delta = C_{target} - C_{cursor}$ emitting right/left arrow sequences (`\x1b[C` / `\x1b[D`), gated by alternate screen buffer suppression (`terminal.buffer.active.type !== 'alternate'`) and active line boundaries.
+  - **Regex Token Decorator (M6 Verified)**: Integrated `@xterm/xterm` `registerLinkProvider` for real-time IPv4 and URL token identification with click-to-copy and browser-open actions.
+* Verification: 13/13 tests pass in `cargo test --workspace` (`putty-compat`: 7, `plinky-core`: 6). `npm run build` compiles 1,911 modules into `dist/` with 0 TS errors in 1.94s.
