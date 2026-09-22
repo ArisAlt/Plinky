@@ -70,16 +70,19 @@ ecdsa-sha2-nistp256@22:host 0x...
 * **D2: Plinky Never Writes Host Keys Directly**:
   `plink` owns host key verification and storage. Plinky never writes or appends directly to `sshhostkeys` or the registry. Plinky presents the host key fingerprint to the user via a native UI dialog and feeds `plink`'s interactive prompt (`y`/`n`). This avoids divergent host-key formats, race conditions with external PuTTY processes, and cross-platform registry/file store discrepancies.
 
-* **D3: Per-Session Pre-Authentication State Machine**:
+* **D3: Per-Session Pre-Authentication State Machine (Refined with D8, D9, R3)**:
   Scraping prompts out of an unconstrained PTY stream creates a severe security hazard where a compromised remote server could emit synthetic prompt strings to manipulate local trust or capture credentials. Plinky enforces a strict per-session lifecycle:
   ```
-  Created -> Spawning -> PreAuth{HostKeyPending | PasswordPending | PassphrasePending} -> Live -> Closing -> Closed{exit | error}
+  Created -> Spawning -> PreAuth{HostKeyPending} -> Live -> Closing -> Closed{exit | error}
+                    \-> PreAuth{PasswordPrompted}  (Display-only in v1: shown to user, typed by
+                                                     user directly into PTY; no Plinky auto-fill)
   ```
   1. **Prompt Interceptors Armed Exclusively in `PreAuth`**: Interceptors exist only while in `PreAuth`. They match exact `plink 0.85` text, answer once, and default to deny on anything unparsed.
-  2. **Hostile Banner & Challenge Defense**: A hostile remote server controls its pre-authentication banner and keyboard-interactive challenge text. Plinky auto-fills only the standard password prompt, once, from the vault credential bound to that session. Plinky **never** auto-fills a keyboard-interactive challenge.
-  3. **No Auth in Process Arguments**: `plink -pw` is strictly prohibited to prevent credential exposure in `ps` and task managers.
-  4. **Open Problem for Spike S2 [?]**: `plink` emits no explicit "authenticated" delimiter upon completing the handshake. Spike S2 evaluates candidate markers: verbose output (`-v`) lines, first prompt detection / OSC 133 semantic prompt marker, or an initial post-handshake timeout.
-  5. **Disarmed in `Live`**: As soon as the session transitions to `Live`, all interceptors are permanently destroyed. In-session terminal output can **never** trigger trust dialogs, password auto-fills, or vault reads.
+  2. **R3: v1 Scope Narrowing (HostKeyPending Only)**: Per D1, vault crypto dependencies are deferred to v2. Auto-filling credentials from scraped text carries significant attack surface. In v1, Plinky's PreAuth state machine handles `HostKeyPending` only. Password and passphrase prompts are display-only (shown to user, typed directly into PTY). Keystroke sync broadcast is suppressed while in `PasswordPrompted` (D6).
+  3. **D8: Launch plink without `-batch`**: Plinky always launches plink without `-batch`, driving the interactive host-key prompt via the PreAuth state machine. `-batch` is reserved for unattended cached-key verification (e.g., auto-reconnect fails loudly and safely if the host key has changed: `"Cannot confirm a host key in batch mode"`).
+  4. **D9: PreAuth → Live Boundary Marker (`Access granted`)**: Plink prints the diagnostic string `Access granted` right after authentication succeeds across all tested modes (interactive, single command, `-batch`, `-v`). On observing `Access granted`, the state machine transitions immediately to `Live` and permanently destroys all interceptors. In-session terminal output can **never** trigger trust dialogs or prompts.
+  5. **No Auth in Process Arguments**: `plink -pw` is strictly prohibited to prevent credential exposure in `ps` and `/proc/<pid>/cmdline`.
+  6. **Default-Deny Capped Buffer**: If 8 KiB of PreAuth output accumulates without a recognized prompt or `Access granted`, transition to `Closed{Error("unrecognised pre-auth output — plink version mismatch?")}` rather than guessing.
 
 * **D4: Read-Only PuTTY Session Store by Default**:
   PuTTY's session store is treated as read-only by default. Plinky-specific metadata (hierarchical folders, tags, tab colors, `protected` server flags, default sync channel) lives in Plinky's dedicated configuration store (`$XDG_CONFIG_HOME/plinky/settings.json` / `%APPDATA%\Plinky\settings.json`) keyed by session name. PuTTY rewrites session files in full and drops unknown keys, so Plinky fields are never stored in PuTTY's files.
@@ -118,38 +121,36 @@ Plinky provides a standalone Rust crate (`crates/putty-compat`) with zero Tauri 
 
 ---
 
-## 2. PuTTY Private Key (`.ppk`) Specification
+## 2. PuTTY Private Key (`.ppk`) Specification (v1 Scope: Header & Fingerprint Only)
 
-PuTTY uses a custom container format for private keys (`.ppk`). Plinky implements a native, zero-dependency parser supporting both **PPK v2** and **PPK v3**.
+Per **Decision D1 (Option A Accepted)**, `crates/putty-compat` in v1 parses `.ppk` **headers and public metadata only**. Private key decryption (Argon2id KDF, AES-256-CBC, HMAC verification) is handled directly at runtime by `/usr/bin/plink`. Hand-written Rust decryption is deferred to v2 / Key Manager to eliminate attack surface and hand-written crypto in v1.
 
-### 2.1. PPK Version Differences
+### 2.1. v1 `putty-compat` Interface & Detection
+```rust
+pub struct PpkHeader {
+    pub version: u8,            // 2 or 3
+    pub algo: String,           // ssh-rsa, ssh-ed25519, etc.
+    pub encrypted: bool,        // true if Encryption != "none"
+    pub comment: String,
+    pub fingerprint: String,    // SHA256 derived from public blob
+}
 
-| Attribute | PPK v2 | PPK v3 |
-| :--- | :--- | :--- |
-| **Header Identifier** | `PuTTY-User-Key-File-2: <algorithm>` | `PuTTY-User-Key-File-3: <algorithm>` |
-| **Supported Algorithms** | `ssh-rsa`, `ssh-dss`, `ecdsa-*`, `ssh-ed25519` | `ssh-rsa`, `ecdsa-*`, `ssh-ed25519` |
-| **Key Derivation Function** | SHA-1 (iterated) | **Argon2id** (memory, passes, parallelism) |
-| **Encryption Cipher** | AES-256-CBC | AES-256-CBC |
-| **Integrity MAC** | HMAC-SHA-1 | HMAC-SHA-256 |
-
-### 2.2. PPK File Structure
+pub fn read_header(path: &Path) -> Result<PpkHeader>;
+pub fn looks_like_ppk(path: &Path) -> bool;
 ```
-PuTTY-User-Key-File-3: ssh-ed25519
-Encryption: aes256-cbc
-Comment: imported-key
-Key-Derivation: Argon2id
-Argon2-Memory: 8192
-Argon2-Passes: 13
-Argon2-Parallelism: 1
-Argon2-Salt: 4a2b9f... (hex)
-Public-Lines: 2
-AAAAC3NzaC1lZDI1NTE5AAAAI...
-Private-Lines: 1
-49f81a7b... (encrypted Base64)
-Private-MAC: e830... (HMAC-SHA-256)
-```
+* `read_header` physically stops reading the file after the last `Public-Lines` line. It never reads or touches `Private-Lines` or `Private-MAC`.
+* `looks_like_ppk` inspects the initial header (`PuTTY-User-Key-File-2:` or `PuTTY-User-Key-File-3:`).
 
-### 2.3. Decryption & Conversion Pipeline
+### 2.2. OpenSSH Key Handling & Conversion Flow
+* `[VERIFIED]` Plink cannot read OpenSSH-format private keys (`Unable to use this key file (OpenSSH SSH-2 private key (new format))`).
+* When a user imports a non-PPK key, Plinky detects this via `looks_like_ppk(path) == false` and offers conversion via the pre-installed `puttygen` binary:
+  ```bash
+  puttygen -O private -o <destination.ppk> <source_openssh_key>
+  ```
+* This prevents cryptic downstream connection failures while maintaining the zero-binary-bundling rule (ADR-002).
+
+### 2.3. [DEFERRED TO V2 — KEY MANAGER] In-Rust PPK Decryption Pipeline
+The complete in-Rust decryption pipeline below is deferred to v2 when standalone key management is introduced:
 ```
 [ PPK File ] 
      │
@@ -163,12 +164,15 @@ Private-MAC: e830... (HMAC-SHA-256)
 [ Verify Private-MAC (HMAC-SHA-256) ]
      │
      ▼
-[ In-Memory Decrypted Key (RFC 4716 / OpenSSH PEM) ] ──► Used by SSH2 / PTY Engine
+[ In-Memory Decrypted Key (RFC 4716 / OpenSSH PEM) ] ──► Used by Key Manager
 ```
 
 ---
 
-## 3. PuTTY Pageant & SSH Agent IPC Protocol Specification
+## 3. PuTTY Pageant & SSH Agent IPC Protocol Specification [DEFERRED TO V2 — KEY MANAGER]
+
+*(Note: In v1, Pageant / SSH Agent forwarding and authentication are handled natively by `plink` subprocesses without requiring an in-app agent client).*
+
 
 Plinky integrates natively with SSH key agents across platforms:
 

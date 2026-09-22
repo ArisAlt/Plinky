@@ -95,6 +95,7 @@ flowchart TD
 
 ### Core Technical Specifications
 * **[SYSTEM_DESIGN.md](file:///home/citizenzero/Dev/Plinky/specs/SYSTEM_DESIGN.md)**: **Master v1 System Design** (IPC contracts, data flow, pre-auth state machine, threat model, persistence rules R1–R3, milestones M0–M7).
+* **[DEEP_DESIGN.md](file:///home/citizenzero/Dev/Plinky/specs/wrapper/DEEP_DESIGN.md)**: **PuTTY-Wrapper Subsystem Deep Design** (Empirical `plink 0.85` evidence, D8 interactive launching, D9 `Access granted` boundary marker, R3 v1 scope, OpenSSH key conversion).
 * **[ADR-001](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-001-primary-ssh-transport.md)**: **`plink` Only for v1**. `russh` is deferred behind empirical spike results to preserve single-stack auditability and 100% PuTTY fidelity.
 * **[ADR-002](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-002-putty-discovery-and-versioning.md)**: **System PuTTY Detection (Floor: 0.75+)**. No binary bundling in v1; Tier 1 platforms: Linux & Windows (macOS on hold).
 

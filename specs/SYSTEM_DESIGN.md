@@ -60,12 +60,16 @@ Output: transport read loop -> ring buffer append -> `Channel` chunk `{seq, byte
 
 **D2. Plinky never writes host keys.** Plink owns verification and storage. Plinky shows the fingerprint to the user and answers plink's own prompt (`y`/`n`). This supersedes `PUTTY_WRAPPER_SPEC` line 65, which has Plinky appending to `sshhostkeys`. On Windows PuTTY keeps host keys in the registry (I believe `HKCU\Software\SimonTatham\PuTTY\SshHostKeys` **[?]**), so any listing must handle both stores.
 
-**D3. Prompt handling is a per-session state machine, armed only before authentication.**
-`Created -> Spawning -> PreAuth{HostKeyPending | PasswordPending | PassphrasePending} -> Live -> Closing -> Closed{exit | error}`
-- Interceptors exist only in `PreAuth`, match exact plink 0.85 text, answer once, and default to deny on anything unparsed.
-- A hostile server controls its pre-auth banner and keyboard-interactive challenge text. Auto-fill only the standard password prompt, once, from the vault credential bound to that session. Never fill a keyboard-interactive challenge.
-- **Open problem [?]:** plink prints no explicit "authenticated" marker. Candidates: verbose (`-v`) markers, first prompt/OSC 133 marker, or a timeout. Settle in spike S2.
+**D3. Prompt handling is a per-session state machine, armed only before authentication (Refined with D8, D9, R3).**
+`Created -> Spawning -> PreAuth{HostKeyPending} -> Live -> Closing -> Closed{exit | error}`
+- **R3 (v1 Scope Narrowing)**: v1's PreAuth state machine handles `HostKeyPending` only. `PasswordPending` and `PassphrasePending` are display-only (shown to user, typed by user directly into PTY; no Plinky auto-fill in v1 since vault crypto dependencies are deferred per D1). This eliminates the highest-risk attack surface of prompt scraping.
+- Interceptors exist only in `PreAuth`, match exact `plink 0.85` text, answer once, and default to deny on anything unparsed.
+- Buffer capped at 8 KiB: unparsed pre-auth output beyond 8 KiB fails closed to `Closed{Error}`.
 - No auth material in argv. `-pw` is prohibited.
+
+**D8. Launch plink without `-batch`; reserve `-batch` for unattended pre-flight checks.** Plinky launches plink interactively so the PreAuth state machine can drive host-key trust dialogs. `-batch` is reserved for unattended cached-key verification (e.g., auto-reconnect checks with `-batch` first to fail closed loudly on host-key mismatch without prompting).
+
+**D9. PreAuth → Live boundary marker: `Access granted` [VERIFIED].** Plink emits `Access granted` in the PTY stream right after authentication succeeds across all tested modes (interactive, single command, `-batch`, `-v`). On observing `Access granted`, the state machine transitions immediately to `Live` and permanently destroys all interceptors. In-session terminal output can never trigger trust dialogs or prompts. S2 will verify keyboard-interactive auth and ensure the marker cannot be injected via pre-auth server banners.
 
 **D4. PuTTY's store is read-only by default.** Plinky metadata (folder, tags, colour, `protected`, default sync channel) lives in Plinky's own config keyed by session name. PuTTY rewrites session files in full and may drop unknown keys, so never store our fields there. "Save back to PuTTY" is an explicit opt-in: backup first, atomic write, round-trip test on real files.
 
@@ -147,12 +151,13 @@ Review gate on every milestone: I audit the diff before commit, and each post li
 ---
 
 ## 7. Open questions (all resolvable by M0)
-1. How to detect the pre-auth to live boundary reliably (D3)?
-2. Does plink.exe on Windows propagate terminal resizes under ConPTY?
-3. What happens to a `psftp -share` downstream when the owning tab closes, and which forwarding types work from a downstream?
-4. Is `psftp` output parsing robust enough for SFTP (spaces, newlines, unicode, symlinks)?
-5. WebKitGTK/WebGL throughput on this Wayland box, and WebView2 on Windows.
-6. Windows host-key store location and format.
+1. **Pre-auth to live boundary**: **Resolved by D9** (`Access granted` substring in PTY stream across all tested modes). S2 spot-checks keyboard-interactive auth and pre-auth banner isolation.
+2. **Terminal resize on Windows**: Does `plink.exe` propagate terminal resizes under ConPTY? (Open — Windows-only, tests on owner's machine).
+3. **`-share` lifecycle & connection ownership**: Concrete design established in `specs/wrapper/DEEP_DESIGN.md` (Rust core owns master connection, tabs/SFTP attach as sharers). S3 to verify downstream survival on tab closure.
+4. **`psftp` parsing robustness**: (Open — spaces, newlines, Unicode, symlinks; S4).
+5. **WebGL throughput**: (Open — S1, WebKitGTK Wayland & WebView2 Windows).
+6. **Windows host-key store**: Documented in ADR-002 (`HKCU\Software\SimonTatham\PuTTY\SshHostKeys`); verify against real Windows install.
+7. **OpenSSH private keys**: **Resolved** — plink cannot use OpenSSH format private keys (`Unable to use this key file`). Key import flow detects via `looks_like_ppk` and converts via `puttygen -O private -o out.ppk in.key`.
 
 ## 8. Revisit as the system grows
 `russh` (only if a spike proves a gap), `.ppk` decryption and an agent client (key manager), PuTTY bundling, macOS, plugin API, session recording, Zmodem, cloud/Git profile sync.

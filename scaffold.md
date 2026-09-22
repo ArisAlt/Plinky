@@ -12,6 +12,8 @@ This document tracks the directory architecture, file structure, component relat
 ├── specs/                                # Technical Specifications & Proposal Suite
 │   ├── README.md                         # Overview of the research & specifications
 │   ├── SYSTEM_DESIGN.md                  # Comprehensive v1 System Design (M0-M7, IPC, security, threat model)
+│   ├── wrapper/                          # PuTTY Wrapper Deep Technical Subsystem Design
+│   │   └── DEEP_DESIGN.md                # Empirical evidence (0.85), D8 (-batch), D9 (Access granted), R3, share ownership
 │   ├── PROPOSAL.md                       # Comprehensive proposal: PuTTY Wrapper + WindTerm features
 │   ├── WINDTERM_ANALYSIS.md              # In-depth autopsy of kingToolbox/WindTerm & community requests
 │   ├── PUTTY_WRAPPER_SPEC.md             # Technical specification for PuTTY bridge & wrappers
@@ -32,7 +34,7 @@ This document tracks the directory architecture, file structure, component relat
 │   │   ├── src/
 │   │   │   ├── lib.rs
 │   │   │   ├── sessions.rs               # PUTTYDIR / ~/.putty/sessions and WinReg parser/writer
-│   │   │   ├── ppk.rs                    # .ppk v2/v3 header parsing & fingerprinting (unencrypted metadata)
+│   │   │   ├── ppk.rs                    # .ppk v2/v3 header parsing, fingerprinting, looks_like_ppk detection
 │   │   │   └── hostkeys.rs               # Read-only hostkey listing (~/.putty/sshhostkeys & WinReg)
 │   │   ├── tests/                        # Headless cross-platform integration tests (real puttygen 0.85 fixtures)
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
@@ -43,13 +45,13 @@ This document tracks the directory architecture, file structure, component relat
 │           ├── lib.rs
 │           ├── transport/                # Unified Transport Abstraction
 │           │   ├── mod.rs                # Transport trait (read, write, resize, close)
-│           │   ├── plink.rs              # Primary: plink under portable-pty with -share
+│           │   ├── plink.rs              # Primary: plink under portable-pty with -share (D8: interactive, no -batch)
 │           │   ├── local_pty.rs          # Local shell PTY (bash, zsh, powershell)
 │           │   └── serial.rs             # Hardware serial port (via `plink -serial`)
-│           ├── session/                  # Session Lifecycle & State Persistence (D3 state machine)
+│           ├── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │           │   ├── mod.rs
-│           │   ├── manager.rs            # Active session registry (survives webview reload)
-│           │   ├── state_machine.rs      # PreAuth state machine (HostKeyPending, PasswordPending -> Live)
+│           │   ├── manager.rs            # Active session registry (survives webview reload; owns -share master)
+│           │   ├── state_machine.rs      # PreAuth state machine (HostKeyPending -> Live on 'Access granted', display-only password)
 │           │   └── ring_buffer.rs        # Scrollback memory buffer (2 MiB per session credit window)
 │           ├── sync/                     # Multi-Session Input Broadcasting (D6)
 │           │   └── router.rs             # SyncInputRouter (Rust fanout, Live-only filtering, paste guard)
@@ -99,7 +101,8 @@ This document tracks the directory architecture, file structure, component relat
     │   ├── sessions/                     # Session Management Tree
     │   │   ├── SessionTree.tsx           # Hierarchical folder view, tags, search filter
     │   │   ├── SessionDialog.tsx         # Session editor (SSH, PuTTY profile, Serial, Telnet)
-    │   │   └── PuTTYImportModal.tsx      # Direct import from PUTTYDIR / ~/.putty / WinReg
+    │   │   ├── PuTTYImportModal.tsx      # Direct import from PUTTYDIR / ~/.putty / WinReg
+    │   │   └── KeyImportModal.tsx        # SSH key importer with puttygen OpenSSH -> PPK conversion flow
     │   ├── snippets/                     # Snippets & Quick Command Bar
     │   │   ├── QuickBar.tsx              # One-click macro execution buttons
     │   │   └── SnippetManager.tsx        # Parameterized command templates (e.g. {{user}}, {{ip}})

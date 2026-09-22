@@ -114,3 +114,13 @@
   - System binaries verified: `/usr/bin/plink`, `/usr/bin/puttygen`, `/usr/bin/psftp`, `/usr/bin/sshd` (0.85).
   - Next focus: Milestone M0 Spikes (S2/S3/S4) & `tools/sshd-fixture`.
 
+### 10. CLAUDE REVIEW & WRAPPER DEEP DESIGN (MSG #149)
+* Empirical Spot-Check Landed: `specs/wrapper/DEEP_DESIGN.md` (authored by Claude, landed from `plinky_wrapper_design.md`). Tested with real `plink 0.85` against user-level localhost `sshd` fixture.
+* Decision D8 (Launch without `-batch`): Plinky always launches `plink` interactively to drive the PreAuth state machine. `-batch` is reserved for unattended cached-key verification (e.g., auto-reconnect fails closed loudly on unknown/changed key: `"Cannot confirm a host key in batch mode"`).
+* Decision D9 (PreAuth -> Live Marker `Access granted`): Plink emits diagnostic string `Access granted` right after authentication succeeds across all tested modes (interactive, single command, `-batch`, `-v`). State machine transitions to `Live` on this marker and permanently destroys all interceptors.
+* Requirement R3 (v1 Scope Narrowing): PreAuth handles `HostKeyPending` only in v1. `PasswordPending` and `PassphrasePending` are display-only (shown to user, typed directly into PTY; no Plinky auto-fill in v1 since vault crypto dependencies are deferred per D1). Eliminates scraped password risk.
+* OpenSSH Private Key Finding & Fix: Plink cannot read OpenSSH format keys (`Unable to use this key file`). Added `putty_compat::looks_like_ppk(path)` and explicit `puttygen -O private -o out.ppk in.key` conversion flow to scaffold and UI (`KeyImportModal.tsx`).
+* Doc Debt Settled: `specs/PUTTY_WRAPPER_SPEC.md` §2 and §3 updated to reflect v1 header-only scope (`PpkHeader`, `read_header`), moving in-Rust decryption pipeline and agent client to `[DEFERRED TO V2 — KEY MANAGER]`.
+* Connection Ownership Architecture: `-share` upstream owned by Rust core `SessionRegistry` with an idle timer (e.g. 30s) rather than UI tabs, so tab closure does not terminate active SFTP transfers or port forwards. Concrete model ready for falsification in Spike S3.
+
+
