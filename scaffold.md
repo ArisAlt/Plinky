@@ -3,7 +3,7 @@
 This document tracks the directory architecture, file structure, component relationships, and implementation boundaries of **Plinky** (PuTTY Modern Wrapper & IDE-Grade Terminal Emulator).
 
 ```
-/home/citizenzero/Dev/Plinky/
+./
 ├── GEMINI.md                             # AI operational rules, project overview, memory governance
 ├── past_memory.md                        # Dense ledger of architectural decisions and context
 ├── README.md                             # Master user guide, project vision, feature breakdown

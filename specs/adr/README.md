@@ -4,5 +4,5 @@ This directory houses the formal Architectural Decision Records for **Plinky**.
 
 | ADR # | Title | Status | Date | Key Decision |
 | :---: | :--- | :---: | :---: | :--- |
-| **[ADR-001](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-001-primary-ssh-transport.md)** | Primary SSH Transport Architecture | **Accepted** | 2026-09-20 | `plink` only in v1 with connection sharing (`-share`); `russh` deferred behind spikes (S3/S4). |
-| **[ADR-002](file:///home/citizenzero/Dev/Plinky/specs/adr/ADR-002-putty-discovery-and-versioning.md)** | PuTTY Discovery & Version Enforcement | **Accepted** | 2026-09-20 | Detect system PuTTY (floor: 0.75+); do not bundle binaries in v1; focus strictly on Linux & Windows. |
+| **[ADR-001](specs/adr/ADR-001-primary-ssh-transport.md)** | Primary SSH Transport Architecture | **Accepted** | 2026-09-20 | `plink` only in v1 with connection sharing (`-share`); `russh` deferred behind spikes (S3/S4). |
+| **[ADR-002](specs/adr/ADR-002-putty-discovery-and-versioning.md)** | PuTTY Discovery & Version Enforcement | **Accepted** | 2026-09-20 | Detect system PuTTY (floor: 0.75+); do not bundle binaries in v1; focus strictly on Linux & Windows. |

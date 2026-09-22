@@ -18,7 +18,7 @@ On Linux systems, PuTTY binaries (such as `/usr/bin/putty`, `plink`, `psftp`) re
 ~/.putty/ (or $PUTTYDIR/)
 ├── sessions/             # Directory containing individual session files
 │   ├── Default%20Settings
-│   ├── 10.10.10.10%20
+│   ├── 192.0.2.10%20
 │   └── COM%20USB0
 ├── sshhostkeys           # Known SSH server host key fingerprints
 └── randomseed            # Cryptographic random seed entropy
@@ -26,14 +26,14 @@ On Linux systems, PuTTY binaries (such as `/usr/bin/putty`, `plink`, `psftp`) re
 
 #### Linux Session Filename Encoding
 Session names containing spaces or punctuation are percent-encoded directly in the filename:
-* `"10.10.10.10 "` $\rightarrow$ `~/.putty/sessions/10.10.10.10%20`
+* `"192.0.2.10 "` $\rightarrow$ `~/.putty/sessions/192.0.2.10%20`
 * `"COM USB0"` $\rightarrow$ `~/.putty/sessions/COM%20USB0`
 * `"Default Settings"` $\rightarrow$ `~/.putty/sessions/Default%20Settings`
 
 #### Linux Session File Format
 Each file is a key-value format parsed line-by-line:
 ```ini
-HostName=10.10.10.10
+HostName=192.0.2.10
 PortNumber=22
 AddressFamily=0
 CloseOnExit=2
@@ -62,8 +62,8 @@ Each entry follows the PuTTY format:
 ```
 Canonical format examples (verified from PuTTY 0.85 on Linux):
 ```
-rsa2@22:10.10.10.10 0x10001,0x9f4a12...
-ssh-ed25519@22:10.10.10.10 0x28b56069f86246d18d5ff08c40029803e298d3f5d21cb1b615792024cf0c8711,0x7cadb38df766f23fda4f284a023dce62099329de4693c01852ff997703cbd588
+rsa2@22:192.0.2.10 0x10001,0x9f4a12...
+ssh-ed25519@22:192.0.2.10 0x28b56069f86246d18d5ff08c40029803e298d3f5d21cb1b615792024cf0c8711,0x7cadb38df766f23fda4f284a023dce62099329de4693c01852ff997703cbd588
 ecdsa-sha2-nistp256@22:host 0x...
 ```
 

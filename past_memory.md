@@ -1,6 +1,6 @@
 [PROJECT]: Plinky (PuTTY Modern Wrapper & IDE-grade Terminal Emulator, named after 'plink')
-[ROOT]: /home/citizenzero/Dev/Plinky
-[WORKSPACE_ALT]: /home/citizenzero/Documents/antigravity/modest-darwin
+[ROOT]: .
+[WORKSPACE_ALT]: (local IDE workspace mirror)
 [DATE_INIT]: 2026-09-20
 [STATUS]: Scaffolding & Specifications Complete; Name Finalized as Plinky
 
@@ -12,7 +12,7 @@
 ### 2. PUTTY LINUX & WINDOWS ARCHITECTURE
 * Linux Host Environment Verified:
   - System has full PuTTY 0.85 suite installed: `/usr/bin/putty`, `/usr/bin/plink`, `/usr/bin/pscp`, `/usr/bin/psftp`, `/usr/bin/puttygen`, `/usr/bin/pageant`.
-  - Local sessions verified at `~/.putty/sessions/`: `10.10.10.10%20`, `COM%20USB0`, `Default%20Settings`.
+  - Local sessions verified at `~/.putty/sessions/`: `192.0.2.10%20`, `COM%20USB0`, `Default%20Settings`.
   - Session format: Plaintext key-value pairs (`HostName=`, `PortNumber=`, `SerialLine=`, `PublicKeyFile=`), percent-encoded filenames.
   - SSH Host keys: `~/.putty/sshhostkeys`.
   - Agent protocol: Native Unix Domain Socket `$SSH_AUTH_SOCK` (standard on Linux).
@@ -70,7 +70,7 @@
 * Security Hardening: Prohibited `plink -pw` (ps leak); Expect triggers require session binding + explicit user confirmation; OSC 52 clipboard access gated; Vault KDF unified to Argon2id.
 * Feature Gating: Free Type Mode disabled in alternate buffer (`vim`, `htop`), handles `DECCKM` application cursor keys, requires verified OSC 133 B..C command region. `xterm.js` `IDecorationOptions` constrained to color styling; clickable IPs/URLs handled via `registerLinkProvider`.
 * Layout: Dockview terminal panels use `renderer: 'always'` with external `xtermRegistry` outside React.
-* Standalone MCP Bridge: Extracted from ABtools into `/home/citizenzero/Dev/mcp_dual_agent/` with passing pytest suite and client configs.
+* Standalone MCP Bridge: Extracted from ABtools into a sibling project (`mcp_dual_agent`) with passing pytest suite and client configs.
 
 ### 6. CLAUDE REVIEW ROUND 2 (MSG #95) & PROTOCOL RIGOR
 * Empirical Hostkey Verification: Confirmed `~/.putty/sshhostkeys` on host uses `ssh-ed25519@22:<host>` (with `ssh-` prefix) and `rsa2@22:<host>`. Fixed spec.
@@ -123,17 +123,7 @@
 * Doc Debt Settled: `specs/PUTTY_WRAPPER_SPEC.md` §2 and §3 updated to reflect v1 header-only scope (`PpkHeader`, `read_header`), moving in-Rust decryption pipeline and agent client to `[DEFERRED TO V2 — KEY MANAGER]`.
 * Connection Ownership Architecture: `-share` upstream owned by Rust core `SessionRegistry` with an idle timer (e.g. 30s) rather than UI tabs, so tab closure does not terminate active SFTP transfers or port forwards. Concrete model ready for falsification in Spike S3.
 
-### 11. ABTOOLS GUI: STREAMLINED APPLY→RESCAN WORKFLOW (TASK W5.7)
-* User Directive: Autonomous execution of `apply→rescan` flow across the GUI. Division of labor: Gemini leads frontend/UI, Claude leads backend/architecture. Full autonomy without interrupting user; commit and push upon completion.
-* Problem: Applying intake changes previously moved files to the library but left the Intake preview table populated with moved books. Audiobookshelf server rescan was not coordinated or surfaced.
-* Implementation:
-  - `ablib/gui/views/intake.py`: `on_apply_finished(self, success=True, result=None)` removes applied books from `_books` and updates `_base_plan`, immediately clearing moved books from the table while keeping unticked/skipped books interactive. Re-renders table, updates summary counts, and accurately reports if books remain or the source directory is clear.
-  - `ablib/gui/views/plan_review.py`: Added `rescan_server_requested = Signal()` to `ApplyResultDialog`. Surfaced dedicated `Rescan Server` button (`rescan_server_btn`) enabled when ABS is configured, with helpful tooltips. Updated summary banner stating local library index was rescanned. Retained 1-arg mock backward compatibility.
-  - `ablib/gui/main_window.py`: Added `is_abs_configured()` and `rescan_server(wait=False, timeout=60)`. In `apply_current_plan._on_finished`, coordinates local library rescan and automatically triggers background Audiobookshelf server rescan when ABS is configured and files were applied. Wires `dialog.rescan_server_requested` to `rescan_server(wait=False)`.
-* Verification: 6 new unit/flow tests in `tests/gui/test_apply_rescan_flow.py` (6/6 pass). All 325 GUI tests pass in 39s; full suite 1,362 tests pass in 66s with 0 regressions. Pyflakes clean.
-* Multi-Agent Orchestration & Deployment: Task `W5.7` claimed, reviewed, committed (`19157c6`), and pushed to GitHub `origin/main`. Notice posted to Claude across bridge (Message #154).
-
-### 12. SPIKE S3 (-SHARE LIFECYCLE) CONFIRMED (CLAUDE MSG #152)
+### 11. SPIKE S3 (-SHARE LIFECYCLE) CONFIRMED (CLAUDE MSG #152)
 * Verification: Real `plink 0.85` tested against throwaway localhost `sshd` fixture by Claude.
 * Key Findings:
   1. Share socket path: `/tmp/putty-connshare.<unix-username>/<hash-of-destination>/socket` (keyed by username in `/tmp`, not `$HOME`).
@@ -142,7 +132,7 @@
   4. Owner survives sharer churn: tested both natural exit and SIGTERM; 3rd subsequent sharer connected cleanly without fresh auth.
 * Architecture Confirmed: `SessionRegistry` connection-owner model in `specs/wrapper/DEEP_DESIGN.md` §5 verified. Updated open questions table in §6.
 
-### 13. CRATES/PUTTY-COMPAT IMPLEMENTED & PASSING (M1/M3)
+### 12. CRATES/PUTTY-COMPAT IMPLEMENTED & PASSING (M1/M3)
 * Standalone Rust Crate: Created `crates/putty-compat` under root workspace `Cargo.toml`.
 * Modules:
   - `sessions`: PuTTY session percent-encoding/decoding, `PuttySession` preserving unknown fields in `extra: BTreeMap<String, String>` (R3 invariant), platform session directory resolution (`PUTTYDIR` -> XDG -> `~/.putty/sessions`), atomic writing with `NamedTempFile` + sync + `.bak` backup.
@@ -150,7 +140,7 @@
   - `hostkeys`: PuTTY `sshhostkeys` parsing (`<type>@<port>:<host> <key>`).
 * Verification: 7/7 integration tests pass in 0.00s (`cargo test --workspace`), verifying session round-trip fidelity, backup creation, ppk header parsing, OpenSSH format rejection, and real system `~/.putty/sshhostkeys` ingestion.
 
-### 14. SPIKE S4 (PSFTP PARSING & -SHARE LIFECYCLE) FINDINGS (CLAUDE MSG #158)
+### 13. SPIKE S4 (PSFTP PARSING & -SHARE LIFECYCLE) FINDINGS (CLAUDE MSG #158)
 * psftp `ls` Format: Classic `ls -l` line-by-line format. Entries are ASCII-sorted, include `.` and `..` (must filter), and omit `-> target` on symlinks.
 * CRITICAL Gotcha: Filenames with embedded spaces are unquoted (e.g. `drwxr-xr-x 2 user group 60 Sep 22 20:03 a dir with spaces`). Parser must match fixed-width/regex columns for metadata and take the rest of the line verbatim as filename.
 * CRITICAL Blocker / Bug: `psftp -share` connects to the shared socket (`Using existing shared connection...`), but then hangs silently without completing SFTP subsystem negotiation (reproduced 2x against OpenSSH internal-sftp).

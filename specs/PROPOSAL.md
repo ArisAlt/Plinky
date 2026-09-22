@@ -74,7 +74,7 @@ flowchart TD
 
 ### 3.1. PuTTY Ecosystem Native Bridge (Linux & Windows)
 * **Linux PuTTY Native Storage (`~/.putty/sessions`)**:
-  * On Linux systems, PuTTY stores sessions directly under `~/.putty/sessions/` in percent-encoded filenames (e.g. `10.10.10.10%20`, `COM%20USB0`).
+  * On Linux systems, PuTTY stores sessions directly under `~/.putty/sessions/` in percent-encoded filenames (e.g. `192.0.2.10%20`, `COM%20USB0`).
   * Plinky reads and parses these session files directly, giving Linux users instant zero-setup access to all their existing PuTTY profiles.
   * Writes and modifications sync back to `~/.putty/sessions/`, ensuring 100% interoperability with `/usr/bin/putty`.
 * **Windows PuTTY Registry**:
