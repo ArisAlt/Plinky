@@ -106,9 +106,10 @@ flowchart TD
   * **S4**: `psftp` batch parsing robustness (spaces, newlines, Unicode, symlinks) vs `russh-sftp`.
 * **M1: CI & Threat Model**: Linux & Windows CI matrix, localhost `sshd` integration target, `cargo-deny`, remote escape threat model.
 * **M2: Walking Skeleton**: Single end-to-end session, single tab, `tauri::ipc::Channel` binary flow control, scrollback ring buffer, reload-and-reattach survival.
-* **M3: `putty-compat` v1**: Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), `.ppk` header parser/fingerprinter, read-only hostkey listing, real `/usr/bin/puttygen 0.85` test oracle fixtures, `cargo-fuzz` corpus. *(D1: full Argon2id decryption pending owner decision)*.
+* **M3: `putty-compat` v1**: Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), `.ppk` header parser/fingerprinter, read-only hostkey listing, real `/usr/bin/puttygen 0.85` test oracle fixtures, `cargo-fuzz` corpus. *(D1 Option A accepted by owner: hand-written Argon2id decryption deferred to v2)*.
 * **M4: Pre-Auth State Machine & Vault**: Pre-auth prompt state machine (D3), Argon2id vault (R1–R3), `putty_detect` command.
 * **M5: Docking Layout & Sync Router**: `dockview` multi-tab/split layout, layout persistence, `SyncInputRouter` (D6: `Live`-only broadcast, paste guard), shell integration bootstrap.
 * **M6: WindTerm Productivity**: Gated Free Type Mode (OSC 133 prompt regions, DECCKM aware), regex markers & link provider, parameterized snippet bar.
 * **M7: SFTP & Port Forwarding**: Dual-pane file manager, directory following (OSC 7), visual tunnel manager (scoped by S3 & S4 findings).
+
 
