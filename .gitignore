@@ -1,0 +1,19 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node / Web Frontend
+/node_modules/
+/dist/
+/dist-ssr/
+*.local
+
+# Tauri build outputs
+src-tauri/target/
+
+# Temporary / backups
+*.bak
+*.tmp
+*.swp
+*~
+.DS_Store

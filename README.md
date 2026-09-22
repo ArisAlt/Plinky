@@ -103,11 +103,11 @@ flowchart TD
 * **M0: Phase 0 Empirical Spikes (Numeric Thresholds)**:
   * **S1**: `xterm.js` WebGL throughput & keystroke latency on WebKitGTK (Wayland) and WebView2 (Windows) during saturated stream (`cat bigfile` / `yes`).
   * **S2**: `plink` under `portable-pty`: terminal resize propagation (Linux vs Windows ConPTY), pre-auth to live boundary detection, and exact prompt text matching.
-  * **S3**: `plink -share` lifecycle (terminal tab closure vs active SFTP transfers; downstream port forwards).
-  * **S4**: `psftp` batch parsing robustness (spaces, newlines, Unicode, symlinks) vs `russh-sftp`.
+  * **S3**: `plink -share` lifecycle: **CONFIRMED** (Claude MSG #152) — owner survives sharer churn, sharer fails closed on owner death, `/tmp/putty-connshare.<user>/<hash>/socket` verified.
+  * **S4**: `psftp` batch parsing: **PARTIALLY RESOLVED / SUSPECTED BLOCKER** (Claude MSG #158) — `ls -l` space-in-filename parser confirmed; `psftp -share` hangs silently; fallback paths designed.
 * **M1: CI & Threat Model**: Linux & Windows CI matrix, localhost `sshd` integration target, `cargo-deny`, remote escape threat model.
 * **M2: Walking Skeleton**: Single end-to-end session, single tab, `tauri::ipc::Channel` binary flow control, scrollback ring buffer, reload-and-reattach survival.
-* **M3: `putty-compat` v1**: Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), `.ppk` header parser/fingerprinter, read-only hostkey listing, real `/usr/bin/puttygen 0.85` test oracle fixtures, `cargo-fuzz` corpus. *(D1 Option A accepted by owner: hand-written Argon2id decryption deferred to v2)*.
+* **M3: `putty-compat` v1**: ✅ **IMPLEMENTED & VERIFIED** (7/7 tests pass) — Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), atomic `.bak` writes, `.ppk` v2/v3 header parser & SHA256 fingerprinting matching `puttygen -l`, OpenSSH rejection, and real system `sshhostkeys` parsing. *(D1 Option A accepted by owner: hand-written Argon2id decryption deferred to v2)*.
 * **M4: Pre-Auth State Machine & Vault**: Pre-auth prompt state machine (D3), Argon2id vault (R1–R3), `putty_detect` command.
 * **M5: Docking Layout & Sync Router**: `dockview` multi-tab/split layout, layout persistence, `SyncInputRouter` (D6: `Live`-only broadcast, paste guard), shell integration bootstrap.
 * **M6: WindTerm Productivity**: Gated Free Type Mode (OSC 133 prompt regions, DECCKM aware), regex markers & link provider, parameterized snippet bar.

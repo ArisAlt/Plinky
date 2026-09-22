@@ -1,0 +1,33 @@
+use std::path::PathBuf;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum PuttyCompatError {
+    #[error("I/O error at {path:?}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
+
+    #[error("Corrupt session file at {path:?}: {reason}")]
+    CorruptSession { path: PathBuf, reason: String },
+
+    #[error("Invalid PPK file at {path:?}: {reason}")]
+    InvalidPpk { path: PathBuf, reason: String },
+
+    #[error("Unsupported PPK version: {0}")]
+    UnsupportedPpkVersion(u8),
+
+    #[error("Base64 decode error at {path:?}: {source}")]
+    Base64Error {
+        path: PathBuf,
+        #[source]
+        source: base64::DecodeError,
+    },
+}
+
+pub type Result<T> = std::result::Result<T, PuttyCompatError>;

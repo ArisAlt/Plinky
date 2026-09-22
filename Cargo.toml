@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "crates/putty-compat",
+]
+resolver = "2"
