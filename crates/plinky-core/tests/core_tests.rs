@@ -191,3 +191,62 @@ async fn test_write_input_blocked_during_hostkey_pending() {
 
     registry.close_session("test-prompt-sess").unwrap();
 }
+
+#[tokio::test]
+async fn test_sync_input_router_d6_safety() {
+    use plinky_core::sync::SyncChannelId;
+
+    let registry = SessionRegistry::new();
+    let (tx1, mut rx1) = mpsc::unbounded_channel();
+    let (tx2, _rx2) = mpsc::unbounded_channel();
+
+    // Spawn 2 sessions
+    registry.create_local_session("sess-1", "S1", 80, 24, tx1).unwrap();
+    registry.create_local_session("sess-2", "S2", 80, 24, tx2).unwrap();
+
+    // Assign both to Channel A
+    registry.set_sync_channel("sess-1", Some(SyncChannelId::A));
+    registry.set_sync_channel("sess-2", Some(SyncChannelId::A));
+
+    // Put sess-2 into HostKeyPending state
+    registry.reset_session_preauth("sess-2").unwrap();
+    let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+    registry.simulate_preauth_bytes("sess-2", prompt_chunk).unwrap();
+
+    // 1. Broadcast on Channel A:
+    // sess-1 is Live and receives input.
+    // sess-2 is HostKeyPending and is safely filtered by D6 gate (not written to!).
+    let count = registry.broadcast_sync_input(SyncChannelId::A, b"echo SYNC_TEST\n").unwrap();
+    assert_eq!(count, 1, "Only Live sess-1 should receive broadcast");
+
+    // Verify sess-1 got the bytes
+    let mut buf = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(chunk) = rx1.recv() => {
+                buf.extend_from_slice(&chunk);
+                if String::from_utf8_lossy(&buf).contains("SYNC_TEST") {
+                    break;
+                }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+    assert!(String::from_utf8_lossy(&buf).contains("SYNC_TEST"));
+
+    // 2. Protection gate: mark sess-1 as protected -> broadcast receives 0
+    registry.set_sync_protected("sess-1", true);
+    let count = registry.broadcast_sync_input(SyncChannelId::A, b"ls\n").unwrap();
+    assert_eq!(count, 0, "Protected sessions must not receive broadcast");
+
+    // 3. Emergency disarm: unprotect sess-1, disarm sync router
+    registry.set_sync_protected("sess-1", false);
+    registry.set_sync_armed(false);
+    let count = registry.broadcast_sync_input(SyncChannelId::A, b"ls\n").unwrap();
+    assert_eq!(count, 0, "Disarmed router must not broadcast");
+
+    registry.close_session("sess-1").unwrap();
+    registry.close_session("sess-2").unwrap();
+}

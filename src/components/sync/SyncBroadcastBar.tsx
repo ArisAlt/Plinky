@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SyncChannel } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
+import { broadcastSyncInput } from '../../services/tauriBridge';
 import { Radio, Send, Terminal } from 'lucide-react';
 
 interface SyncBroadcastBarProps {
@@ -11,9 +12,18 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
   const [broadcastTarget, setBroadcastTarget] = useState<SyncChannel | 'all'>('all');
   const [command, setCommand] = useState('');
 
-  const handleBroadcast = (e: React.FormEvent) => {
+  const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!command.trim()) return;
+
+    const data = new TextEncoder().encode(command + '\n');
+    if (broadcastTarget === 'all') {
+      for (const ch of ['A', 'B', 'C', 'D'] as const) {
+        await broadcastSyncInput(ch, data);
+      }
+    } else {
+      await broadcastSyncInput(broadcastTarget, data);
+    }
 
     terminalManager.broadcastInput(broadcastTarget, command);
     setCommand('');

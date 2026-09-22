@@ -42,6 +42,7 @@ pub struct ActiveSession {
 pub struct SessionRegistry {
     sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
     prompt_tx: broadcast::Sender<PromptEvent>,
+    sync_router: Arc<Mutex<crate::sync::router::SyncInputRouter>>,
 }
 
 impl SessionRegistry {
@@ -50,6 +51,7 @@ impl SessionRegistry {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             prompt_tx,
+            sync_router: Arc::new(Mutex::new(crate::sync::router::SyncInputRouter::new())),
         }
     }
 
@@ -264,12 +266,38 @@ impl SessionRegistry {
         session.transport.resize(cols, rows)
     }
 
+    /// Sets the broadcast sync channel for a session (Channels A-D or None).
+    pub fn set_sync_channel(&self, session_id: &str, channel: Option<crate::sync::router::SyncChannelId>) {
+        self.sync_router.lock().unwrap().set_session_channel(session_id, channel);
+    }
+
+    /// Toggles protected status on a session (protected sessions do not accept broadcast input).
+    pub fn set_sync_protected(&self, session_id: &str, protected: bool) {
+        self.sync_router.lock().unwrap().set_session_protected(session_id, protected);
+    }
+
+    /// Sets whether sync broadcasting is armed or emergency-disarmed (D6 safety).
+    pub fn set_sync_armed(&self, armed: bool) {
+        self.sync_router.lock().unwrap().set_armed(armed);
+    }
+
+    pub fn is_sync_armed(&self) -> bool {
+        self.sync_router.lock().unwrap().is_armed()
+    }
+
+    /// Broadcasts input data to all Live, unbuffered, and unprotected sessions in `channel`.
+    pub fn broadcast_sync_input(&self, channel: crate::sync::router::SyncChannelId, data: &[u8]) -> Result<usize> {
+        let router = self.sync_router.lock().unwrap();
+        router.broadcast(self, channel, data)
+    }
+
     /// Terminates and removes a session.
     pub fn close_session(&self, id: &str) -> Result<()> {
         let mut lock = self.sessions.lock().unwrap();
         if let Some(mut session) = lock.remove(id) {
             let _ = session.transport.kill();
         }
+        self.sync_router.lock().unwrap().set_session_channel(id, None);
         Ok(())
     }
 

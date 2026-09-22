@@ -11,6 +11,7 @@ import {
   closeTerminalSession,
   answerHostKeyPrompt,
   listenHostKeyPrompts,
+  setSyncChannel,
   HostKeyPromptInfo
 } from '../../services/tauriBridge';
 import { Radio, Edit3, Sparkles, ShieldAlert } from 'lucide-react';
@@ -214,6 +215,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
       if (unlistenPrompts) {
         unlistenPrompts();
       }
+      setSyncChannel(tab.id, null);
       terminalManager.unregisterTerminal(tab.id);
       if (isLivePtyRef.current) {
         closeTerminalSession(tab.id);
@@ -286,6 +288,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     const nextChannel = channels[(currentIdx + 1) % channels.length];
     onUpdateTab(tab.id, { syncChannel: nextChannel });
     terminalManager.setSyncChannel(tab.id, nextChannel);
+    setSyncChannel(tab.id, nextChannel === 'none' ? null : nextChannel);
   };
 
   const toggleFreeType = () => {
