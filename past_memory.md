@@ -123,4 +123,15 @@
 * Doc Debt Settled: `specs/PUTTY_WRAPPER_SPEC.md` §2 and §3 updated to reflect v1 header-only scope (`PpkHeader`, `read_header`), moving in-Rust decryption pipeline and agent client to `[DEFERRED TO V2 — KEY MANAGER]`.
 * Connection Ownership Architecture: `-share` upstream owned by Rust core `SessionRegistry` with an idle timer (e.g. 30s) rather than UI tabs, so tab closure does not terminate active SFTP transfers or port forwards. Concrete model ready for falsification in Spike S3.
 
+### 11. ABTOOLS GUI: STREAMLINED APPLY→RESCAN WORKFLOW (TASK W5.7)
+* User Directive: Autonomous execution of `apply→rescan` flow across the GUI. Division of labor: Gemini leads frontend/UI, Claude leads backend/architecture. Full autonomy without interrupting user; commit and push upon completion.
+* Problem: Applying intake changes previously moved files to the library but left the Intake preview table populated with moved books. Audiobookshelf server rescan was not coordinated or surfaced.
+* Implementation:
+  - `ablib/gui/views/intake.py`: `on_apply_finished(self, success=True, result=None)` removes applied books from `_books` and updates `_base_plan`, immediately clearing moved books from the table while keeping unticked/skipped books interactive. Re-renders table, updates summary counts, and accurately reports if books remain or the source directory is clear.
+  - `ablib/gui/views/plan_review.py`: Added `rescan_server_requested = Signal()` to `ApplyResultDialog`. Surfaced dedicated `Rescan Server` button (`rescan_server_btn`) enabled when ABS is configured, with helpful tooltips. Updated summary banner stating local library index was rescanned. Retained 1-arg mock backward compatibility.
+  - `ablib/gui/main_window.py`: Added `is_abs_configured()` and `rescan_server(wait=False, timeout=60)`. In `apply_current_plan._on_finished`, coordinates local library rescan and automatically triggers background Audiobookshelf server rescan when ABS is configured and files were applied. Wires `dialog.rescan_server_requested` to `rescan_server(wait=False)`.
+* Verification: 6 new unit/flow tests in `tests/gui/test_apply_rescan_flow.py` (6/6 pass). All 325 GUI tests pass in 39s; full suite 1,362 tests pass in 66s with 0 regressions. Pyflakes clean.
+* Multi-Agent Orchestration & Deployment: Task `W5.7` claimed, reviewed, committed (`19157c6`), and pushed to GitHub `origin/main`. Notice posted to Claude across bridge (Message #154).
+
+
 
