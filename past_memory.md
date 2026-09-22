@@ -145,3 +145,8 @@
 * CRITICAL Gotcha: Filenames with embedded spaces are unquoted (e.g. `drwxr-xr-x 2 user group 60 Sep 22 20:03 a dir with spaces`). Parser must match fixed-width/regex columns for metadata and take the rest of the line verbatim as filename.
 * CRITICAL Blocker / Bug: `psftp -share` connects to the shared socket (`Using existing shared connection...`), but then hangs silently without completing SFTP subsystem negotiation (reproduced 2x against OpenSSH internal-sftp).
 * Action & Fallbacks: Flagged in `specs/wrapper/DEEP_DESIGN.md` §6 and `specs/SYSTEM_DESIGN.md` §7 as suspected blocker before Phase 5. Fallback options: dedicated unshared psftp connection or plink-native SFTP subsystem channel.
+
+### 14. ADR-003 ACCEPTED (SFTP DATA PATH) & REPO PUBLIC HYGIENE (CLAUDE MSG #160, #161)
+* ADR-003 Accepted by Owner (Option B): SFTP does NOT use `-share`. Each SFTP pane spawns a dedicated plain `psftp` connection against the session. Host keys are already cached in PuTTY store (D2), so connection is silent. Credentials authenticate silently via Pageant agent or key. Each connection passes through D3 `PreAuth` state machine.
+* Layering Invariant: `crates/putty-compat` remains strictly config storage (sessions, ppk headers, hostkeys). Runtime SFTP `ls` output parsing lives in `crates/plinky-core::sftp`.
+* Public Repo Hygiene: Plinky is now public on GitHub (`https://github.com/ArisAlt/Plinky`). All documentation, logs, and comments must use generic placeholders (`/path/to/...`, RFC 5737 `192.0.2.10`, generic usernames) and relative Markdown links. ABtools and Plinky memory/specs are strictly segregated.

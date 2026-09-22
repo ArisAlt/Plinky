@@ -235,7 +235,7 @@ plink -load "<SessionName>" \
 
 #### Command Line Flags & Operational Rules:
 * `-load "<SessionName>"`: Applies session configurations directly from `PUTTYDIR` / `~/.putty/sessions/`.
-* `-share`: **Connection Sharing**. Creates a shared master SSH connection socket. Secondary terminals and SFTP (`psftp -share`) reuse this encrypted pipe without redundant TCP handshakes or credential re-authentication.
+* `-share`: **Connection Sharing**. Creates a shared master SSH connection socket. Secondary terminals reuse this encrypted pipe without redundant TCP handshakes or credential re-authentication (note: SFTP uses dedicated plain `psftp` connections per ADR-003).
 * `-agent`: Enables Pageant / `$SSH_AUTH_SOCK` forwarding.
 * `-t`: Forces remote pseudo-terminal allocation (vital for full-screen curses apps like `vim`, `htop`, `tmux`).
 * `-L`, `-R`, `-D`: Forward port tunnels statically defined in the session.
@@ -251,13 +251,15 @@ flowchart LR
     Plink <-->|"Encrypted SSH Protocol"| Remote["Remote SSH Server"]
 ```
 
-### 4.5. `psftp` File System Bridge & Connection Sharing Lifecycle
+### 4.5. `psftp` File System Bridge (ADR-003 Option B)
 For graphical SFTP file exploration:
-* Spawns `psftp -load "<SessionName>" -share`.
-* Because `-share` is enabled, `psftp` connects instantaneously over the active `plink` master connection without reconnecting or re-authenticating.
-* Plinky interacts via standard SFTP batch commands or native binary SFTP channel, feeding directory hierarchies directly into the dual-pane file manager.
+* Spawns dedicated plain `psftp -load "<SessionName>"` per SFTP pane (without `-share`).
+* **Why not `-share`?**: Empirical testing (Spike S4, ADR-003) revealed that `psftp -share` against an open `plink -share` master attaches to the Unix socket but hangs indefinitely without completing SFTP subsystem negotiation under PuTTY 0.85. Plain `psftp` connects instantaneously and reliably.
+* **Authentication & Host Keys**: Because host keys are already verified and cached in `~/.putty/sshhostkeys` (or Windows registry) per D2, no host-key prompt is shown. Credential authentication (Pageant / SSH agent / `.ppk` key) completes silently.
+* **PreAuth State Machine**: Crucially, each spawned `psftp` process goes through the same **D3 PreAuth state machine** as terminal sessions, safeguarding against malicious prompt injection or MITM before switching to file transfer operations.
+* Plinky interacts via standard SFTP commands (`ls -l`, `cd`, `get`, `put`, `reget`, `reput`), feeding directory listings directly into the dual-pane file manager.
 
-#### Lifecycle & Teardown Boundary (`-share` Ownership)
-Under PuTTY's connection sharing model, the process that opened the master connection (`plink -share`) owns the Unix domain sharing socket. If that process exits, all downstream sharers (`psftp -share`, secondary terminal tabs) are abruptly disconnected.
-* **Phase 0 Empirical Spike Requirement**: Test downstream behavior on Linux when upstream terminates, and test reverse teardown (closing SFTP while terminal continues).
-* **Architecture Solution**: In Plinky, the Rust backend (`crates/plinky-core`) owns the process lifecycle. To prevent premature SFTP termination when a user closes a terminal tab, the connection master can be decoupled into a Rust-managed background master process, with both the interactive terminal PTY and the SFTP client attaching as sharers. Alternatively, closing a terminal tab with active SFTP transfers prompts the user or detaches the master PTY gracefully.
+#### Lifecycle & Teardown Boundary
+* Each SFTP pane owns its dedicated `psftp` coprocess lifecycle.
+* Closing a terminal tab has **zero** impact on active SFTP transfers or panes (and vice versa), eliminating cross-process cascade teardown risks without requiring complex master socket management for SFTP.
+* Terminal sessions continue to leverage `plink -share` connection sharing across multiple terminal tabs.
