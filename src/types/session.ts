@@ -78,3 +78,14 @@ export interface PpkInfo {
   comment: string;
   fingerprintSha256: string;
 }
+
+export type SplitLayoutMode = 'single' | 'split-vertical' | 'split-horizontal' | 'grid-4';
+
+export interface SnippetItem {
+  id: string;
+  name: string;
+  command: string;
+  category: 'System' | 'Docker' | 'Logs' | 'Network' | 'Custom';
+  description?: string;
+}
+

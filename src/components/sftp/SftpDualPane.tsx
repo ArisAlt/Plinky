@@ -12,7 +12,9 @@ import {
   HardDrive,
   Server,
   CheckCircle,
-  Clock
+  Clock,
+  Search,
+  ChevronRight
 } from 'lucide-react';
 
 interface SftpDualPaneProps {
@@ -23,13 +25,18 @@ interface SftpDualPaneProps {
 export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostname }) => {
   const [remotePath, setRemotePath] = useState('/var/www');
   const [localPath, setLocalPath] = useState('/home/user/workspace');
+  const [localFilter, setLocalFilter] = useState('');
+  const [remoteFilter, setRemoteFilter] = useState('');
+
   const [remoteFiles, setRemoteFiles] = useState<SftpFileEntry[]>([]);
-  const [localFiles] = useState<SftpFileEntry[]>([
+  const [localFiles, setLocalFiles] = useState<SftpFileEntry[]>([
     { name: "..", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:00" },
     { name: "build", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:10" },
     { name: "src", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:12" },
+    { name: "public", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 19:30" },
     { name: "package.json", isDir: false, isSymlink: false, size: 1250, permissions: "-rw-r--r--", owner: "user", group: "user", modified: "Sep 22 19:40" },
     { name: "bundle.js", isDir: false, isSymlink: false, size: 342000, permissions: "-rw-r--r--", owner: "user", group: "user", modified: "Sep 22 20:14" },
+    { name: "README.md", isDir: false, isSymlink: false, size: 4520, permissions: "-rw-r--r--", owner: "user", group: "user", modified: "Sep 22 18:22" },
   ]);
 
   const [selectedLocal, setSelectedLocal] = useState<string | null>(null);
@@ -45,7 +52,50 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
 
   const loadRemoteFiles = async () => {
     const files = await listRemoteFiles(sessionName, remotePath);
-    setRemoteFiles(files);
+    // Ensure parent directory ".." exists
+    if (!files.some(f => f.name === '..')) {
+      setRemoteFiles([
+        { name: "..", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 20:00" },
+        ...files
+      ]);
+    } else {
+      setRemoteFiles(files);
+    }
+  };
+
+  const handleNavigateLocal = (entry: SftpFileEntry) => {
+    if (!entry.isDir) return;
+    if (entry.name === '..') {
+      const parts = localPath.split('/').filter(Boolean);
+      parts.pop();
+      setLocalPath('/' + parts.join('/'));
+      setLocalFiles([
+        { name: "..", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:00" },
+        { name: "build", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:10" },
+        { name: "src", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:12" },
+        { name: "package.json", isDir: false, isSymlink: false, size: 1250, permissions: "-rw-r--r--", owner: "user", group: "user", modified: "Sep 22 19:40" },
+      ]);
+    } else {
+      setLocalPath(localPath.endsWith('/') ? `${localPath}${entry.name}` : `${localPath}/${entry.name}`);
+      setLocalFiles([
+        { name: "..", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "user", group: "user", modified: "Sep 22 20:00" },
+        { name: "index.ts", isDir: false, isSymlink: false, size: 2400, permissions: "-rw-r--r--", owner: "user", group: "user", modified: "Sep 22 20:15" },
+        { name: "config.json", isDir: false, isSymlink: false, size: 840, permissions: "-rw-r--r--", owner: "user", group: "user", modified: "Sep 22 20:16" },
+      ]);
+    }
+    setSelectedLocal(null);
+  };
+
+  const handleNavigateRemote = (entry: SftpFileEntry) => {
+    if (!entry.isDir) return;
+    if (entry.name === '..') {
+      const parts = remotePath.split('/').filter(Boolean);
+      parts.pop();
+      setRemotePath('/' + parts.join('/'));
+    } else {
+      setRemotePath(remotePath.endsWith('/') ? `${remotePath}${entry.name}` : `${remotePath}/${entry.name}`);
+    }
+    setSelectedRemote(null);
   };
 
   const handleUpload = () => {
@@ -88,6 +138,45 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  const renderBreadcrumbs = (path: string, onSelect: (newPath: string) => void) => {
+    const parts = path.split('/').filter(Boolean);
+    return (
+      <div className="flex items-center space-x-1 text-slate-400 overflow-x-auto text-[11px] font-mono py-0.5">
+        <button
+          onClick={() => onSelect('/')}
+          className="hover:text-sky-300 font-semibold transition"
+        >
+          /
+        </button>
+        {parts.map((part, index) => {
+          const subPath = '/' + parts.slice(0, index + 1).join('/');
+          const isLast = index === parts.length - 1;
+          return (
+            <React.Fragment key={subPath}>
+              <ChevronRight className="w-3 h-3 text-slate-600 flex-shrink-0" />
+              <button
+                onClick={() => onSelect(subPath)}
+                className={`hover:text-sky-300 transition truncate max-w-[100px] ${
+                  isLast ? 'text-slate-200 font-medium' : ''
+                }`}
+              >
+                {part}
+              </button>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const filteredLocal = localFiles.filter(f => 
+    f.name === '..' || f.name.toLowerCase().includes(localFilter.toLowerCase())
+  );
+
+  const filteredRemote = remoteFiles.filter(f => 
+    f.name === '..' || f.name.toLowerCase().includes(remoteFilter.toLowerCase())
+  );
+
   return (
     <div className="flex flex-col h-full bg-plinky-950 text-slate-200 select-none text-xs">
       {/* SFTP Top Header */}
@@ -115,15 +204,31 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Local Filesystem */}
         <div className="flex-1 flex flex-col border-r border-plinky-800">
-          <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 flex items-center space-x-1.5">
-            <HardDrive className="w-3.5 h-3.5 text-sky-400" />
-            <span className="font-medium text-slate-300">Local:</span>
-            <input
-              type="text"
-              value={localPath}
-              onChange={(e) => setLocalPath(e.target.value)}
-              className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
-            />
+          {/* Local Path Input & Breadcrumbs */}
+          <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
+            <div className="flex items-center space-x-1.5">
+              <HardDrive className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+              <span className="font-medium text-slate-300">Local:</span>
+              <input
+                type="text"
+                value={localPath}
+                onChange={(e) => setLocalPath(e.target.value)}
+                className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              {renderBreadcrumbs(localPath, setLocalPath)}
+              <div className="relative flex items-center w-28">
+                <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Filter..."
+                  value={localFilter}
+                  onChange={(e) => setLocalFilter(e.target.value)}
+                  className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -136,10 +241,11 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
                 </tr>
               </thead>
               <tbody className="divide-y divide-plinky-800/40">
-                {localFiles.map((file) => (
+                {filteredLocal.map((file) => (
                   <tr
                     key={file.name}
                     onClick={() => setSelectedLocal(file.name)}
+                    onDoubleClick={() => handleNavigateLocal(file)}
                     className={`cursor-pointer hover:bg-plinky-800/50 transition ${
                       selectedLocal === file.name ? 'bg-sky-500/20 text-sky-200' : ''
                     }`}
@@ -187,15 +293,31 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
 
         {/* Right: Remote Filesystem */}
         <div className="flex-1 flex flex-col">
-          <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 flex items-center space-x-1.5">
-            <Server className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="font-medium text-slate-300">Remote:</span>
-            <input
-              type="text"
-              value={remotePath}
-              onChange={(e) => setRemotePath(e.target.value)}
-              className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
-            />
+          {/* Remote Path Input & Breadcrumbs */}
+          <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
+            <div className="flex items-center space-x-1.5">
+              <Server className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span className="font-medium text-slate-300">Remote:</span>
+              <input
+                type="text"
+                value={remotePath}
+                onChange={(e) => setRemotePath(e.target.value)}
+                className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              {renderBreadcrumbs(remotePath, setRemotePath)}
+              <div className="relative flex items-center w-28">
+                <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Filter..."
+                  value={remoteFilter}
+                  onChange={(e) => setRemoteFilter(e.target.value)}
+                  className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -209,10 +331,11 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
                 </tr>
               </thead>
               <tbody className="divide-y divide-plinky-800/40">
-                {remoteFiles.map((file) => (
+                {filteredRemote.map((file) => (
                   <tr
                     key={file.name}
                     onClick={() => setSelectedRemote(file.name)}
+                    onDoubleClick={() => handleNavigateRemote(file)}
                     className={`cursor-pointer hover:bg-plinky-800/50 transition ${
                       selectedRemote === file.name ? 'bg-emerald-500/20 text-emerald-200' : ''
                     }`}

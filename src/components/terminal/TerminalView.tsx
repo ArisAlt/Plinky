@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { TerminalTab, SyncChannel } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
 import { 
@@ -14,21 +15,55 @@ import {
   setSyncChannel,
   HostKeyPromptInfo
 } from '../../services/tauriBridge';
-import { Radio, Edit3, Sparkles, ShieldAlert } from 'lucide-react';
+import { 
+  Radio, 
+  Edit3, 
+  Sparkles, 
+  ShieldAlert, 
+  Search, 
+  ChevronUp, 
+  ChevronDown, 
+  X, 
+  Copy, 
+  Clipboard, 
+  Trash2, 
+  CheckSquare,
+  Columns,
+  Rows
+} from 'lucide-react';
 
 interface TerminalViewProps {
   tab: TerminalTab;
   onUpdateTab: (tabId: string, updates: Partial<TerminalTab>) => void;
+  onSplitPane?: (direction: 'vertical' | 'horizontal') => void;
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ 
+  tab, 
+  onUpdateTab,
+  onSplitPane 
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const isLivePtyRef = useRef<boolean>(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<HostKeyPromptInfo | null>(null);
+
+  // Search State
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
+  const [isRegex, setIsRegex] = useState(false);
+  const [searchStats, setSearchStats] = useState<{ index: number; total: number } | null>(null);
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -40,12 +75,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
       fontFamily: '"JetBrains Mono", "Fira Code", monospace',
       fontSize: 13,
       lineHeight: 1.25,
+      allowTransparency: true,
       theme: {
         background: '#090d16',
         foreground: '#e2e8f0',
         cursor: '#38bdf8',
         cursorAccent: '#090d16',
-        selectionBackground: 'rgba(56, 189, 248, 0.3)',
+        selectionBackground: 'rgba(56, 189, 248, 0.35)',
         black: '#0f172a',
         red: '#f43f5e',
         green: '#10b981',
@@ -67,6 +103,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+
+    // Initialize Search Addon
+    const searchAddon = new SearchAddon();
+    term.loadAddon(searchAddon);
+    searchAddonRef.current = searchAddon;
+
+    searchAddon.onDidChangeResults((e) => {
+      if (e) {
+        setSearchStats({ index: e.resultIndex, total: e.resultCount });
+      } else {
+        setSearchStats(null);
+      }
+    });
 
     term.open(containerRef.current);
     fitAddon.fit();
@@ -200,6 +249,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
       }
     });
 
+    // Handle Ctrl+F for searching inside terminal
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      } else if (e.key === 'Escape' && isSearchOpen) {
+        setIsSearchOpen(false);
+        searchAddonRef.current?.clearDecorations();
+        term.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
     const handleResize = () => {
       try {
         fitAddon.fit();
@@ -211,6 +275,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     window.addEventListener('resize', handleResize);
 
     return () => {
+      window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
       if (unlistenPrompts) {
         unlistenPrompts();
@@ -224,8 +289,45 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     };
   }, [tab.id, tab.sessionName, tab.hostname, tab.port, tab.username]);
 
+  // Execute in-buffer search
+  const performSearch = useCallback((direction: 'next' | 'prev' = 'next') => {
+    if (!searchAddonRef.current || !searchQuery) return;
+    const options = {
+      caseSensitive,
+      wholeWord,
+      regex: isRegex,
+      incremental: direction === 'next',
+      decorations: {
+        matchOverviewRuler: '#38bdf8',
+        activeMatchColorOverviewRuler: '#f59e0b',
+        matchBackground: 'rgba(56, 189, 248, 0.3)',
+        activeMatchBackground: 'rgba(245, 158, 11, 0.6)',
+      }
+    };
+
+    if (direction === 'next') {
+      searchAddonRef.current.findNext(searchQuery, options);
+    } else {
+      searchAddonRef.current.findPrevious(searchQuery, options);
+    }
+  }, [searchQuery, caseSensitive, wholeWord, isRegex]);
+
+  useEffect(() => {
+    if (isSearchOpen && searchQuery) {
+      performSearch('next');
+    } else if (!searchQuery && searchAddonRef.current) {
+      searchAddonRef.current.clearDecorations();
+      setSearchStats(null);
+    }
+  }, [searchQuery, caseSensitive, wholeWord, isRegex, isSearchOpen, performSearch]);
+
   // WindTerm Free Type Mode: Arbitrary cursor placement and delta computation
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Close context menu on left click
+    if (contextMenu) {
+      setContextMenu(null);
+    }
+
     if (!isFreeType || !containerRef.current || !terminalRef.current) return;
     const term = terminalRef.current;
 
@@ -274,7 +376,47 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     }
 
     term.focus();
-  }, [isFreeType, tab.id]);
+  }, [isFreeType, tab.id, contextMenu]);
+
+  // Context Menu Handler
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 220);
+    const y = Math.min(e.clientY, window.innerHeight - 280);
+    setContextMenu({ x, y });
+  };
+
+  const handleCopy = () => {
+    const selection = terminalRef.current?.getSelection();
+    if (selection && navigator.clipboard) {
+      navigator.clipboard.writeText(selection);
+    }
+    setContextMenu(null);
+  };
+
+  const handlePaste = async () => {
+    if (navigator.clipboard) {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        if (isLivePtyRef.current) {
+          writeTerminalInput(tab.id, new TextEncoder().encode(text));
+        } else {
+          terminalRef.current?.write(text);
+        }
+      }
+    }
+    setContextMenu(null);
+  };
+
+  const handleSelectAll = () => {
+    terminalRef.current?.selectAll();
+    setContextMenu(null);
+  };
+
+  const handleClear = () => {
+    terminalRef.current?.clear();
+    setContextMenu(null);
+  };
 
   const handleAnswerPrompt = async (answer: 'store' | 'once' | 'reject') => {
     await answerHostKeyPrompt(tab.id, answer);
@@ -312,16 +454,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
   };
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-plinky-950 overflow-hidden">
+    <div 
+      className="relative flex flex-col h-full w-full bg-plinky-950 overflow-hidden"
+      onContextMenu={handleContextMenu}
+    >
       {/* Tab Control Overlay Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
         <div className="flex items-center space-x-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span className="font-semibold text-slate-200">{tab.sessionName}</span>
-          <span className="text-slate-500">({tab.hostname}:{tab.port})</span>
+          <span className="text-slate-500 font-mono">({tab.hostname}:{tab.port})</span>
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Find In Terminal Button */}
+          <button
+            onClick={() => {
+              setIsSearchOpen(true);
+              setTimeout(() => searchInputRef.current?.focus(), 50);
+            }}
+            title="Find in Terminal (Ctrl+F)"
+            className="flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] transition"
+          >
+            <Search className="w-3 h-3 text-sky-400" />
+            <span>Find</span>
+          </button>
+
           {/* Sync Input Channel Badge */}
           <button
             onClick={cycleChannel}
@@ -338,7 +496,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
             title="Toggle WindTerm Free Type Mode (click anywhere to edit)"
             className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-all ${
               isFreeType
-                ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-sm'
+                ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-xs'
                 : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-300'
             }`}
           >
@@ -357,6 +515,93 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
         </div>
       </div>
 
+      {/* Floating In-Buffer Search Bar Overlay */}
+      {isSearchOpen && (
+        <div className="absolute top-10 right-4 z-40 flex items-center space-x-1.5 p-2 bg-plinky-900 border border-sky-500/40 rounded-lg shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+          <Search className="w-3.5 h-3.5 text-sky-400 ml-1" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Find in terminal..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (e.shiftKey) {
+                  performSearch('prev');
+                } else {
+                  performSearch('next');
+                }
+              }
+            }}
+            className="w-44 bg-plinky-950 border border-plinky-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-hidden focus:border-sky-500"
+          />
+
+          {/* Search Result Counter */}
+          <span className="text-[10px] font-mono text-slate-400 px-1 min-w-[50px] text-center">
+            {searchStats ? `${searchStats.index + 1}/${searchStats.total}` : (searchQuery ? '0/0' : '')}
+          </span>
+
+          {/* Direction Navigation */}
+          <button
+            onClick={() => performSearch('prev')}
+            title="Previous Match (Shift+Enter)"
+            className="p-1 rounded hover:bg-plinky-800 text-slate-400 hover:text-white"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => performSearch('next')}
+            title="Next Match (Enter)"
+            className="p-1 rounded hover:bg-plinky-800 text-slate-400 hover:text-white"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Match Options Toggles */}
+          <button
+            onClick={() => setCaseSensitive(!caseSensitive)}
+            title="Match Case"
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
+              caseSensitive ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-slate-500 border-transparent hover:text-slate-300'
+            }`}
+          >
+            Aa
+          </button>
+          <button
+            onClick={() => setWholeWord(!wholeWord)}
+            title="Match Whole Word"
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
+              wholeWord ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-slate-500 border-transparent hover:text-slate-300'
+            }`}
+          >
+            \b
+          </button>
+          <button
+            onClick={() => setIsRegex(!isRegex)}
+            title="Use Regular Expression"
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
+              isRegex ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-slate-500 border-transparent hover:text-slate-300'
+            }`}
+          >
+            .*
+          </button>
+
+          {/* Close Search */}
+          <button
+            onClick={() => {
+              setIsSearchOpen(false);
+              searchAddonRef.current?.clearDecorations();
+              terminalRef.current?.focus();
+            }}
+            title="Close Search (Esc)"
+            className="p-1 text-slate-500 hover:text-rose-400 ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Terminal Viewport */}
       <div
         ref={containerRef}
@@ -374,6 +619,92 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
               height: '18px',
             }}
           />
+        )}
+
+        {/* Custom Terminal Context Menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-50 w-48 bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={handleCopy}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <Copy className="w-3.5 h-3.5 text-sky-400" />
+              <span>Copy Selection</span>
+            </button>
+            <button
+              onClick={handlePaste}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <Clipboard className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Paste Clipboard</span>
+            </button>
+            <button
+              onClick={handleSelectAll}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Select All</span>
+            </button>
+            <div className="border-t border-plinky-800 my-1" />
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                setIsSearchOpen(true);
+                setTimeout(() => searchInputRef.current?.focus(), 50);
+              }}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <Search className="w-3.5 h-3.5 text-amber-400" />
+              <span>Find in Terminal...</span>
+            </button>
+            <button
+              onClick={() => {
+                toggleFreeType();
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{isFreeType ? 'Disable Free Type' : 'Enable Free Type'}</span>
+            </button>
+            <div className="border-t border-plinky-800 my-1" />
+            {onSplitPane && (
+              <>
+                <button
+                  onClick={() => {
+                    onSplitPane('vertical');
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+                >
+                  <Columns className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Split Vertically</span>
+                </button>
+                <button
+                  onClick={() => {
+                    onSplitPane('horizontal');
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+                >
+                  <Rows className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Split Horizontally</span>
+                </button>
+                <div className="border-t border-plinky-800 my-1" />
+              </>
+            )}
+            <button
+              onClick={handleClear}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-rose-500/20 hover:text-rose-300 text-left transition"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Clear Terminal</span>
+            </button>
+          </div>
         )}
 
         {/* Native Host Key Verification Dialog */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { PuttySession, TerminalTab, SyncChannel } from './types/session';
-import { listPuttySessions, writePuttySession } from './services/tauriBridge';
+import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
+import { listPuttySessions, writePuttySession, writeTerminalInput } from './services/tauriBridge';
 import { TitleBar } from './components/layout/TitleBar';
 import { StatusBar } from './components/layout/StatusBar';
 import { SessionExplorer } from './components/sidebar/SessionExplorer';
@@ -9,6 +9,7 @@ import { SftpDualPane } from './components/sftp/SftpDualPane';
 import { TunnelManager } from './components/tunnels/TunnelManager';
 import { HostKeyManager } from './components/keys/HostKeyManager';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
+import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
 import { 
   X, 
@@ -16,6 +17,8 @@ import {
   Terminal, 
   Columns, 
   Rows, 
+  Square,
+  LayoutGrid
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -23,6 +26,7 @@ export const App: React.FC = () => {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys'>('sessions');
+  const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
   const [sftpSession, setSftpSession] = useState<{ name: string; host: string }>({
     name: 'Production Cluster Alpha',
@@ -95,6 +99,9 @@ export const App: React.FC = () => {
     if (activeTabId === id) {
       setActiveTabId(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
     }
+    if (remaining.length < 2 && layoutMode !== 'single') {
+      setLayoutMode('single');
+    }
   };
 
   const handleUpdateTab = (tabId: string, updates: Partial<TerminalTab>) => {
@@ -106,7 +113,30 @@ export const App: React.FC = () => {
     await loadSessions();
   };
 
-  const activeTab = tabs.find(t => t.id === activeTabId);
+  const handleSplitPane = (direction: 'vertical' | 'horizontal') => {
+    if (direction === 'vertical') {
+      setLayoutMode('split-vertical');
+    } else {
+      setLayoutMode('split-horizontal');
+    }
+
+    if (tabs.length === 1 && activeTab) {
+      // Automatically spawn a split session with the same session
+      handleConnectSession({
+        name: `${activeTab.sessionName} (Split)`,
+        hostname: activeTab.hostname,
+        port: activeTab.port,
+        protocol: 'SSH',
+      });
+    }
+  };
+
+  const handleExecuteSnippet = (command: string) => {
+    if (!activeTabId) return;
+    writeTerminalInput(activeTabId, new TextEncoder().encode(command));
+  };
+
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
   const getChannelColor = (ch: SyncChannel) => {
     switch (ch) {
@@ -117,6 +147,11 @@ export const App: React.FC = () => {
       default: return 'text-slate-500';
     }
   };
+
+  // Determine tabs displayed in split views
+  const splitTabs = tabs.length >= 2
+    ? [activeTab, ...tabs.filter(t => t.id !== activeTab?.id)]
+    : tabs;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-plinky-950 text-slate-100 overflow-hidden font-sans">
@@ -192,52 +227,53 @@ export const App: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Right Tab Controls: Split & Layout */}
-                <div className="flex items-center space-x-1 text-slate-500">
+                {/* Right Tab Controls: Split & Multi-Pane Layout Selector */}
+                <div className="flex items-center space-x-1 text-slate-400">
                   <button
-                    onClick={() => {
-                      if (activeTab) {
-                        handleConnectSession({
-                          name: `${activeTab.sessionName} (Split)`,
-                          hostname: activeTab.hostname,
-                          port: activeTab.port,
-                          protocol: 'SSH',
-                        });
-                      }
-                    }}
-                    title="Split Terminal Vertically"
-                    className="p-1 rounded hover:bg-plinky-800 hover:text-slate-300 transition"
+                    onClick={() => setLayoutMode('single')}
+                    title="Single Terminal View"
+                    className={`p-1.5 rounded transition ${layoutMode === 'single' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
+                  >
+                    <Square className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleSplitPane('vertical')}
+                    title="Split View Vertically (Side by Side)"
+                    className={`p-1.5 rounded transition ${layoutMode === 'split-vertical' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
                   >
                     <Columns className="w-3.5 h-3.5" />
                   </button>
                   <button
+                    onClick={() => handleSplitPane('horizontal')}
+                    title="Split View Horizontally (Stacked)"
+                    className={`p-1.5 rounded transition ${layoutMode === 'split-horizontal' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
+                  >
+                    <Rows className="w-3.5 h-3.5" />
+                  </button>
+                  <button
                     onClick={() => {
-                      if (activeTab) {
+                      setLayoutMode('grid-4');
+                      while (tabs.length < 4 && sessions.length > 0) {
+                        const nextSession = sessions[tabs.length % sessions.length];
                         handleConnectSession({
-                          name: `${activeTab.sessionName} (Split)`,
-                          hostname: activeTab.hostname,
-                          port: activeTab.port,
-                          protocol: 'SSH',
+                          name: `${nextSession.name} (${tabs.length + 1})`,
+                          hostname: nextSession.hostname,
+                          port: nextSession.port,
+                          protocol: nextSession.protocol,
                         });
                       }
                     }}
-                    title="Split Terminal Horizontally"
-                    className="p-1 rounded hover:bg-plinky-800 hover:text-slate-300 transition"
+                    title="4-Terminal Cluster Grid (2x2)"
+                    className={`p-1.5 rounded transition ${layoutMode === 'grid-4' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
                   >
-                    <Rows className="w-3.5 h-3.5" />
+                    <LayoutGrid className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              {/* Terminal Viewport */}
-              <div className="flex-1 relative overflow-hidden bg-plinky-950">
-                {activeTab ? (
-                  <TerminalView
-                    key={activeTab.id}
-                    tab={activeTab}
-                    onUpdateTab={handleUpdateTab}
-                  />
-                ) : (
+              {/* Terminal Viewport (Single, Split, or Grid) */}
+              <div className="flex-1 relative overflow-hidden bg-plinky-950 flex flex-col">
+                {tabs.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
                     <Terminal className="w-8 h-8 text-slate-600" />
                     <span>No active terminal sessions</span>
@@ -250,8 +286,116 @@ export const App: React.FC = () => {
                       Connect to {sessions[0]?.name || 'Server'}
                     </button>
                   </div>
+                ) : layoutMode === 'single' ? (
+                  <div className="flex-1 relative w-full h-full overflow-hidden">
+                    <TerminalView
+                      key={activeTab.id}
+                      tab={activeTab}
+                      onUpdateTab={handleUpdateTab}
+                      onSplitPane={handleSplitPane}
+                    />
+                  </div>
+                ) : layoutMode === 'split-vertical' ? (
+                  <div className="flex-1 flex w-full h-full overflow-hidden divide-x divide-plinky-800">
+                    <div 
+                      onClick={() => setActiveTabId(splitTabs[0].id)}
+                      className={`flex-1 h-full relative ${activeTabId === splitTabs[0].id ? 'ring-1 ring-sky-500/50' : ''}`}
+                    >
+                      <TerminalView
+                        key={splitTabs[0].id}
+                        tab={splitTabs[0]}
+                        onUpdateTab={handleUpdateTab}
+                        onSplitPane={handleSplitPane}
+                      />
+                    </div>
+                    {splitTabs[1] ? (
+                      <div 
+                        onClick={() => setActiveTabId(splitTabs[1].id)}
+                        className={`flex-1 h-full relative ${activeTabId === splitTabs[1].id ? 'ring-1 ring-sky-500/50' : ''}`}
+                      >
+                        <TerminalView
+                          key={splitTabs[1].id}
+                          tab={splitTabs[1]}
+                          onUpdateTab={handleUpdateTab}
+                          onSplitPane={handleSplitPane}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1 h-full flex flex-col items-center justify-center bg-plinky-950 text-slate-500 text-xs space-y-2">
+                        <Columns className="w-6 h-6 text-slate-600" />
+                        <span>Empty Split View Pane</span>
+                        <button
+                          onClick={() => handleSplitPane('vertical')}
+                          className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
+                        >
+                          + Open Split Tab
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : layoutMode === 'split-horizontal' ? (
+                  <div className="flex-1 flex flex-col w-full h-full overflow-hidden divide-y divide-plinky-800">
+                    <div 
+                      onClick={() => setActiveTabId(splitTabs[0].id)}
+                      className={`flex-1 w-full relative ${activeTabId === splitTabs[0].id ? 'ring-1 ring-sky-500/50' : ''}`}
+                    >
+                      <TerminalView
+                        key={splitTabs[0].id}
+                        tab={splitTabs[0]}
+                        onUpdateTab={handleUpdateTab}
+                        onSplitPane={handleSplitPane}
+                      />
+                    </div>
+                    {splitTabs[1] ? (
+                      <div 
+                        onClick={() => setActiveTabId(splitTabs[1].id)}
+                        className={`flex-1 w-full relative ${activeTabId === splitTabs[1].id ? 'ring-1 ring-sky-500/50' : ''}`}
+                      >
+                        <TerminalView
+                          key={splitTabs[1].id}
+                          tab={splitTabs[1]}
+                          onUpdateTab={handleUpdateTab}
+                          onSplitPane={handleSplitPane}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1 w-full flex flex-col items-center justify-center bg-plinky-950 text-slate-500 text-xs space-y-2">
+                        <Rows className="w-6 h-6 text-slate-600" />
+                        <span>Empty Split View Pane</span>
+                        <button
+                          onClick={() => handleSplitPane('horizontal')}
+                          className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
+                        >
+                          + Open Split Tab
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* 4-Pane Cluster Grid Layout */
+                  <div className="flex-1 grid grid-cols-2 grid-rows-2 w-full h-full overflow-hidden divide-x divide-y divide-plinky-800">
+                    {splitTabs.slice(0, 4).map((tab) => (
+                      <div
+                        key={tab.id}
+                        onClick={() => setActiveTabId(tab.id)}
+                        className={`relative w-full h-full overflow-hidden ${activeTabId === tab.id ? 'ring-1 ring-sky-500/50' : ''}`}
+                      >
+                        <TerminalView
+                          tab={tab}
+                          onUpdateTab={handleUpdateTab}
+                          onSplitPane={handleSplitPane}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
+
+              {/* Parameterized Quick Snippet Bar (WindTerm superpower) */}
+              <QuickSnippetBar
+                onExecuteSnippet={handleExecuteSnippet}
+                activeSessionName={activeTab?.sessionName}
+              />
             </>
           )}
 
