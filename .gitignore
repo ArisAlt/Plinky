@@ -10,6 +10,7 @@
 
 # Tauri build outputs
 src-tauri/target/
+src-tauri/gen/
 
 # Temporary / backups
 *.bak

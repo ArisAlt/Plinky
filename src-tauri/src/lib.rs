@@ -4,12 +4,12 @@ use putty_compat::ppk::PpkHeader;
 
 #[tauri::command]
 fn list_putty_sessions() -> Result<Vec<PuttySession>, String> {
-    let session_names = putty_compat::sessions::list_sessions()
+    let session_refs = putty_compat::sessions::list_sessions()
         .map_err(|e| format!("Failed to list PuTTY sessions: {e}"))?;
 
     let mut sessions = Vec::new();
-    for name in session_names {
-        if let Ok(sess) = putty_compat::sessions::read_session(&name) {
+    for s_ref in session_refs {
+        if let Ok(sess) = putty_compat::sessions::read_session(&s_ref.name) {
             sessions.push(sess);
         }
     }
@@ -36,7 +36,7 @@ fn list_putty_hostkeys() -> Result<Vec<HostKeyEntry>, String> {
 
 #[tauri::command]
 fn inspect_ppk(path: String) -> Result<PpkHeader, String> {
-    putty_compat::ppk::read_header(&path)
+    putty_compat::ppk::read_header(std::path::Path::new(&path))
         .map_err(|e| format!("Failed to parse PPK header for '{path}': {e}"))
 }
 
