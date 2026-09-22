@@ -64,55 +64,50 @@ This document tracks the directory architecture, file structure, component relat
 │               ├── mod.rs
 │               └── bootstrap.rs          # Auto-injection snippets for bash, zsh, fish (OSC 133 + OSC 7)
 │
-├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings
-│   ├── Cargo.toml                        # Workspace member: tauri, putty-compat, plinky-core
-│   ├── tauri.conf.json                   # Tauri v2 window, security capabilities, and permissions
+├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings (IMPLEMENTED)
+│   ├── Cargo.toml                        # Workspace member: tauri, putty-compat, tokio
+│   ├── tauri.conf.json                   # Tauri v2 window, dimensions (1280x820), security, icons
+│   ├── build.rs                          # tauri_build entry
+│   ├── icons/                            # Desktop app icons (32x32, 128x128, 256x256, .ico, .icns)
 │   └── src/
-│       ├── main.rs                       # Desktop entrypoint & lifecycle hooks
-│       ├── lib.rs                        # Tauri plugin setup & command registration
-│       └── commands/                     # Tauri IPC Commands
-│           ├── mod.rs
-│           ├── terminal.rs               # tauri::ipc::Channel binary streaming & watermarks
-│           ├── sftp.rs                   # SFTP directory navigation and chunked transfer queue
-│           └── sessions.rs               # Session CRUD operations
+│       ├── main.rs                       # Desktop entrypoint & windows subsystem flags
+│       └── lib.rs                        # Tauri plugin setup & command registration:
+│                                         # list_putty_sessions, read_putty_session, write_putty_session,
+│                                         # list_putty_hostkeys, inspect_ppk
 │
 └── src/                                  # Frontend UI Workbench (TypeScript + React 19 + xterm.js)
-    ├── package.json                      # Dependencies (react, @xterm/xterm, dockview, lucide-react)
-    ├── vite.config.ts                    # Vite build configuration
-    ├── index.html                        # Application shell
-    ├── main.tsx                          # React entrypoint
-    ├── App.tsx                           # Main IDE-style workbench (Dockview container)
-    ├── services/                         # Terminal & Session Services (Outside React Lifecycle)
-    │   ├── xtermRegistry.ts              # Global xterm instances keyed by sessionId (prevents teardown)
-    │   └── channelStream.ts              # tauri::ipc::Channel raw binary reader & flow control
-    ├── components/
-    │   ├── layout/                       # Docking layout manager
-    │   │   ├── DockManager.tsx           # dockview container with renderer: 'always' & layout persistence
-    │   │   ├── StatusBar.tsx             # Connection status, sync channel indicator, latency
-    │   │   └── TitleBar.tsx              # Custom window frame, quick connect bar
-    │   ├── terminal/                     # Terminal Viewport & WindTerm Enhancements
-    │   │   ├── TerminalTab.tsx           # xterm.js instance with WebGL addon
-    │   │   ├── FreeTypeMode.ts           # Gated Free Type Mode (OSC 133 prompt region, DECCKM aware)
-    │   │   ├── RegexMarkers.ts           # IDecoration color markers & registerLinkProvider
-    │   │   ├── SyncInputBar.tsx          # Multi-session broadcast channels (A, B, C, D) toolbar
-    │   │   └── PromptDetector.ts         # OSC 133 semantic prompt & command status tracker
-    │   ├── sftp/                         # WindTerm-style SFTP Explorer
-    │   │   ├── DualPaneExplorer.tsx      # Side-by-side local & remote filesystem trees
-    │   │   ├── FileTable.tsx             # File list, permissions, owner, date modified
-    │   │   └── TransferQueue.tsx         # Active background transfers, speed graph, pause/resume
-    │   ├── sessions/                     # Session Management Tree
-    │   │   ├── SessionTree.tsx           # Hierarchical folder view, tags, search filter
-    │   │   ├── SessionDialog.tsx         # Session editor (SSH, PuTTY profile, Serial, Telnet)
-    │   │   ├── PuTTYImportModal.tsx      # Direct import from PUTTYDIR / ~/.putty / WinReg
-    │   │   └── KeyImportModal.tsx        # SSH key importer with puttygen OpenSSH -> PPK conversion flow
-    │   ├── snippets/                     # Snippets & Quick Command Bar
-    │   │   ├── QuickBar.tsx              # One-click macro execution buttons
-    │   │   └── SnippetManager.tsx        # Parameterized command templates (e.g. {{user}}, {{ip}})
-    │   └── tunnels/                      # Visual SSH Port Forwarding
-    │       └── TunnelModal.tsx           # Local, Remote, and Dynamic SOCKS5 visualizer
-    ├── hooks/                            # React state hooks
-    │   ├── useSessionStream.ts           # Hook binding xterm to Tauri IPC binary channel
-    │   ├── useSyncChannels.ts            # 4-channel broadcast router hook
+    ├── package.json                      # Dependencies: React 19, @xterm/xterm, dockview, lucide-react, tailwindcss
+    ├── vite.config.ts                    # Vite 6 config with Tauri dev port 1420 & aliases
+    ├── tsconfig.json                     # TypeScript strict bundler configuration
+    ├── tailwind.config.js                # Dark terminal slate palette + broadcast channel colors (A-D)
+    ├── postcss.config.js                 # Tailwind PostCSS configuration
+    ├── index.html                        # Application shell with font preconnects
+    ├── main.tsx                          # React 19 entrypoint
+    ├── App.tsx                           # Master IDE-style workbench with tab management & view routing
+    ├── index.css                         # CSS styling, dockview overrides, xterm customisation, free-type styles
+    ├── types/
+    │   └── session.ts                    # TypeScript models (PuttySession, TerminalTab, SyncChannel, Sftp, Tunnels)
+    ├── services/
+    │   ├── tauriBridge.ts                # Dual-mode IPC bridge (Tauri native + browser preview fallbacks)
+    │   └── terminalManager.ts            # Terminal registry, broadcast sync router, prompt simulation
+    └── components/
+        ├── layout/
+        │   ├── TitleBar.tsx              # Quick connect, view switchers, new session action
+        │   └── StatusBar.tsx             # Active tabs, plink transport status, sync channel metrics, R3 safety
+        ├── sidebar/
+        │   └── SessionExplorer.tsx       # Native PuTTY session tree, fuzzy search, tags/folders, launch actions
+        ├── terminal/
+        │   └── TerminalView.tsx          # xterm.js canvas, Free Type Mode, live regex highlighting, channel badge
+        ├── sftp/
+        │   └── SftpDualPane.tsx          # Dual-pane local/remote filesystem explorer, transfer queue, ADR-003 Option B
+        ├── tunnels/
+        │   └── TunnelManager.tsx         # Visual SSH tunnels (Local -L, Remote -R, Dynamic -D SOCKS5)
+        ├── keys/
+        │   └── HostKeyManager.tsx        # Trusted PuTTY host keys viewer and PPK header inspection
+        ├── sync/
+        │   └── SyncBroadcastBar.tsx      # Multi-session command broadcast bar (All, A, B, C, D)
+        └── modals/
+            └── NewSessionModal.tsx       # New PuTTY session modal with atomic persistence
     │   └── useSFTP.ts                    # Remote filesystem navigation and directory following
     └── styles/                           # Styling & Theme Variables
         ├── themes/                       # WindTerm Dark, PuTTY Classic, Dracula, Nord

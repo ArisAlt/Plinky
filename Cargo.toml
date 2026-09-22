@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "crates/putty-compat",
+    "src-tauri",
 ]
 resolver = "2"

@@ -1,0 +1,84 @@
+@import "dockview/dist/styles/dockview.css";
+@import "@xterm/xterm/css/xterm.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --channel-A: #06b6d4;
+  --channel-B: #10b981;
+  --channel-C: #f59e0b;
+  --channel-D: #f43f5e;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #090d16;
+  color: #f1f5f9;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Dockview Theme Overrides for Sleek Modern Look */
+.dockview-theme-dark {
+  --dv-paneview-header-border-color: #1e293b;
+  --dv-separator-border: #1e293b;
+  --dv-tabs-and-actions-container-background-color: #0f172a;
+  --dv-activegroup-visiblepanel-tab-background-color: #1e293b;
+  --dv-activegroup-hiddenpanel-tab-background-color: #0f172a;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #1e293b;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #0f172a;
+  --dv-tab-divider-color: #1e293b;
+  --dv-activegroup-visiblepanel-tab-color: #38bdf8;
+  --dv-activegroup-hiddenpanel-tab-color: #94a3b8;
+  --dv-inactivegroup-visiblepanel-tab-color: #cbd5e1;
+  --dv-inactivegroup-hiddenpanel-tab-color: #64748b;
+  --dv-drag-over-background-color: rgba(56, 189, 248, 0.15);
+  --dv-drag-over-border-color: #38bdf8;
+}
+
+/* xterm.js Canvas Customization */
+.xterm {
+  padding: 8px 12px;
+  height: 100%;
+}
+
+.xterm .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+/* Free Type Mode Visual Canvas Overlay */
+.free-type-active {
+  cursor: crosshair !important;
+}
+
+.free-type-cursor-indicator {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed rgba(56, 189, 248, 0.7);
+  background-color: rgba(56, 189, 248, 0.15);
+  z-index: 50;
+  transition: all 0.05s ease-out;
+}
