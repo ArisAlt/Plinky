@@ -3,7 +3,7 @@ use tauri::{State, ipc::Channel, Emitter};
 use putty_compat::sessions::PuttySession;
 use putty_compat::hostkeys::HostKeyEntry;
 use putty_compat::ppk::PpkHeader;
-use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer};
+use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer, SyncChannelId};
 use tokio::sync::mpsc;
 
 #[tauri::command]
@@ -151,6 +151,49 @@ fn close_terminal_session(
         .map_err(|e| format!("Failed to close session: {e}"))
 }
 
+#[tauri::command]
+fn set_sync_channel(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    channel: Option<String>,
+) -> Result<(), String> {
+    let chan_id = channel.as_deref().and_then(SyncChannelId::parse);
+    registry.set_sync_channel(&session_id, chan_id);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_sync_protected(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    protected: bool,
+) -> Result<(), String> {
+    registry.set_sync_protected(&session_id, protected);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_sync_armed(
+    registry: State<Arc<SessionRegistry>>,
+    armed: bool,
+) -> Result<(), String> {
+    registry.set_sync_armed(armed);
+    Ok(())
+}
+
+#[tauri::command]
+fn broadcast_sync_input(
+    registry: State<Arc<SessionRegistry>>,
+    channel: String,
+    data: Vec<u8>,
+) -> Result<usize, String> {
+    let chan_id = SyncChannelId::parse(&channel)
+        .ok_or_else(|| format!("Invalid sync channel '{channel}'"))?;
+    registry
+        .broadcast_sync_input(chan_id, &data)
+        .map_err(|e| format!("Failed to broadcast sync input: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -181,7 +224,11 @@ pub fn run() {
             answer_hostkey_prompt,
             write_terminal_input,
             resize_terminal,
-            close_terminal_session
+            close_terminal_session,
+            set_sync_channel,
+            set_sync_protected,
+            set_sync_armed,
+            broadcast_sync_input
         ])
         .run(tauri::generate_context!())
         .expect("error while running plinky desktop application");

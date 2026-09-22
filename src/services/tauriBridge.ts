@@ -357,3 +357,67 @@ export async function listenHostKeyPrompts(
   }
   return null;
 }
+
+export async function setSyncChannel(
+  sessionId: string,
+  channel: string | null
+): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_sync_channel', {
+        sessionId,
+        channel,
+      });
+    } catch (e) {
+      console.warn("Failed to set sync channel via Tauri:", e);
+    }
+  }
+}
+
+export async function setSyncProtected(
+  sessionId: string,
+  protectedStatus: boolean
+): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_sync_protected', {
+        sessionId,
+        protected: protectedStatus,
+      });
+    } catch (e) {
+      console.warn("Failed to set sync protection via Tauri:", e);
+    }
+  }
+}
+
+export async function setSyncArmed(armed: boolean): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_sync_armed', { armed });
+    } catch (e) {
+      console.warn("Failed to set sync armed state via Tauri:", e);
+    }
+  }
+}
+
+export async function broadcastSyncInput(
+  channel: string,
+  data: Uint8Array
+): Promise<number> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<number>('broadcast_sync_input', {
+        channel,
+        data: Array.from(data),
+      });
+    } catch (e) {
+      console.warn("Failed to broadcast sync input via Tauri:", e);
+      return 0;
+    }
+  }
+  return 0;
+}

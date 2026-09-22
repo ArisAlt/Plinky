@@ -51,6 +51,9 @@ This document tracks the directory architecture, file structure, component relat
 │           │   ├── mod.rs                # Transport trait (write, resize, kill, is_alive) bound to Send
 │           │   ├── plink.rs              # Primary: plink under portable-pty, ADR-002 detect_putty probe
 │           │   └── local.rs              # Local shell PTY (sh, bash) under portable-pty
+│           ├── sync/                     # Multi-session command broadcast (M5 SyncInputRouter)
+│           │   ├── mod.rs
+│           │   └── router.rs             # In-memory fan-out, D6 state filtering (Live-only), protected exclusion
 │           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
 │               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events

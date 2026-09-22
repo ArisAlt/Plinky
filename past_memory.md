@@ -193,3 +193,15 @@
   - Subscribes to `session:prompt` via `listenHostKeyPrompts()`.
   - Renders secure modal displaying Host, Port, Key Type, and Fingerprint with explicit action buttons: "Store Key in Cache & Connect", "Connect Just Once", "Abandon Connection".
 * Verification: 14/14 tests pass in `cargo test --workspace` (`test_write_input_blocked_during_hostkey_pending` verified). `npm run build` compiles 1,912 modules with 0 TS errors in 1.91s.
+
+### 18. M5 SYNC INPUT ROUTER (MULTI-SESSION BROADCAST FANOUT & D6 SAFETY)
+* `crates/plinky-core::sync`: Implemented thread-safe `SyncInputRouter` coordinating multi-session broadcast fanout across discrete channels (All, A, B, C, D).
+* In-Memory Rust Fan-out: All keystroke replication executes inside Rust in-memory, eliminating multi-call IPC roundtrip overhead from the webview.
+* D6 State Filtering: Keystrokes are strictly broadcast to sessions currently in `SessionState::Live`. Sessions in `Connecting`, `PreAuth`, or `HostKeyPending` are safely skipped, preventing keystroke leakage and authentication corruption.
+* Protected Sessions & Global Disarm: Protected sessions (`is_protected = true`, e.g. production targets) are excluded from broadcast fanout by default. Global `armed` toggle allows instant emergency suspension of all broadcasts.
+* Tauri IPC & Frontend UI:
+  - Registered `set_sync_channel`, `set_sync_protected`, `set_sync_armed`, and `broadcast_sync_input` commands in `src-tauri/src/lib.rs`.
+  - Added frontend bindings in `src/services/tauriBridge.ts`.
+  - `SyncBroadcastBar.tsx` wired directly to backend broadcast fanout.
+* Verification: Added `test_sync_input_router_d6_safety`. 15/15 tests pass in `cargo test --workspace` (`putty-compat`: 7, `plinky-core`: 8). `npm run build` compiles 1,912 modules with 0 TS errors.
+
