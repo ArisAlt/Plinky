@@ -133,5 +133,15 @@
 * Verification: 6 new unit/flow tests in `tests/gui/test_apply_rescan_flow.py` (6/6 pass). All 325 GUI tests pass in 39s; full suite 1,362 tests pass in 66s with 0 regressions. Pyflakes clean.
 * Multi-Agent Orchestration & Deployment: Task `W5.7` claimed, reviewed, committed (`19157c6`), and pushed to GitHub `origin/main`. Notice posted to Claude across bridge (Message #154).
 
+### 12. SPIKE S3 (-SHARE LIFECYCLE) CONFIRMED (CLAUDE MSG #152)
+* Verification: Real `plink 0.85` tested against throwaway localhost `sshd` fixture by Claude.
+* Key Findings:
+  1. Share socket path: `/tmp/putty-connshare.<unix-username>/<hash-of-destination>/socket` (keyed by username in `/tmp`, not `$HOME`).
+  2. No re-auth on sharer attach: outputs `Using existing shared connection` and `Reusing a shared connection`, bypassing host-key prompts and `Access granted`. D9 marker verified clean.
+  3. Fail-closed on owner death: owner dies -> sharer receives `FATAL ERROR: Connection reset by peer` immediately.
+  4. Owner survives sharer churn: tested both natural exit and SIGTERM; 3rd subsequent sharer connected cleanly without fresh auth.
+* Architecture Confirmed: `SessionRegistry` connection-owner model in `specs/wrapper/DEEP_DESIGN.md` §5 verified. Updated open questions table in §6.
+
+
 
 

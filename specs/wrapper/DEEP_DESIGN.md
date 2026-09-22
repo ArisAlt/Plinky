@@ -124,13 +124,16 @@ pub fn list_host_keys() -> Result<Vec<HostKeyEntry>>;    // parses ~/.putty/sshh
 
 ---
 
-## 5. `-share` lifecycle: a concrete ownership design (narrows open question #3)
+## 5. `-share` lifecycle: connection ownership architecture (confirmed by Spike S3)
 
-Not yet spiked (S3 is still open), but the SYSTEM_DESIGN.md §3 D-note already reasoned about it; here is the concrete shape to spike against, so S3 has a specific design to falsify rather than starting blank:
+Spiked empirically on 2026-09-22 via real `plink 0.85` against a user-level localhost `sshd` fixture. Confirms the connection-owner/sharer design, closes the core architectural question:
 
-- **The Rust core, not any UI tab, owns the `-share` upstream.** `SessionRegistry` distinguishes a session's *presentation* (a terminal tab, an SFTP pane) from its *transport ownership*. The first thing that needs a connection to `host:port` under a given PuTTY session name spawns `plink -share ... -N`-equivalent as a **connection owner** with no tab attached; the terminal tab and the SFTP pane both attach as **sharers** (plain `plink -share`, `psftp -share`) against it.
-- Closing the last sharer (tab or SFTP pane) does **not** kill the connection owner immediately — it starts a short idle timer (e.g. 30s **[A]**, tunable), so re-opening a tab to the same host right after closing one doesn't pay a fresh handshake. The owner is torn down explicitly on "disconnect" or when the idle timer fires with zero sharers.
-- **What S3 must still verify empirically** (this is design, not evidence, unlike §2): whether a `psftp -share` sharer can outlive the tab that originally spawned the owning `plink -share`, and whether `-R`/`-L` forwards declared on the owner survive a sharer attaching/detaching. If the owner model above turns out to be unnecessary (i.e., PuTTY's own socket already survives any single sharer's exit, including the first), simplify to "first spawn is unprivileged, just don't kill the socket file" — S3's job is to tell us which.
+- **Socket path finding:** PuTTY's connection sharing socket is created at `/tmp/putty-connshare.<unix-username>/<hash-of-destination>/socket` (NOT under `$HOME/.putty`). It is keyed by the real OS username in `/tmp` and a hash of the destination, independent of `$HOME`. If Plinky runs sessions under different sandboxes or profiles, the share socket is shared system-wide per OS user.
+- **The Rust core, not any UI tab, owns the `-share` upstream.** `SessionRegistry` distinguishes a session's *presentation* (a terminal tab, an SFTP pane) from its *transport ownership*. The first entity requiring a connection to `host:port` under a given PuTTY session spawns `plink -share ... -N`-equivalent as a **connection owner** with no tab attached; subsequent terminal tabs and SFTP panes attach as **sharers** (plain `plink -share`, `psftp -share`) against it.
+- **No re-authentication on sharer attach:** Verified byte-for-byte. A sharer attaching to an existing owner outputs `"Using existing shared connection at <path>/socket"`, `"Reusing a shared connection to this server."`, and enters the SSH connection-sharing sub-protocol banner directly without host-key prompt or `"Access granted"` (confirming D9's marker does not falsely trigger on sharer attach).
+- **Owner survives sharer churn:** Tested both normal sharer exit (single command) and forced termination (SIGTERM). The owner process stayed alive across both, and a subsequent 3rd sharer cleanly attached without fresh authentication.
+- **Sharers fail closed on owner exit:** If the owner process dies, active sharers immediately receive `"FATAL ERROR: Connection reset by peer"`. The Rust core must be the sole authority terminating the owner process, and must never terminate it while active sharers (SFTP transfers, terminal tabs) remain attached.
+- Closing the last sharer does **not** kill the connection owner immediately — it initiates a short idle timer (e.g. 30s **[A]**, tunable), avoiding re-handshake latency if a tab is reopened. The owner is torn down explicitly on "disconnect" or when the idle timer expires with zero active sharers.
 
 ---
 
@@ -140,7 +143,7 @@ Not yet spiked (S3 is still open), but the SYSTEM_DESIGN.md §3 D-note already r
 |---|---|---|
 | 1 | PreAuth→Live boundary | **Resolved** by D9 (§2 Finding 4), pubkey path only — password/kbd-interactive path still needs S2 |
 | 2 | plink.exe resize under ConPTY | Still open — Windows-only, needs the owner's machine |
-| 3 | `-share` lifecycle / downstream forwards | Narrowed to a concrete ownership design (§5) — still needs S3 to verify |
+| 3 | `-share` lifecycle / downstream forwards | **CONFIRMED** by S3 spot-check 2026-09-22: owner survives sharer churn, sharer does not survive owner death, no re-auth on attach. Forward-visibility across sharers still open. |
 | 4 | `psftp` parsing robustness | Still open — unrelated to this pass |
 | 5 | WebKitGTK/WebGL, WebView2 | Still open — S1, needs the Tauri app to exist (M2) |
 | 6 | Windows host-key store | Documented in ADR-002 (registry path) — still needs verification against a real Windows PuTTY install |
