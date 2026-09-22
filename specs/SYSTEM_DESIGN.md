@@ -153,8 +153,8 @@ Review gate on every milestone: I audit the diff before commit, and each post li
 ## 7. Open questions (all resolvable by M0)
 1. **Pre-auth to live boundary**: **Resolved by D9** (`Access granted` substring in PTY stream across all tested modes). S2 spot-checks keyboard-interactive auth and pre-auth banner isolation.
 2. **Terminal resize on Windows**: Does `plink.exe` propagate terminal resizes under ConPTY? (Open — Windows-only, tests on owner's machine).
-3. **`-share` lifecycle & connection ownership**: Concrete design established in `specs/wrapper/DEEP_DESIGN.md` (Rust core owns master connection, tabs/SFTP attach as sharers). S3 to verify downstream survival on tab closure.
-4. **`psftp` parsing robustness**: (Open — spaces, newlines, Unicode, symlinks; S4).
+3. **`-share` lifecycle & connection ownership**: **CONFIRMED** by S3 spot-check 2026-09-22: Rust core owns master connection, tabs/SFTP attach as sharers; owner survives sharer churn (SIGTERM and normal exit); sharers fail closed on owner exit; no re-auth on attach. Downstream port-forward visibility across sharers still open.
+4. **`psftp` parsing robustness & `-share` data-path**: **PARTIALLY RESOLVED / SUSPECTED BLOCKER** by S4 spot-check 2026-09-22: `ls -l` byte format confirmed (filenames with spaces are unquoted, fixed-prefix parser required, `.`/`..` filtered, symlinks omit `-> target`). **CRITICAL**: `psftp -share` hangs silently after socket attach without completing SFTP subsystem negotiation (reproduced 2x against OpenSSH internal-sftp). Needs dedicated spike before Phase 5 (SFTP); fallback: non-shared psftp connection or plink-native SFTP channel.
 5. **WebGL throughput**: (Open — S1, WebKitGTK Wayland & WebView2 Windows).
 6. **Windows host-key store**: Documented in ADR-002 (`HKCU\Software\SimonTatham\PuTTY\SshHostKeys`); verify against real Windows install.
 7. **OpenSSH private keys**: **Resolved** — plink cannot use OpenSSH format private keys (`Unable to use this key file`). Key import flow detects via `looks_like_ppk` and converts via `puttygen -O private -o out.ppk in.key`.

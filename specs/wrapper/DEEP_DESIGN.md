@@ -144,7 +144,7 @@ Spiked empirically on 2026-09-22 via real `plink 0.85` against a user-level loca
 | 1 | PreAuth→Live boundary | **Resolved** by D9 (§2 Finding 4), pubkey path only — password/kbd-interactive path still needs S2 |
 | 2 | plink.exe resize under ConPTY | Still open — Windows-only, needs the owner's machine |
 | 3 | `-share` lifecycle / downstream forwards | **CONFIRMED** by S3 spot-check 2026-09-22: owner survives sharer churn, sharer does not survive owner death, no re-auth on attach. Forward-visibility across sharers still open. |
-| 4 | `psftp` parsing robustness | Still open — unrelated to this pass |
+| 4 | `psftp` parsing robustness & `-share` data-path | **PARTIALLY RESOLVED / SUSPECTED BLOCKER** by S4 spot-check 2026-09-22: `ls -l` byte format confirmed (filenames with spaces are unquoted, fixed-prefix parser required, `.`/`..` filtered, symlinks omit `-> target`). **CRITICAL**: `psftp -share` hangs silently after socket attach without completing SFTP subsystem negotiation (reproduced 2x against OpenSSH internal-sftp). Needs dedicated spike before Phase 5 (SFTP); fallback: non-shared psftp connection or plink-native SFTP channel. |
 | 5 | WebKitGTK/WebGL, WebView2 | Still open — S1, needs the Tauri app to exist (M2) |
 | 6 | Windows host-key store | Documented in ADR-002 (registry path) — still needs verification against a real Windows PuTTY install |
 | **new** | Does plink accept OpenSSH-format keys? | **Resolved**: no (§2 Finding 1). Import flow must convert via `puttygen`. |

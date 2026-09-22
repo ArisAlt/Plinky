@@ -142,6 +142,16 @@
   4. Owner survives sharer churn: tested both natural exit and SIGTERM; 3rd subsequent sharer connected cleanly without fresh auth.
 * Architecture Confirmed: `SessionRegistry` connection-owner model in `specs/wrapper/DEEP_DESIGN.md` §5 verified. Updated open questions table in §6.
 
+### 13. CRATES/PUTTY-COMPAT IMPLEMENTED & PASSING (M1/M3)
+* Standalone Rust Crate: Created `crates/putty-compat` under root workspace `Cargo.toml`.
+* Modules:
+  - `sessions`: PuTTY session percent-encoding/decoding, `PuttySession` preserving unknown fields in `extra: BTreeMap<String, String>` (R3 invariant), platform session directory resolution (`PUTTYDIR` -> XDG -> `~/.putty/sessions`), atomic writing with `NamedTempFile` + sync + `.bak` backup.
+  - `ppk`: Version 2 and 3 `.ppk` header parsing (`PpkHeader`), SHA256 public key fingerprinting matching `puttygen -l`, and `looks_like_ppk` format detection terminating before private key bytes (D1 header-only scope).
+  - `hostkeys`: PuTTY `sshhostkeys` parsing (`<type>@<port>:<host> <key>`).
+* Verification: 7/7 integration tests pass in 0.00s (`cargo test --workspace`), verifying session round-trip fidelity, backup creation, ppk header parsing, OpenSSH format rejection, and real system `~/.putty/sshhostkeys` ingestion.
 
-
-
+### 14. SPIKE S4 (PSFTP PARSING & -SHARE LIFECYCLE) FINDINGS (CLAUDE MSG #158)
+* psftp `ls` Format: Classic `ls -l` line-by-line format. Entries are ASCII-sorted, include `.` and `..` (must filter), and omit `-> target` on symlinks.
+* CRITICAL Gotcha: Filenames with embedded spaces are unquoted (e.g. `drwxr-xr-x 2 user group 60 Sep 22 20:03 a dir with spaces`). Parser must match fixed-width/regex columns for metadata and take the rest of the line verbatim as filename.
+* CRITICAL Blocker / Bug: `psftp -share` connects to the shared socket (`Using existing shared connection...`), but then hangs silently without completing SFTP subsystem negotiation (reproduced 2x against OpenSSH internal-sftp).
+* Action & Fallbacks: Flagged in `specs/wrapper/DEEP_DESIGN.md` §6 and `specs/SYSTEM_DESIGN.md` §7 as suspected blocker before Phase 5. Fallback options: dedicated unshared psftp connection or plink-native SFTP subsystem channel.

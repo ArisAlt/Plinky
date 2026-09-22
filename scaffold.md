@@ -27,16 +27,18 @@ This document tracks the directory architecture, file structure, component relat
 │
 ├── crates/
 │   ├── putty-compat/                     # Standalone PuTTY Compatibility Crate (Zero Tauri dependencies)
+│   │   │                                 # ✅ IMPLEMENTED & VERIFIED (7/7 tests pass)
 │   │   │                                 # [D1 ACCEPTED BY OWNER - Option A: narrow v1 to session r/w,
 │   │   │                                 #  .ppk header inspection/fingerprinting, and read-only hostkey listing;
 │   │   │                                 #  deferring .ppk decryption & agent client to v2 / key manager]
-│   │   ├── Cargo.toml                    # Dependencies: winreg (Windows), serde, zeroize
+│   │   ├── Cargo.toml                    # Dependencies: winreg (Windows), serde, serde_json, thiserror, base64, sha2, tempfile
 │   │   ├── src/
 │   │   │   ├── lib.rs
-│   │   │   ├── sessions.rs               # PUTTYDIR / ~/.putty/sessions and WinReg parser/writer
+│   │   │   ├── errors.rs                 # PuttyCompatError and Result<T>
+│   │   │   ├── sessions.rs               # PUTTYDIR / ~/.putty/sessions and WinReg parser/atomic writer with .bak
 │   │   │   ├── ppk.rs                    # .ppk v2/v3 header parsing, fingerprinting, looks_like_ppk detection
 │   │   │   └── hostkeys.rs               # Read-only hostkey listing (~/.putty/sshhostkeys & WinReg)
-│   │   ├── tests/                        # Headless cross-platform integration tests (real puttygen 0.85 fixtures)
+│   │   ├── tests/                        # Headless cross-platform integration tests (real puttygen 0.85 & ~/.putty fixtures)
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
