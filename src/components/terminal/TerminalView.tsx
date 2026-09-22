@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { TerminalTab, SyncChannel } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
 import { 
   startTerminalSession, 
+  attachTerminalSession,
   writeTerminalInput, 
   resizeTerminal, 
   closeTerminalSession 
@@ -20,6 +21,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const isLivePtyRef = useRef<boolean>(false);
   const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
 
@@ -67,36 +69,102 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Register terminal with manager
+    // Register terminal with manager for broadcast sync input
     terminalManager.registerTerminal(tab.id, term, tab.syncChannel);
     terminalManager.setActiveTab(tab.id);
 
-    // Connect to live Tauri backend PTY session or fallback to preview
-    let isLivePty = false;
-    startTerminalSession(
-      tab.id,
-      tab.sessionName,
-      tab.hostname === 'localhost' || !tab.hostname,
-      term.cols,
-      term.rows,
-      (chunk) => {
-        isLivePty = true;
-        term.write(chunk);
-      }
-    ).then((started) => {
-      if (!started) {
-        // Browser development preview fallback banner
-        term.writeln(`\x1b[36m╔══════════════════════════════════════════════════════════════════╗\x1b[0m`);
-        term.writeln(`\x1b[36m║\x1b[0m  \x1b[1mPlinky PuTTY Wrapper (Preview)\x1b[0m — ${tab.sessionName} (${tab.hostname}:${tab.port})  \x1b[36m║\x1b[0m`);
-        term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Free Type: \x1b[32mActive\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
-        term.writeln(`\x1b[36m╚══════════════════════════════════════════════════════════════════╝\x1b[0m\r\n`);
-        term.write(`\x1b[32m${tab.username || 'deploy'}@${tab.sessionName.toLowerCase().replace(/\s+/g, '-')}\x1b[0m:\x1b[34m~\x1b[0m$ `);
+    // Register Real-time Regex Link Provider (IPs, URLs, Error hashes)
+    term.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const line = term.buffer.active.getLine(bufferLineNumber - 1);
+        if (!line) {
+          callback(undefined);
+          return;
+        }
+        const text = line.translateToString(true);
+        const links: Array<{
+          range: { start: { x: number; y: number }; end: { x: number; y: number } };
+          text: string;
+          activate: (event: MouseEvent, text: string) => void;
+        }> = [];
+
+        // IPv4 Pattern Matcher
+        const ipRegex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+        let match;
+        while ((match = ipRegex.exec(text)) !== null) {
+          const start = match.index + 1;
+          const matchedText = match[0];
+          links.push({
+            range: {
+              start: { x: start, y: bufferLineNumber },
+              end: { x: start + matchedText.length, y: bufferLineNumber },
+            },
+            text: matchedText,
+            activate: (_e, ip) => {
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(ip);
+              }
+            },
+          });
+        }
+
+        // URL Pattern Matcher
+        const urlRegex = /https?:\/\/[^\s/$.?#].[^\s]*/g;
+        while ((match = urlRegex.exec(text)) !== null) {
+          const start = match.index + 1;
+          const matchedText = match[0];
+          links.push({
+            range: {
+              start: { x: start, y: bufferLineNumber },
+              end: { x: start + matchedText.length, y: bufferLineNumber },
+            },
+            text: matchedText,
+            activate: (_e, url) => {
+              window.open(url, '_blank');
+            },
+          });
+        }
+
+        callback(links);
+      },
+    });
+
+    // Attempt to reattach to existing session or start a new PTY session
+    attachTerminalSession(tab.id, 0, (chunk) => {
+      isLivePtyRef.current = true;
+      term.write(chunk);
+    }).then((attachInfo) => {
+      if (attachInfo && attachInfo.replay_data.length > 0) {
+        isLivePtyRef.current = true;
+        term.write(new Uint8Array(attachInfo.replay_data));
+      } else {
+        // Fresh start
+        startTerminalSession(
+          tab.id,
+          tab.sessionName,
+          tab.hostname === 'localhost' || !tab.hostname,
+          term.cols,
+          term.rows,
+          (chunk) => {
+            isLivePtyRef.current = true;
+            term.write(chunk);
+          }
+        ).then((started) => {
+          if (!started) {
+            // Browser development preview fallback banner
+            term.writeln(`\x1b[36m╔══════════════════════════════════════════════════════════════════╗\x1b[0m`);
+            term.writeln(`\x1b[36m║\x1b[0m  \x1b[1mPlinky PuTTY Wrapper (Preview)\x1b[0m — ${tab.sessionName} (${tab.hostname}:${tab.port})  \x1b[36m║\x1b[0m`);
+            term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Free Type: \x1b[32mActive\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
+            term.writeln(`\x1b[36m╚══════════════════════════════════════════════════════════════════╝\x1b[0m\r\n`);
+            term.write(`\x1b[32m${tab.username || 'deploy'}@${tab.sessionName.toLowerCase().replace(/\s+/g, '-')}\x1b[0m:\x1b[34m~\x1b[0m$ `);
+          }
+        });
       }
     });
 
     // Handle user keyboard input
     term.onData((data) => {
-      if (isLivePty) {
+      if (isLivePtyRef.current) {
         writeTerminalInput(tab.id, new TextEncoder().encode(data));
       } else {
         // Echo input locally for browser preview
@@ -112,7 +180,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     });
 
     term.onResize(({ cols, rows }) => {
-      if (isLivePty) {
+      if (isLivePtyRef.current) {
         resizeTerminal(tab.id, cols, rows);
       }
     });
@@ -130,26 +198,66 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     return () => {
       window.removeEventListener('resize', handleResize);
       terminalManager.unregisterTerminal(tab.id);
-      if (isLivePty) {
+      if (isLivePtyRef.current) {
         closeTerminalSession(tab.id);
       }
       term.dispose();
     };
   }, [tab.id, tab.sessionName, tab.hostname, tab.port, tab.username]);
 
-  // Handle Free Type Mode Click
-  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isFreeType || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  // WindTerm Free Type Mode: Arbitrary cursor placement and delta computation
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isFreeType || !containerRef.current || !terminalRef.current) return;
+    const term = terminalRef.current;
 
-    setClickIndicator({ x, y });
-    setTimeout(() => setClickIndicator(null), 800);
+    // Gating 1: Suppress in alternate screen buffer (vim, nano, htop, less)
+    if (term.buffer.active.type === 'alternate') {
+      return;
+    }
 
-    // Place cursor in terminal
-    terminalRef.current?.focus();
-  };
+    const screenEl = containerRef.current.querySelector('.xterm-screen');
+    if (!screenEl) return;
+
+    const rect = screenEl.getBoundingClientRect();
+    const cellWidth = rect.width / term.cols;
+    const cellHeight = rect.height / term.rows;
+
+    const targetCol = Math.floor((e.clientX - rect.left) / cellWidth);
+    const targetRow = Math.floor((e.clientY - rect.top) / cellHeight);
+
+    // Visual click ripple
+    const localX = e.clientX - containerRef.current.getBoundingClientRect().left;
+    const localY = e.clientY - containerRef.current.getBoundingClientRect().top;
+    setClickIndicator({ x: localX, y: localY });
+    setTimeout(() => setClickIndicator(null), 600);
+
+    const cursorCol = term.buffer.active.cursorX;
+    const cursorRow = term.buffer.active.cursorY;
+
+    // Line gating: only move cursor if clicking on the active input row
+    if (targetRow === cursorRow && targetCol >= 0 && targetCol < term.cols) {
+      const delta = targetCol - cursorCol;
+      if (delta > 0) {
+        // Emit right arrow movement
+        const rightSeq = '\x1b[C'.repeat(delta);
+        if (isLivePtyRef.current) {
+          writeTerminalInput(tab.id, new TextEncoder().encode(rightSeq));
+        } else {
+          term.write(rightSeq);
+        }
+      } else if (delta < 0) {
+        // Emit left arrow movement
+        const leftSeq = '\x1b[D'.repeat(Math.abs(delta));
+        if (isLivePtyRef.current) {
+          writeTerminalInput(tab.id, new TextEncoder().encode(leftSeq));
+        } else {
+          term.write(leftSeq);
+        }
+      }
+    }
+
+    term.focus();
+  }, [isFreeType, tab.id]);
 
   const cycleChannel = () => {
     const channels: SyncChannel[] = ['none', 'A', 'B', 'C', 'D'];
@@ -164,6 +272,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     setIsFreeType(nextState);
     onUpdateTab(tab.id, { freeTypeMode: nextState });
     terminalManager.setFreeTypeMode(tab.id, nextState);
+    if (terminalRef.current) {
+      terminalRef.current.options.cursorStyle = nextState ? 'bar' : 'block';
+    }
   };
 
   const getChannelColor = (ch: SyncChannel) => {
@@ -213,7 +324,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
 
           {/* Regex Highlighting Indicator */}
           <span
-            title="Active Regex Highlighting: IPs, UUIDs, Errors, Warnings, URLs"
+            title="Active Regex Highlighting: IPs, UUIDs, Errors, Warnings, URLs (Clickable links enabled)"
             className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 text-[11px]"
           >
             <Sparkles className="w-3 h-3" />
