@@ -1,9 +1,9 @@
 use std::sync::Arc;
-use tauri::{State, ipc::Channel};
+use tauri::{State, ipc::Channel, Emitter};
 use putty_compat::sessions::PuttySession;
 use putty_compat::hostkeys::HostKeyEntry;
 use putty_compat::ppk::PpkHeader;
-use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo};
+use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer};
 use tokio::sync::mpsc;
 
 #[tauri::command]
@@ -103,6 +103,22 @@ fn attach_terminal_session(
 }
 
 #[tauri::command]
+fn answer_hostkey_prompt(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    answer: String,
+) -> Result<(), String> {
+    let prompt_answer = match answer.as_str() {
+        "store" => PromptAnswer::AcceptAndStore,
+        "once" => PromptAnswer::AcceptOnce,
+        _ => PromptAnswer::Reject,
+    };
+    registry
+        .answer_prompt(&session_id, prompt_answer)
+        .map_err(|e| format!("Failed to answer prompt: {e}"))
+}
+
+#[tauri::command]
 fn write_terminal_input(
     registry: State<Arc<SessionRegistry>>,
     session_id: String,
@@ -138,10 +154,21 @@ fn close_terminal_session(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
+    let reg_for_setup = registry.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(registry)
+        .setup(move |app| {
+            let app_handle = app.handle().clone();
+            let mut rx = reg_for_setup.subscribe_prompts();
+            tokio::spawn(async move {
+                while let Ok(event) = rx.recv().await {
+                    let _ = app_handle.emit("session:prompt", &event);
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             putty_detect,
             list_putty_sessions,
@@ -151,6 +178,7 @@ pub fn run() {
             inspect_ppk,
             start_terminal_session,
             attach_terminal_session,
+            answer_hostkey_prompt,
             write_terminal_input,
             resize_terminal,
             close_terminal_session

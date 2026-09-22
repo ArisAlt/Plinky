@@ -8,9 +8,12 @@ import {
   attachTerminalSession,
   writeTerminalInput, 
   resizeTerminal, 
-  closeTerminalSession 
+  closeTerminalSession,
+  answerHostKeyPrompt,
+  listenHostKeyPrompts,
+  HostKeyPromptInfo
 } from '../../services/tauriBridge';
-import { Radio, Edit3, Sparkles } from 'lucide-react';
+import { Radio, Edit3, Sparkles, ShieldAlert } from 'lucide-react';
 
 interface TerminalViewProps {
   tab: TerminalTab;
@@ -24,6 +27,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
   const isLivePtyRef = useRef<boolean>(false);
   const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState<HostKeyPromptInfo | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -73,7 +77,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     terminalManager.registerTerminal(tab.id, term, tab.syncChannel);
     terminalManager.setActiveTab(tab.id);
 
-    // Register Real-time Regex Link Provider (IPs, URLs, Error hashes)
+    // Register Real-time Regex Link Provider (IPs, URLs)
     term.registerLinkProvider({
       provideLinks: (bufferLineNumber, callback) => {
         const line = term.buffer.active.getLine(bufferLineNumber - 1);
@@ -127,6 +131,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
 
         callback(links);
       },
+    });
+
+    // Subscribe to native host key prompt events from backend
+    let unlistenPrompts: (() => void) | null = null;
+    listenHostKeyPrompts((event) => {
+      if (event.session_id === tab.id) {
+        setPendingPrompt(event.prompt);
+      }
+    }).then((unlisten) => {
+      unlistenPrompts = unlisten;
     });
 
     // Attempt to reattach to existing session or start a new PTY session
@@ -197,6 +211,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (unlistenPrompts) {
+        unlistenPrompts();
+      }
       terminalManager.unregisterTerminal(tab.id);
       if (isLivePtyRef.current) {
         closeTerminalSession(tab.id);
@@ -238,7 +255,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
     if (targetRow === cursorRow && targetCol >= 0 && targetCol < term.cols) {
       const delta = targetCol - cursorCol;
       if (delta > 0) {
-        // Emit right arrow movement
         const rightSeq = '\x1b[C'.repeat(delta);
         if (isLivePtyRef.current) {
           writeTerminalInput(tab.id, new TextEncoder().encode(rightSeq));
@@ -246,7 +262,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
           term.write(rightSeq);
         }
       } else if (delta < 0) {
-        // Emit left arrow movement
         const leftSeq = '\x1b[D'.repeat(Math.abs(delta));
         if (isLivePtyRef.current) {
           writeTerminalInput(tab.id, new TextEncoder().encode(leftSeq));
@@ -258,6 +273,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
 
     term.focus();
   }, [isFreeType, tab.id]);
+
+  const handleAnswerPrompt = async (answer: 'store' | 'once' | 'reject') => {
+    await answerHostKeyPrompt(tab.id, answer);
+    setPendingPrompt(null);
+    terminalRef.current?.focus();
+  };
 
   const cycleChannel = () => {
     const channels: SyncChannel[] = ['none', 'A', 'B', 'C', 'D'];
@@ -350,6 +371,61 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, onUpdateTab }) 
               height: '18px',
             }}
           />
+        )}
+
+        {/* Native Host Key Verification Dialog */}
+        {pendingPrompt && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-lg w-full p-6 text-slate-100">
+              <div className="flex items-start space-x-3 mb-4">
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">Host Key Verification Required</h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    The server's host key is not cached in PuTTY's known hosts store. You have no guarantee that the server is the computer you think it is.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 bg-slate-950/80 rounded-lg p-3 border border-slate-800 text-xs font-mono mb-5">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Destination:</span>
+                  <span className="text-slate-200 font-semibold">{pendingPrompt.host}:{pendingPrompt.port}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Key Type:</span>
+                  <span className="text-cyan-400">{pendingPrompt.key_type}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-1">Key Fingerprint:</span>
+                  <span className="text-emerald-400 break-all select-all font-bold">{pendingPrompt.fingerprint}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 justify-end">
+                <button
+                  onClick={() => handleAnswerPrompt('reject')}
+                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-all"
+                >
+                  Abandon Connection
+                </button>
+                <button
+                  onClick={() => handleAnswerPrompt('once')}
+                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/30 text-amber-300 text-xs font-medium transition-all"
+                >
+                  Connect Just Once
+                </button>
+                <button
+                  onClick={() => handleAnswerPrompt('store')}
+                  className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-sm transition-all"
+                >
+                  Store Key in Cache & Connect
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

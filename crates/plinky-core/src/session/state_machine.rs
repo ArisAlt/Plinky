@@ -1,5 +1,43 @@
 use regex::Regex;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HostKeyPromptInfo {
+    pub host: String,
+    pub port: u16,
+    pub key_type: String,
+    pub fingerprint: String,
+    pub raw_prompt: String,
+}
+
+impl HostKeyPromptInfo {
+    pub fn parse(raw: &str) -> Self {
+        // Parse host and port: e.g. "  192.0.2.1 (port 22)"
+        let host_port_regex = Regex::new(r"(?m)^\s+([^\s]+)\s+\(port\s+(\d+)\)").unwrap();
+        let (host, port) = if let Some(caps) = host_port_regex.captures(raw) {
+            let h = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+            let p = caps.get(2).and_then(|m| m.as_str().parse::<u16>().ok()).unwrap_or(22);
+            (h, p)
+        } else {
+            (String::new(), 22)
+        };
+
+        // Parse key type and fingerprint: e.g. "SHA256:..."
+        let fp_regex = Regex::new(r"SHA256:[A-Za-z0-9+/=]+").unwrap();
+        let fingerprint = fp_regex.find(raw).map(|m| m.as_str().to_string()).unwrap_or_default();
+
+        let type_regex = Regex::new(r"(ssh-ed25519|ssh-rsa|ecdsa-sha2-[a-z0-9]+)").unwrap();
+        let key_type = type_regex.find(raw).map(|m| m.as_str().to_string()).unwrap_or_else(|| "unknown".to_string());
+
+        Self {
+            host,
+            port,
+            key_type,
+            fingerprint,
+            raw_prompt: raw.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloseReason {
     Ok,
@@ -11,7 +49,7 @@ pub enum CloseReason {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionState {
     PreAuth,
-    HostKeyPending { prompt: String },
+    HostKeyPending { prompt: HostKeyPromptInfo },
     Live,
     Closed(CloseReason),
 }
@@ -22,8 +60,8 @@ pub enum PreAuthAction {
     Hold,
     /// Pass bytes directly to the terminal consumer (only in Live).
     PassThrough(Vec<u8>),
-    /// Host key confirmation prompt detected (requires user approval).
-    HostKeyPrompt(String),
+    /// Host key confirmation prompt detected (requires user approval via native dialog).
+    HostKeyPrompt(HostKeyPromptInfo),
     /// Authentication verified via D9 marker ("Access granted") — transitions to Live.
     TransitionToLive(Vec<u8>),
     /// Session closed (error, rejected, or auth failure).
@@ -118,11 +156,11 @@ impl PreAuthStateMachine {
 
         // Check for host-key confirmation prompt
         if self.hostkey_prompt_regex.is_match(&text) {
-            let prompt = text.to_string();
+            let prompt_info = HostKeyPromptInfo::parse(&text);
             self.state = SessionState::HostKeyPending {
-                prompt: prompt.clone(),
+                prompt: prompt_info.clone(),
             };
-            return PreAuthAction::HostKeyPrompt(prompt);
+            return PreAuthAction::HostKeyPrompt(prompt_info);
         }
 
         // Default-deny: hold unmatched pre-auth bytes until transition to Live or prompt
