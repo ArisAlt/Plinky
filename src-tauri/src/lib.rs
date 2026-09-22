@@ -1,6 +1,15 @@
+use std::sync::Arc;
+use tauri::{State, ipc::Channel};
 use putty_compat::sessions::PuttySession;
 use putty_compat::hostkeys::HostKeyEntry;
 use putty_compat::ppk::PpkHeader;
+use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo};
+use tokio::sync::mpsc;
+
+#[tauri::command]
+fn putty_detect() -> PuttyInfo {
+    PlinkTransport::detect_putty()
+}
 
 #[tauri::command]
 fn list_putty_sessions() -> Result<Vec<PuttySession>, String> {
@@ -40,16 +49,111 @@ fn inspect_ppk(path: String) -> Result<PpkHeader, String> {
         .map_err(|e| format!("Failed to parse PPK header for '{path}': {e}"))
 }
 
+#[tauri::command]
+fn start_terminal_session(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    session_name: String,
+    is_local: bool,
+    cols: u16,
+    rows: u16,
+    on_data: Channel<Vec<u8>>,
+) -> Result<(), String> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+    tokio::spawn(async move {
+        while let Some(chunk) = rx.recv().await {
+            if on_data.send(chunk).is_err() {
+                break;
+            }
+        }
+    });
+
+    if is_local {
+        registry
+            .create_local_session(&session_id, &session_name, cols, rows, tx)
+            .map_err(|e| format!("Failed to create local session: {e}"))
+    } else {
+        registry
+            .create_plink_session(&session_id, &session_name, cols, rows, tx)
+            .map_err(|e| format!("Failed to create plink session: {e}"))
+    }
+}
+
+#[tauri::command]
+fn attach_terminal_session(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    from_seq: usize,
+    on_data: Channel<Vec<u8>>,
+) -> Result<AttachInfo, String> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+    tokio::spawn(async move {
+        while let Some(chunk) = rx.recv().await {
+            if on_data.send(chunk).is_err() {
+                break;
+            }
+        }
+    });
+
+    registry
+        .attach_session(&session_id, tx, from_seq)
+        .map_err(|e| format!("Failed to attach session: {e}"))
+}
+
+#[tauri::command]
+fn write_terminal_input(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    registry
+        .write_input(&session_id, &data)
+        .map_err(|e| format!("Failed to write input: {e}"))
+}
+
+#[tauri::command]
+fn resize_terminal(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    registry
+        .resize(&session_id, cols, rows)
+        .map_err(|e| format!("Failed to resize terminal: {e}"))
+}
+
+#[tauri::command]
+fn close_terminal_session(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+) -> Result<(), String> {
+    registry
+        .close_session(&session_id)
+        .map_err(|e| format!("Failed to close session: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let registry = Arc::new(SessionRegistry::new());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(registry)
         .invoke_handler(tauri::generate_handler![
+            putty_detect,
             list_putty_sessions,
             read_putty_session,
             write_putty_session,
             list_putty_hostkeys,
-            inspect_ppk
+            inspect_ppk,
+            start_terminal_session,
+            attach_terminal_session,
+            write_terminal_input,
+            resize_terminal,
+            close_terminal_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running plinky desktop application");

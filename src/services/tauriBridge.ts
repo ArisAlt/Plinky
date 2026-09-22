@@ -5,6 +5,20 @@ export const isTauriEnvironment = (): boolean => {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 };
 
+export interface PuttyDetectInfo {
+  path: string | null;
+  version: string | null;
+  ok: boolean;
+  reason: string | null;
+}
+
+export interface AttachInfo {
+  session_id: string;
+  replay_data: number[];
+  truncated: boolean;
+  is_live: boolean;
+}
+
 // Fallback demo sessions for browser development/preview mode
 const DEMO_SESSIONS: PuttySession[] = [
   {
@@ -82,6 +96,23 @@ const DEMO_HOSTKEYS: HostKeyEntry[] = [
     rawKey: "0xabcdef1234567890...",
   },
 ];
+
+export async function detectPutty(): Promise<PuttyDetectInfo> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<PuttyDetectInfo>('putty_detect');
+    } catch (e) {
+      console.warn("Failed to invoke putty_detect via Tauri:", e);
+    }
+  }
+  return {
+    path: "/usr/bin/plink",
+    version: "0.85",
+    ok: true,
+    reason: null,
+  };
+}
 
 export async function listPuttySessions(): Promise<PuttySession[]> {
   if (isTauriEnvironment()) {
@@ -176,4 +207,102 @@ export async function listRemoteFiles(_sessionName: string, _path: string): Prom
     { name: "docker-compose.yml", isDir: false, isSymlink: false, size: 1820, permissions: "-rw-r--r--", owner: "deploy", group: "deploy", modified: "Sep 21 14:10" },
     { name: "backup.tar.gz", isDir: false, isSymlink: false, size: 45182900, permissions: "-rw-------", owner: "root", group: "root", modified: "Sep 19 04:00" },
   ];
+}
+
+export async function startTerminalSession(
+  sessionId: string,
+  sessionName: string,
+  isLocal: boolean,
+  cols: number,
+  rows: number,
+  onData: (chunk: Uint8Array) => void
+): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke, Channel } = await import('@tauri-apps/api/core');
+      const channel = new Channel<number[]>();
+      channel.onmessage = (bytes: number[]) => {
+        onData(new Uint8Array(bytes));
+      };
+      await invoke('start_terminal_session', {
+        sessionId,
+        sessionName,
+        isLocal,
+        cols,
+        rows,
+        onData: channel,
+      });
+      return true;
+    } catch (e) {
+      console.warn("Failed to invoke start_terminal_session via Tauri:", e);
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function attachTerminalSession(
+  sessionId: string,
+  fromSeq: number,
+  onData: (chunk: Uint8Array) => void
+): Promise<AttachInfo | null> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke, Channel } = await import('@tauri-apps/api/core');
+      const channel = new Channel<number[]>();
+      channel.onmessage = (bytes: number[]) => {
+        onData(new Uint8Array(bytes));
+      };
+      const info = await invoke<AttachInfo>('attach_terminal_session', {
+        sessionId,
+        fromSeq,
+        onData: channel,
+      });
+      return info;
+    } catch (e) {
+      console.warn("Failed to invoke attach_terminal_session via Tauri:", e);
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function writeTerminalInput(sessionId: string, data: Uint8Array): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('write_terminal_input', {
+        sessionId,
+        data: Array.from(data),
+      });
+    } catch (e) {
+      console.warn("Failed to invoke write_terminal_input via Tauri:", e);
+    }
+  }
+}
+
+export async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('resize_terminal', {
+        sessionId,
+        cols,
+        rows,
+      });
+    } catch (e) {
+      console.warn("Failed to invoke resize_terminal via Tauri:", e);
+    }
+  }
+}
+
+export async function closeTerminalSession(sessionId: string): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('close_terminal_session', { sessionId });
+    } catch (e) {
+      console.warn("Failed to invoke close_terminal_session via Tauri:", e);
+    }
+  }
 }
