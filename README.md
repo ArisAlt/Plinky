@@ -109,8 +109,8 @@ flowchart TD
 * **M2: Walking Skeleton**: Single end-to-end session, single tab, `tauri::ipc::Channel` binary flow control, scrollback ring buffer, reload-and-reattach survival.
 * **M3: `putty-compat` v1**: ✅ **IMPLEMENTED & VERIFIED** (7/7 tests pass) — Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), atomic `.bak` writes, `.ppk` v2/v3 header parser & SHA256 fingerprinting matching `puttygen -l`, OpenSSH rejection, and real system `sshhostkeys` parsing. *(D1 Option A accepted by owner: hand-written Argon2id decryption deferred to v2)*.
 * **M4: Pre-Auth State Machine & Vault**: Pre-auth prompt state machine (D3), Argon2id vault (R1–R3), `putty_detect` command.
-* **M5: Docking Layout & Sync Router**: ✅ **FRONTEND UI COMPLETE** (`src/`) — Multi-tab/split layout, `SyncBroadcastBar` (Channels A-D + All tabs broadcast), Session tree explorer.
-* **M6: WindTerm Productivity**: ✅ **FRONTEND UI COMPLETE** (`src/`) — Gated Free Type Mode (click-to-edit canvas overlay), real-time regex highlighting (IPs, UUIDs, errors, warnings, URLs).
-* **M7: SFTP & Port Forwarding**: ✅ **FRONTEND UI COMPLETE** (`src/`) — Dual-pane local/remote SFTP explorer (ADR-003 plain `psftp`), background transfer queue, visual SSH tunnel manager (Local `-L`, Remote `-R`, Dynamic `-D` SOCKS5).
+* **M5: Docking Layout & Sync Router**: ✅ **UI SHELL COMPLETE** (`src/`) — Multi-tab/split layout, `SyncBroadcastBar` (Channels A-D + All tabs broadcast), Session tree explorer.
+* **M6: WindTerm Productivity**: ✅ **UI AFFORDANCES COMPLETE** (`src/`) — Free Type Mode toggle & click-to-edit canvas overlay, regex highlight badges (wiring to real terminal buffer scheduled for M2/M6).
+* **M7: SFTP & Port Forwarding**: ✅ **UI SHELL COMPLETE** (`src/`) — Dual-pane local/remote SFTP explorer (ADR-003 plain `psftp`), background transfer queue, visual SSH tunnel manager (Local `-L`, Remote `-R`, Dynamic `-D` SOCKS5).
 
 

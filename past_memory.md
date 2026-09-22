@@ -151,14 +151,15 @@
 * Layering Invariant: `crates/putty-compat` remains strictly config storage (sessions, ppk headers, hostkeys). Runtime SFTP `ls` output parsing lives in `crates/plinky-core::sftp`.
 * Public Repo Hygiene: Plinky is now public on GitHub (`https://github.com/ArisAlt/Plinky`). All documentation, logs, and comments must use generic placeholders (`/path/to/...`, RFC 5737 `192.0.2.10`, generic usernames) and relative Markdown links. ABtools and Plinky memory/specs are strictly segregated.
 
-### 15. FRONTEND WORKBENCH & TAURI V2 DESKTOP HOST (M5 / M6 UI)
-* Frontend Implementation: Built complete modern IDE workbench in `src/` (React 19, TypeScript 5.7, Vite 6, Tailwind CSS, Dockview, @xterm/xterm, lucide-react).
-* Production Verification: `npm run build` compiled 1,911 modules in 1.93s into `dist/` with 0 TypeScript errors.
-* Core Capabilities:
-  - `SessionExplorer.tsx`: Hierarchical folder/tag tree reading native PuTTY sessions, real-time search, one-click terminal & SFTP launch, atomic New Session modal.
-  - `TerminalView.tsx`: xterm.js canvas with fit addon, discrete broadcast channel badges (Off, A, B, C, D), WindTerm Free Type Mode (click-to-edit canvas overlay), and real-time regex highlighting.
-  - `SyncBroadcastBar.tsx`: Simultaneous command broadcast across all tabs or discrete channels.
-  - `SftpDualPane.tsx`: Dual-pane local/remote filesystem explorer aligned with ADR-003 Option B (plain psftp per pane), transfer queue with live progress.
-  - `TunnelManager.tsx`: Visual SSH port forward manager (Local -L, Remote -R, Dynamic -D SOCKS5) with live toggles and byte counters.
-  - `HostKeyManager.tsx`: Viewing trusted host keys and inspecting .ppk headers with SHA256 fingerprints.
+### 15. FRONTEND WORKBENCH & TAURI V2 DESKTOP HOST (M5 / M6 UI SHELL)
+* Frontend Implementation & Production Verification: Built modern IDE workbench in `src/` (React 19, TypeScript 5.7, Vite 6, Tailwind CSS, Dockview, @xterm/xterm, lucide-react). `npm run build` compiled 1,911 modules in 1.93s into `dist/` with 0 TypeScript errors.
+* IPC-Wired PuTTY Config UI (Verified Real):
+  - `SessionExplorer.tsx`: Hierarchical folder/tag tree reading native PuTTY sessions via IPC (`list_putty_sessions`), instant search, launch triggers, atomic New Session modal with `.bak` safety (`write_putty_session`).
+  - `HostKeyManager.tsx`: Viewing trusted host keys via IPC (`list_putty_hostkeys`) and inspecting `.ppk` headers with SHA256 fingerprints (`inspect_ppk`).
+* Visual Workbench Shells (Ready for M2 Backend Wiring):
+  - `TerminalView.tsx`: Real xterm.js canvas with fit addon, resize lifecycle, theme, discrete broadcast channel badges (Off, A, B, C, D), and UI affordances for Free Type Mode and regex highlighting. (Buffer delta calculations, DECCKM gating, and IDecoration regex markers await M2 live backend PTY connection).
+  - `SyncBroadcastBar.tsx`: Command broadcast UI and target selector (All, A-D).
+  - `SftpDualPane.tsx`: Dual-pane local/remote filesystem visual shell and transfer queue mockup aligned with ADR-003 Option B (plain psftp).
+  - `TunnelManager.tsx`: Visual SSH port forward visualizer (Local -L, Remote -R, Dynamic -D SOCKS5).
 * Tauri v2 Host: `src-tauri` workspace member with IPC commands (`list_putty_sessions`, `read_putty_session`, `write_putty_session`, `list_putty_hostkeys`, `inspect_ppk`), app icons, and `tauri.conf.json`.
+* Next Milestone: M2 Walking Skeleton — `crates/plinky-core` (Transport trait, `portable-pty`, `PlinkTransport`, D3/D9 PreAuth state machine) wired to ONE live terminal tab via `tauri::ipc::Channel` binary streaming.
