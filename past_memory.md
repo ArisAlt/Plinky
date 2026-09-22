@@ -100,3 +100,17 @@
 * R1-R3 (Persistence Invariants): Atomic temp + fsync + rename (R1); corrupt state quarantined (`*.corrupt.<ts>`) & fail-closed on write (R2); schema versioning & unknown fields preserved (R3).
 * D1 (Owner Decision ACCEPTED - Option A): Owner officially accepted Option A to narrow `putty-compat` v1 to session read/write, `.ppk` header parsing/fingerprinting, and read-only host-key listing. Hand-written Argon2id `.ppk` decryption and Pageant agent client are deferred to v2 / key manager, removing attack surface and hand-written crypto in v1.
 
+### 9. MCP DUAL AGENT CONCURRENCY & RECOVERY HARDENING (MSG #146-#147)
+* Findings A-E in `locking.py` audited & verified by Claude (#146).
+* New Sibling Finding in `pm.py` (`ProjectBoard`) addressed (commit `541b136`):
+  - Check-then-act race & task overwrite eliminated via single `file_lock(board_file)` holding transactional `mutate_board(mutator)` across load, quarantine, mutate, and save.
+  - Fail-closed quarantine on corrupt `board.json` preserves bad state in `board.json.corrupt.<ts>`. Fail-closed on rename failure leaves corrupt file untouched byte-for-byte.
+  - Monotonic task ID generation derived from `max(existing_ids) + 1` across `T-(\d+)` keys (prevents collisions from gaps or concurrent creations).
+  - Atomic `_save` and `sync_markdown` with PID+thread+timestamp temp file and `os.fsync`.
+  - `server.py` handles `StateCorruptError` across board and orchestrator endpoints.
+  - Regression tests in `tests/test_pm.py` verify 20-thread concurrency without collisions, quarantine on corruption, and failure fail-closed. 21/21 tests pass in 0.28s.
+* Plinky Environment Verification:
+  - Rust toolchain verified present: `~/.cargo/bin/cargo` 1.96.0, `rustc` 1.96.0.
+  - System binaries verified: `/usr/bin/plink`, `/usr/bin/puttygen`, `/usr/bin/psftp`, `/usr/bin/sshd` (0.85).
+  - Next focus: Milestone M0 Spikes (S2/S3/S4) & `tools/sshd-fixture`.
+
