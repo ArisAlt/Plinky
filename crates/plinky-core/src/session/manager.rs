@@ -237,9 +237,9 @@ impl SessionRegistry {
         }
 
         let bytes: &[u8] = match answer {
-            PromptAnswer::AcceptAndStore => b"y\n",
-            PromptAnswer::AcceptOnce => b"n\n",
-            PromptAnswer::Reject => b"\n",
+            PromptAnswer::AcceptAndStore => b"y\r",
+            PromptAnswer::AcceptOnce => b"n\r",
+            PromptAnswer::Reject => b"\r",
         };
         session.transport.write(bytes)
     }
