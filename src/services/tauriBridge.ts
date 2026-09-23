@@ -568,6 +568,15 @@ export interface VaultEntry {
   updated_at: number;
 }
 
+/** Entry metadata WITHOUT the secret -- for listing views. */
+export interface VaultEntryMeta {
+  id: string;
+  username?: string;
+  notes?: string;
+  created_at: number;
+  updated_at: number;
+}
+
 export async function vaultIsInitialized(): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
@@ -710,6 +719,22 @@ export async function vaultListKeys(): Promise<string[]> {
       return await invoke<string[]>('vault_list_keys');
     } catch (e) {
       console.warn("Failed to list vault keys:", e);
+      return [];
+    }
+  }
+  return [];
+}
+
+/** Entry metadata for every stored credential, WITHOUT decrypted secrets.
+ * Use vaultGetEntry(id) to fetch one entry's secret on demand -- never
+ * bulk-load secrets just to render a list. */
+export async function vaultListEntriesMeta(): Promise<VaultEntryMeta[]> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<VaultEntryMeta[]>('vault_list_entries_meta');
+    } catch (e) {
+      console.warn("Failed to list vault entry metadata:", e);
       return [];
     }
   }

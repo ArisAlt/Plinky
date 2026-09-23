@@ -15,24 +15,38 @@ import {
 } from 'lucide-react';
 import {
   VaultEntry,
+  VaultEntryMeta,
   vaultIsInitialized,
   vaultIsUnlocked,
   vaultCreate,
   vaultUnlock,
   vaultLock,
-  vaultListKeys,
+  vaultListEntriesMeta,
   vaultGetEntry,
   vaultSetEntry,
   vaultDelete,
 } from '../../services/tauriBridge';
+
+// How long a copied secret is allowed to sit on the OS clipboard before it's
+// cleared automatically -- common password-manager convention, limits how
+// long a secret lingers somewhere clipboard history tools / other apps can
+// read it from.
+const CLIPBOARD_CLEAR_MS = 25_000;
 
 export const VaultManager: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState<boolean>(true);
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [masterPassword, setMasterPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [entries, setEntries] = useState<VaultEntry[]>([]);
-  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
+  // Metadata only -- never holds a decrypted secret. Secrets are fetched
+  // per-entry, on demand, only when the user explicitly reveals or copies
+  // one (see revealedSecrets below), so an unlocked vault doesn't sit with
+  // every stored credential's plaintext resident in JS memory at once.
+  const [entries, setEntries] = useState<VaultEntryMeta[]>([]);
+  // Holds a decrypted secret ONLY for entries the user has actually revealed,
+  // keyed by entry id. Cleared for an entry the moment it's hidden again.
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
+  const [revealLoading, setRevealLoading] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -71,15 +85,10 @@ export const VaultManager: React.FC = () => {
 
   const loadEntries = async () => {
     try {
-      const keys = await vaultListKeys();
-      const loaded: VaultEntry[] = [];
-      for (const key of keys) {
-        const entry = await vaultGetEntry(key);
-        if (entry) {
-          loaded.push(entry);
-        }
-      }
-      setEntries(loaded);
+      // Metadata only -- no secrets are fetched or held here.
+      const meta = await vaultListEntriesMeta();
+      setEntries(meta);
+      setRevealedSecrets({});
     } catch (e: any) {
       setError(e.toString());
     }
@@ -140,7 +149,7 @@ export const VaultManager: React.FC = () => {
       await vaultLock();
       setIsUnlocked(false);
       setEntries([]);
-      setRevealedKeys({});
+      setRevealedSecrets({});
     } catch (e: any) {
       setError(e.toString());
     } finally {
@@ -188,14 +197,61 @@ export const VaultManager: React.FC = () => {
     }
   };
 
-  const toggleReveal = (key: string) => {
-    setRevealedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  // Fetches an entry's decrypted secret on demand and caches it, only for
+  // as long as it stays revealed. Returns null (and surfaces an error) if
+  // the fetch failed, so callers don't act on a stale/empty secret.
+  const fetchSecret = async (key: string): Promise<string | null> => {
+    if (revealedSecrets[key] !== undefined) return revealedSecrets[key];
+    setRevealLoading(key);
+    try {
+      const entry: VaultEntry | null = await vaultGetEntry(key);
+      if (!entry) {
+        setError(`Credential '${key}' not found`);
+        return null;
+      }
+      setRevealedSecrets(prev => ({ ...prev, [key]: entry.secret }));
+      return entry.secret;
+    } catch (e: any) {
+      setError(e.toString());
+      return null;
+    } finally {
+      setRevealLoading(null);
+    }
   };
 
-  const copyToClipboard = (key: string, secret: string) => {
+  const toggleReveal = async (key: string) => {
+    if (revealedSecrets[key] !== undefined) {
+      // Hide: actually drop the plaintext from state, don't just flip a flag.
+      setRevealedSecrets(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    await fetchSecret(key);
+  };
+
+  const copyToClipboard = async (key: string) => {
+    const secret = await fetchSecret(key);
+    if (secret === null) return;
     navigator.clipboard.writeText(secret);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+    // Clear the clipboard after a timeout, but only if it still holds exactly
+    // what we put there -- don't clobber something the user copied since.
+    setTimeout(async () => {
+      try {
+        const current = await navigator.clipboard.readText();
+        if (current === secret) {
+          await navigator.clipboard.writeText('');
+        }
+      } catch {
+        // Clipboard read permission can be denied by the browser/webview;
+        // failing silently here is fine -- this is defense in depth, not
+        // the primary protection.
+      }
+    }, CLIPBOARD_CLEAR_MS);
   };
 
   return (
@@ -420,7 +476,8 @@ export const VaultManager: React.FC = () => {
             ) : (
               <div className="bg-plinky-900 border border-plinky-800 rounded-lg overflow-hidden divide-y divide-plinky-800">
                 {entries.map(entry => {
-                  const isRevealed = !!revealedKeys[entry.id];
+                  const isRevealed = revealedSecrets[entry.id] !== undefined;
+                  const isRevealPending = revealLoading === entry.id;
                   const isCopied = copiedKey === entry.id;
 
                   return (
@@ -440,7 +497,11 @@ export const VaultManager: React.FC = () => {
                         )}
                         <div className="pl-5 pt-1 flex items-center space-x-2">
                           <span className="font-mono text-xs text-slate-300">
-                            {isRevealed ? entry.secret : '••••••••••••••••'}
+                            {isRevealPending
+                              ? '…'
+                              : isRevealed
+                                ? revealedSecrets[entry.id]
+                                : '••••••••••••••••'}
                           </span>
                         </div>
                       </div>
@@ -455,8 +516,8 @@ export const VaultManager: React.FC = () => {
                         </button>
 
                         <button
-                          onClick={() => copyToClipboard(entry.id, entry.secret)}
-                          title="Copy Secret"
+                          onClick={() => copyToClipboard(entry.id)}
+                          title="Copy Secret (clears clipboard after 25s)"
                           className="p-1.5 rounded hover:bg-plinky-800 text-slate-400 hover:text-slate-200 transition"
                         >
                           {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}

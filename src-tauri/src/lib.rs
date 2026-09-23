@@ -7,7 +7,7 @@ use putty_compat::hostkeys::HostKeyEntry;
 use putty_compat::ppk::PpkHeader;
 use plinky_core::{
     SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer,
-    SyncChannelId, PsftpClient, SftpFileEntry, Vault, VaultEntry,
+    SyncChannelId, PsftpClient, SftpFileEntry, Vault, VaultEntry, VaultEntryMeta,
     ShellType, get_bootstrap_script,
 };
 use tokio::sync::mpsc;
@@ -366,6 +366,19 @@ async fn vault_list_keys(state: State<'_, VaultState>) -> Result<Vec<String>, St
     Ok(vault.list_keys())
 }
 
+/// Lists entry metadata (id, username, notes, timestamps) WITHOUT decrypted
+/// secrets. The frontend list view uses this so every credential's plaintext
+/// isn't pulled into the webview just to render the list -- vault_get_entry
+/// is fetched per-row only when the user explicitly reveals or copies it.
+#[tauri::command]
+async fn vault_list_entries_meta(
+    state: State<'_, VaultState>,
+) -> Result<Vec<VaultEntryMeta>, String> {
+    let guard = state.inner.lock().await;
+    let vault = guard.as_ref().ok_or_else(|| "Vault is locked".to_string())?;
+    Ok(vault.list_entries_meta())
+}
+
 #[tauri::command]
 fn get_shell_integration_script(shell: String) -> Result<String, String> {
     let shell_type = ShellType::parse(&shell)
@@ -438,6 +451,7 @@ pub fn run() {
             vault_set_entry,
             vault_delete,
             vault_list_keys,
+            vault_list_entries_meta,
             get_shell_integration_script,
             inject_shell_integration
         ])
