@@ -264,6 +264,24 @@
   - 29/29 tests pass across workspace (`cargo test --workspace`: 7 `putty-compat`, 22 `plinky-core`).
   - `npm run build` compiles 1,917 modules with 0 TS errors in 1.90s.
 
+### 23. M5 SHELL INTEGRATION BOOTSTRAP & LAYOUT PERSISTENCE
+* Shell Integration Architecture (`crates/plinky-core::session::shell_integration`):
+  - Multi-Shell Scripts: Bash (`PROMPT_COMMAND` + `DEBUG` trap), Zsh (`add-zsh-hook precmd`/`preexec`), and Fish (`--on-event fish_prompt`/`fish_preexec`).
+  - Semantic Markers: Emits `OSC 133 ; A` (prompt start), `OSC 133 ; B` (command start), `OSC 133 ; C` (execution start), `OSC 133 ; D ; <exit_code>` (completion).
+  - Working Directory Tracking: Emits `OSC 7` (`\x1b]7;file://${HOSTNAME}${PWD}\x07`) reporting remote path changes on prompt return.
+  - Safe Injection: `inject_shell_integration` Tauri command writes scripts to live PTY sessions (fail-closed if not `Live`).
+* Frontend Terminal & SFTP Synchronization:
+  - Real-Time Directory Following: `TerminalView.tsx` parses `OSC 7` sequences and emits `onCwdChange(path)` to parent `App.tsx`, dynamically updating `remotePath` in `SftpDualPane.tsx`.
+  - Prompt Navigation: `Ctrl+Up` / `Ctrl+Down` jumps viewport directly between `OSC 133 ; A` command prompts.
+  - One-Click Activation: "Shell Hooks" button in terminal toolbar injects hooks seamlessly into active session.
+* R1-R3 Layout & State Persistence (`src/services/layoutPersistence.ts`):
+  - Tracks open sessions, active tab, and split mode (`single`, `split-col`, `split-row`, `grid`).
+  - Auto-persists on tab/layout state changes with `schema_version: 1`.
+  - Fail-closed quarantine: invalid or corrupt JSON is quarantined with a timestamp (`plinky_layout_corrupt_<ts>`) rather than overwritten.
+  - Restores active sessions and pane layout on application reload.
+* Verification: 33/33 tests pass in `cargo test --workspace` (4 new shell integration unit tests), frontend builds cleanly with 0 TS errors in 1.89s.
+
+
 
 
 

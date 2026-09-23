@@ -12,6 +12,7 @@ import { VaultManager } from './components/vault/VaultManager';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
+import { saveLayout, loadLayout } from './services/layoutPersistence';
 import { 
   X, 
   Plus, 
@@ -29,24 +30,54 @@ export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
-  const [sftpSession, setSftpSession] = useState<{ name: string; host: string }>({
+  const [sftpSession, setSftpSession] = useState<{ name: string; host: string; remotePath?: string }>({
     name: 'Production Cluster Alpha',
     host: '192.0.2.10',
+    remotePath: '/var/www',
   });
 
-  // Load PuTTY sessions on startup
+  // Load PuTTY sessions and restored layout on startup
   useEffect(() => {
     loadSessions();
   }, []);
+
+  // R1-R3: Auto-persist layout changes
+  useEffect(() => {
+    if (tabs.length > 0) {
+      saveLayout(layoutMode, activeTabId, tabs);
+    }
+  }, [layoutMode, activeTabId, tabs]);
 
   const loadSessions = async () => {
     const list = await listPuttySessions();
     setSessions(list);
 
-    // If no tabs open, open the first session by default
-    if (list.length > 0 && tabs.length === 0) {
+    // Check for saved layout first (R1-R3)
+    const savedLayout = loadLayout();
+    if (savedLayout && savedLayout.tabs.length > 0) {
+      setLayoutMode(savedLayout.layoutMode);
+      const restoredTabs: TerminalTab[] = savedLayout.tabs.map(t => ({
+        id: t.id,
+        title: t.title,
+        sessionName: t.sessionName,
+        syncChannel: t.syncChannel,
+        status: 'live',
+        freeTypeMode: true,
+        activeHighlighting: true,
+        hostname: t.hostname,
+        port: t.port,
+        username: t.username,
+      }));
+      setTabs(restoredTabs);
+      setActiveTabId(savedLayout.activeTabId || restoredTabs[0]?.id || null);
+    } else if (list.length > 0 && tabs.length === 0) {
       handleConnectSession(list[0]);
     }
+  };
+
+  const handleCwdChange = (cwd: string) => {
+    // Synchronize SFTP panel remote directory (directory following)
+    setSftpSession(prev => ({ ...prev, remotePath: cwd }));
   };
 
   const handleConnectSession = (session: PuttySession) => {
@@ -294,6 +325,7 @@ export const App: React.FC = () => {
                       tab={activeTab}
                       onUpdateTab={handleUpdateTab}
                       onSplitPane={handleSplitPane}
+                      onCwdChange={handleCwdChange}
                     />
                   </div>
                 ) : layoutMode === 'split-vertical' ? (
@@ -307,6 +339,7 @@ export const App: React.FC = () => {
                         tab={splitTabs[0]}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
+                        onCwdChange={handleCwdChange}
                       />
                     </div>
                     {splitTabs[1] ? (
@@ -319,6 +352,7 @@ export const App: React.FC = () => {
                           tab={splitTabs[1]}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
+                          onCwdChange={handleCwdChange}
                         />
                       </div>
                     ) : (
@@ -337,7 +371,7 @@ export const App: React.FC = () => {
                 ) : layoutMode === 'split-horizontal' ? (
                   <div className="flex-1 flex flex-col w-full h-full overflow-hidden divide-y divide-plinky-800">
                     <div 
-                      onClick={() => setActiveTabId(splitTabs[0].id)}
+                       onClick={() => setActiveTabId(splitTabs[0].id)}
                       className={`flex-1 w-full relative ${activeTabId === splitTabs[0].id ? 'ring-1 ring-sky-500/50' : ''}`}
                     >
                       <TerminalView
@@ -345,6 +379,7 @@ export const App: React.FC = () => {
                         tab={splitTabs[0]}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
+                        onCwdChange={handleCwdChange}
                       />
                     </div>
                     {splitTabs[1] ? (
@@ -357,6 +392,7 @@ export const App: React.FC = () => {
                           tab={splitTabs[1]}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
+                          onCwdChange={handleCwdChange}
                         />
                       </div>
                     ) : (
@@ -385,6 +421,7 @@ export const App: React.FC = () => {
                           tab={tab}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
+                          onCwdChange={handleCwdChange}
                         />
                       </div>
                     ))}
@@ -404,6 +441,7 @@ export const App: React.FC = () => {
             <SftpDualPane
               sessionName={sftpSession.name}
               hostname={sftpSession.host}
+              initialRemotePath={sftpSession.remotePath}
             />
           )}
 

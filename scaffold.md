@@ -65,7 +65,8 @@ This document tracks the directory architecture, file structure, component relat
 │               ├── mod.rs
 │               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events
 │               ├── state_machine.rs      # PreAuth state machine (HostKeyPromptInfo, verbatim prompts, 8 KiB default-deny, D9 marker)
-│               └── ring_buffer.rs        # Scrollback ring buffer with monotonic sequence tracking & get_since replay
+│               ├── ring_buffer.rs        # Scrollback ring buffer with monotonic sequence tracking & get_since replay
+│               └── shell_integration.rs  # Shell integration bootstrap (OSC 133 prompt markers + OSC 7 CWD reporting)
 │
 ├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings (IMPLEMENTED)
 │   ├── Cargo.toml                        # Workspace member: tauri, putty-compat, tokio
@@ -93,7 +94,8 @@ This document tracks the directory architecture, file structure, component relat
     │   └── session.ts                    # TypeScript models (PuttySession, TerminalTab, SyncChannel, Sftp, Tunnels)
     ├── services/
     │   ├── tauriBridge.ts                # Dual-mode IPC bridge (Tauri native + browser preview fallbacks)
-    │   └── terminalManager.ts            # Terminal registry, broadcast sync router, prompt simulation
+    │   ├── terminalManager.ts            # Terminal registry, broadcast sync router, prompt simulation
+    │   └── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
     └── components/
         ├── layout/
         │   ├── TitleBar.tsx              # Quick connect, view switchers, new session action
@@ -130,6 +132,6 @@ This document tracks the directory architecture, file structure, component relat
 | **M2** | **Walking Skeleton**: Hard-coded session, single tab, `tauri::ipc::Channel` + flow control + ring buffer, reload-and-reattach | Webview reload keeps session alive; keystroke latency & throughput meet M0 thresholds. |
 | **M3** | **`putty-compat` v1**: Sessions r/w, `.ppk` header parser/fingerprinter, read-only hostkey listing, session tree | Fixtures generated via real `/usr/bin/puttygen 0.85`; parser edge cases covered; `cargo-fuzz` clean. |
 | **M4** | **Pre-Auth State Machine & Vault**: ✅ **DONE** - PreAuth state machine (D3/D9), Argon2id + AES-256-GCM vault (R1–R3, AAD, zeroize), `putty_detect` | 6/6 vault tests pass, 29/29 workspace tests pass; hostile banner cannot trigger credential auto-fill; full memory zeroization. |
-| **M5** | **Docking Layout & Sync Router**: `dockview` multi-tab/split layout, layout persistence, `SyncInputRouter` (D6), shell integration bootstrap | Sync race conditions audited; state-filtering tests pass (`Live` sessions only). |
+| **M5** | **Docking Layout, Sync Router & Shell Integration**: ✅ **DONE** - Multi-tab/split layouts, R1-R3 layout persistence (`layoutPersistence.ts`), `SyncInputRouter` (D6), shell integration bootstrap (OSC 133 + OSC 7) | Sync race conditions audited; state-filtering tests pass (`Live` only); 33/33 workspace tests pass; real-time SFTP directory following via OSC 7. |
 | **M6** | **WindTerm Productivity Features**: Free Type Mode, regex markers/link provider, snippet bar | Gating tests pass (alternate buffer suppression, DECCKM, OSC 133 semantic region). |
 | **M7** | **SFTP & Port Forwarding**: Dual-pane file manager, directory following, visual tunnels (scoped by S3/S4) | Transfers resume; unsupported tunnel types cleanly documented. |

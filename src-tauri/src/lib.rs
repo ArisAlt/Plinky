@@ -8,6 +8,7 @@ use putty_compat::ppk::PpkHeader;
 use plinky_core::{
     SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer,
     SyncChannelId, PsftpClient, SftpFileEntry, Vault, VaultEntry,
+    ShellType, get_bootstrap_script,
 };
 use tokio::sync::mpsc;
 
@@ -365,6 +366,28 @@ async fn vault_list_keys(state: State<'_, VaultState>) -> Result<Vec<String>, St
     Ok(vault.list_keys())
 }
 
+#[tauri::command]
+fn get_shell_integration_script(shell: String) -> Result<String, String> {
+    let shell_type = ShellType::parse(&shell)
+        .ok_or_else(|| format!("Unsupported shell: '{shell}'. Expected bash, zsh, or fish."))?;
+    Ok(get_bootstrap_script(shell_type).to_string())
+}
+
+#[tauri::command]
+fn inject_shell_integration(
+    registry: State<'_, Arc<SessionRegistry>>,
+    session_id: String,
+    shell: String,
+) -> Result<(), String> {
+    let shell_type = ShellType::parse(&shell)
+        .ok_or_else(|| format!("Unsupported shell: '{shell}'. Expected bash, zsh, or fish."))?;
+    let script = get_bootstrap_script(shell_type);
+    registry
+        .write_input(&session_id, script.as_bytes())
+        .map_err(|e| format!("Failed to inject shell integration: {e}"))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -414,7 +437,9 @@ pub fn run() {
             vault_get_entry,
             vault_set_entry,
             vault_delete,
-            vault_list_keys
+            vault_list_keys,
+            get_shell_integration_script,
+            inject_shell_integration
         ])
         .run(tauri::generate_context!())
         .expect("error while running plinky desktop application");
