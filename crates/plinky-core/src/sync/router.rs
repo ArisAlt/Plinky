@@ -99,9 +99,14 @@ impl SyncInputRouter {
                 continue;
             }
 
-            // D6 Gate 2: write_input internally verifies that the session is in Live state,
-            // and rejects any session in HostKeyPending or PreAuth.
-            if registry.write_input(session_id, data).is_ok() {
+            // D6 Gate 2: write_input_live_only requires the session to be
+            // genuinely Live and rejects ANY PreAuth substate (HostKeyPending
+            // included). This comment previously claimed the looser
+            // write_input already did this -- it didn't (it only blocked
+            // HostKeyPending), which meant a broadcast could reach a target
+            // session sitting at its own password prompt. Fixed by switching
+            // to write_input_live_only, not just by correcting the comment.
+            if registry.write_input_live_only(session_id, data).is_ok() {
                 sent_count += 1;
             }
         }
