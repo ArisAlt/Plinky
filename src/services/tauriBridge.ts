@@ -1,4 +1,4 @@
-import { PuttySession, HostKeyEntry, PpkInfo, SftpFileEntry } from '../types/session';
+import { PuttySession, HostKeyEntry, PpkInfo, SftpFileEntry, TunnelEntry } from '../types/session';
 
 // Check if running inside Tauri runtime
 export const isTauriEnvironment = (): boolean => {
@@ -127,38 +127,130 @@ export async function detectPutty(): Promise<PuttyDetectInfo> {
   };
 }
 
+function normalizeSession(raw: any): PuttySession {
+  return {
+    ...raw,
+    hostname: raw.hostname || raw.host_name || '',
+    host_name: raw.host_name || raw.hostname || '',
+    port: raw.port || raw.port_number || 22,
+    port_number: raw.port_number || raw.port || 22,
+    username: raw.username || raw.user_name || '',
+    user_name: raw.user_name || raw.username || '',
+    publicKeyFile: raw.publicKeyFile || raw.public_key_file || '',
+    public_key_file: raw.public_key_file || raw.publicKeyFile || '',
+    protocol: (raw.protocol || 'SSH').toUpperCase() as any,
+    extra: raw.extra || {},
+    tags: raw.tags || [],
+    folder: raw.folder || 'Saved Sessions',
+    lastConnected: raw.lastConnected,
+  };
+}
+
+export function parsePortForwardings(raw: string | undefined, sessionName: string): TunnelEntry[] {
+  if (!raw || !raw.trim()) return [];
+  const entries: TunnelEntry[] = [];
+  const items = raw.split(',').map(s => s.trim()).filter(Boolean);
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const typeChar = item[0]?.toUpperCase();
+    const rest = item.slice(1);
+    
+    if (typeChar === 'D') {
+      const port = parseInt(rest.replace('=', ''), 10);
+      if (port) {
+        entries.push({
+          id: `tunnel-${sessionName}-${i}`,
+          type: 'Dynamic',
+          srcPort: port,
+          active: true,
+          sessionName,
+          bytesTransferred: 0,
+        });
+      }
+    } else if (typeChar === 'L' || typeChar === 'R') {
+      const type = typeChar === 'L' ? 'Local' : 'Remote';
+      const [srcPart, destPart] = rest.split('=');
+      const srcPort = parseInt(srcPart, 10);
+      if (srcPort && destPart) {
+        const [destHost, destPortStr] = destPart.split(':');
+        const destPort = parseInt(destPortStr, 10);
+        entries.push({
+          id: `tunnel-${sessionName}-${i}`,
+          type,
+          srcPort,
+          destHost: destHost || 'localhost',
+          destPort: destPort || 80,
+          active: true,
+          sessionName,
+          bytesTransferred: 0,
+        });
+      }
+    }
+  }
+  return entries;
+}
+
+export function serializePortForwardings(entries: TunnelEntry[]): string {
+  const parts: string[] = [];
+  for (const t of entries) {
+    if (!t.active) continue;
+    if (t.type === 'Dynamic') {
+      parts.push(`D${t.srcPort}`);
+    } else if (t.type === 'Local') {
+      parts.push(`L${t.srcPort}=${t.destHost || 'localhost'}:${t.destPort || 80}`);
+    } else if (t.type === 'Remote') {
+      parts.push(`R${t.srcPort}=${t.destHost || '127.0.0.1'}:${t.destPort || 80}`);
+    }
+  }
+  return parts.join(',');
+}
+
 export async function listPuttySessions(): Promise<PuttySession[]> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PuttySession[]>('list_putty_sessions');
+      const rawList = await invoke<any[]>('list_putty_sessions');
+      return rawList.map(normalizeSession);
     } catch (e) {
       console.warn("Failed to invoke Tauri list_putty_sessions, using fallback:", e);
-      return DEMO_SESSIONS;
+      return DEMO_SESSIONS.map(normalizeSession);
     }
   }
   // Browser preview mode
-  return DEMO_SESSIONS;
+  return DEMO_SESSIONS.map(normalizeSession);
 }
 
 export async function readPuttySession(name: string): Promise<PuttySession | null> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PuttySession>('read_putty_session', { name });
+      const raw = await invoke<any>('read_putty_session', { name });
+      return raw ? normalizeSession(raw) : null;
     } catch (e) {
       console.warn(`Failed to read session ${name} via Tauri:`, e);
-      return DEMO_SESSIONS.find(s => s.name === name) || null;
+      const found = DEMO_SESSIONS.find(s => s.name === name);
+      return found ? normalizeSession(found) : null;
     }
   }
-  return DEMO_SESSIONS.find(s => s.name === name) || null;
+  const found = DEMO_SESSIONS.find(s => s.name === name);
+  return found ? normalizeSession(found) : null;
 }
 
 export async function writePuttySession(session: PuttySession): Promise<boolean> {
+  const payload = {
+    name: session.name,
+    host_name: session.hostname || session.host_name || '',
+    port_number: session.port || session.port_number || 22,
+    user_name: session.username || session.user_name || '',
+    protocol: (session.protocol || 'ssh').toLowerCase(),
+    public_key_file: session.publicKeyFile || session.public_key_file || '',
+    extra: session.extra || {},
+  };
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('write_putty_session', { session });
+      await invoke('write_putty_session', { session: payload });
       return true;
     } catch (e) {
       console.error("Failed to write session via Tauri:", e);
@@ -167,9 +259,9 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
   }
   const idx = DEMO_SESSIONS.findIndex(s => s.name === session.name);
   if (idx >= 0) {
-    DEMO_SESSIONS[idx] = session;
+    DEMO_SESSIONS[idx] = normalizeSession({ ...session, ...payload });
   } else {
-    DEMO_SESSIONS.push(session);
+    DEMO_SESSIONS.push(normalizeSession({ ...session, ...payload }));
   }
   return true;
 }

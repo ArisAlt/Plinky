@@ -81,6 +81,11 @@ pub fn parse_psftp_ls_line(line: &str) -> Option<SftpFileEntry> {
         return None;
     }
 
+    // Security check: reject filenames containing control characters or newlines
+    if name.chars().any(|c| c.is_control()) {
+        return None;
+    }
+
     // In case of symlinks, psftp may show `symlink -> target` or just `symlink`
     if is_symlink && name.contains(" -> ") {
         if let Some((link_name, _)) = name.split_once(" -> ") {
@@ -165,5 +170,12 @@ drwxr-xr-x   4 user group 4096 Sep 22 19:00 ..
         let files = parse_psftp_ls_output(output);
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].name, "real_file.txt");
+    }
+
+    #[test]
+    fn test_reject_filenames_with_control_characters() {
+        let output = "-rw-r--r--   1 user group  100 Sep 22 20:01 hostile\x07file.txt\n";
+        let files = parse_psftp_ls_output(output);
+        assert_eq!(files.len(), 0);
     }
 }

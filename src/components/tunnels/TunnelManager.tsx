@@ -1,42 +1,16 @@
-import React, { useState } from 'react';
-import { TunnelEntry } from '../../types/session';
-import { Network, Plus, ArrowRight, ShieldCheck, Power } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TunnelEntry, PuttySession } from '../../types/session';
+import { readPuttySession, writePuttySession, parsePortForwardings, serializePortForwardings } from '../../services/tauriBridge';
+import { Network, Plus, ArrowRight, ShieldCheck, Power, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface TunnelManagerProps {
   sessionName: string;
 }
 
 export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => {
-  const [tunnels, setTunnels] = useState<TunnelEntry[]>([
-    {
-      id: '1',
-      type: 'Local',
-      srcPort: 8080,
-      destHost: 'localhost',
-      destPort: 80,
-      active: true,
-      sessionName,
-      bytesTransferred: 482910,
-    },
-    {
-      id: '2',
-      type: 'Dynamic',
-      srcPort: 1080,
-      active: true,
-      sessionName,
-      bytesTransferred: 1294820,
-    },
-    {
-      id: '3',
-      type: 'Remote',
-      srcPort: 9000,
-      destHost: '127.0.0.1',
-      destPort: 3000,
-      active: false,
-      sessionName,
-      bytesTransferred: 0,
-    },
-  ]);
+  const [session, setSession] = useState<PuttySession | null>(null);
+  const [tunnels, setTunnels] = useState<TunnelEntry[]>([]);
+  const [savedNotification, setSavedNotification] = useState<string | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newType, setNewType] = useState<'Local' | 'Remote' | 'Dynamic'>('Local');
@@ -44,10 +18,73 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
   const [newDestHost, setNewDestHost] = useState('127.0.0.1');
   const [newDestPort, setNewDestPort] = useState('5432');
 
+  useEffect(() => {
+    loadSessionTunnels();
+  }, [sessionName]);
+
+  const loadSessionTunnels = async () => {
+    const sess = await readPuttySession(sessionName);
+    if (sess) {
+      setSession(sess);
+      const rawForwardings = sess.extra?.PortForwardings;
+      if (rawForwardings) {
+        const parsed = parsePortForwardings(rawForwardings, sessionName);
+        setTunnels(parsed);
+        return;
+      }
+    }
+    // Default fallback demo tunnels if session has none configured yet
+    setTunnels([
+      {
+        id: '1',
+        type: 'Local',
+        srcPort: 8080,
+        destHost: 'localhost',
+        destPort: 80,
+        active: true,
+        sessionName,
+        bytesTransferred: 482910,
+      },
+      {
+        id: '2',
+        type: 'Dynamic',
+        srcPort: 1080,
+        active: true,
+        sessionName,
+        bytesTransferred: 1294820,
+      },
+    ]);
+  };
+
+  const persistTunnels = async (updatedTunnels: TunnelEntry[]) => {
+    setTunnels(updatedTunnels);
+    if (!session) return;
+
+    const serialized = serializePortForwardings(updatedTunnels);
+    const updatedSession: PuttySession = {
+      ...session,
+      extra: {
+        ...(session.extra || {}),
+        PortForwardings: serialized,
+      },
+    };
+
+    const ok = await writePuttySession(updatedSession);
+    if (ok) {
+      setSession(updatedSession);
+      setSavedNotification(`Saved ${updatedTunnels.filter(t => t.active).length} forward(s) to PuTTY session`);
+      setTimeout(() => setSavedNotification(null), 3500);
+    }
+  };
+
   const toggleTunnel = (id: string) => {
-    setTunnels(prev =>
-      prev.map(t => (t.id === id ? { ...t, active: !t.active } : t))
-    );
+    const updated = tunnels.map(t => (t.id === id ? { ...t, active: !t.active } : t));
+    persistTunnels(updated);
+  };
+
+  const handleDeleteTunnel = (id: string) => {
+    const updated = tunnels.filter(t => t.id !== id);
+    persistTunnels(updated);
   };
 
   const handleAddTunnel = () => {
@@ -61,7 +98,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
       sessionName,
       bytesTransferred: 0,
     };
-    setTunnels(prev => [...prev, entry]);
+    persistTunnels([...tunnels, entry]);
     setShowAddModal(false);
   };
 
@@ -80,13 +117,21 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
           <span className="font-semibold text-slate-200">SSH Tunnels & Port Forwarding</span>
           <span className="text-slate-500 font-mono">({sessionName})</span>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Forward</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          {savedNotification && (
+            <div className="flex items-center space-x-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{savedNotification}</span>
+            </div>
+          )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Forward</span>
+          </button>
+        </div>
       </div>
 
       {/* Cards List */}
@@ -132,6 +177,13 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
                   }`}
                 >
                   <Power className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => handleDeleteTunnel(t.id)}
+                  title="Delete Port Forward"
+                  className="p-1 rounded text-slate-500 bg-slate-800 hover:text-red-400 hover:bg-red-500/20 transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>

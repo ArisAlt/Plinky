@@ -11,6 +11,10 @@ export interface PuttySession {
   port: number;
   username?: string;
   publicKeyFile?: string;
+  host_name?: string;
+  port_number?: number;
+  user_name?: string;
+  public_key_file?: string;
   extra?: Record<string, string>;
   tags?: string[];
   folder?: string;
