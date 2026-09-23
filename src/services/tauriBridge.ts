@@ -207,7 +207,18 @@ export async function inspectPpk(path: string): Promise<PpkInfo | null> {
   };
 }
 
-export async function listRemoteFiles(_sessionName: string, _path: string): Promise<SftpFileEntry[]> {
+export async function listRemoteFiles(sessionName: string, path: string): Promise<SftpFileEntry[]> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<SftpFileEntry[]>('sftp_list', {
+        sessionName,
+        remotePath: path,
+      });
+    } catch (e) {
+      console.warn("Failed to invoke sftp_list via Tauri:", e);
+    }
+  }
   // Mock SFTP remote filesystem listing
   return [
     { name: "..", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 18:00" },
@@ -220,6 +231,40 @@ export async function listRemoteFiles(_sessionName: string, _path: string): Prom
     { name: "docker-compose.yml", isDir: false, isSymlink: false, size: 1820, permissions: "-rw-r--r--", owner: "deploy", group: "deploy", modified: "Sep 21 14:10" },
     { name: "backup.tar.gz", isDir: false, isSymlink: false, size: 45182900, permissions: "-rw-------", owner: "root", group: "root", modified: "Sep 19 04:00" },
   ];
+}
+
+export async function createRemoteDir(sessionName: string, path: string): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('sftp_mkdir', {
+        sessionName,
+        remotePath: path,
+      });
+      return true;
+    } catch (e) {
+      console.warn("Failed to invoke sftp_mkdir via Tauri:", e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function removeRemoteFile(sessionName: string, path: string): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('sftp_rm', {
+        sessionName,
+        remotePath: path,
+      });
+      return true;
+    } catch (e) {
+      console.warn("Failed to invoke sftp_rm via Tauri:", e);
+      return false;
+    }
+  }
+  return true;
 }
 
 export async function startTerminalSession(

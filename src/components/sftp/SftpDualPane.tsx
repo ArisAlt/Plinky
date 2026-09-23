@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SftpFileEntry, SftpTransferItem } from '../../types/session';
-import { listRemoteFiles } from '../../services/tauriBridge';
+import { listRemoteFiles, createRemoteDir, removeRemoteFile } from '../../services/tauriBridge';
 import { 
   Folder, 
   File, 
@@ -14,7 +14,9 @@ import {
   CheckCircle,
   Clock,
   Search,
-  ChevronRight
+  ChevronRight,
+  FolderPlus,
+  Trash2
 } from 'lucide-react';
 
 interface SftpDualPaneProps {
@@ -112,6 +114,27 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
       status: 'completed',
     };
     setTransfers(prev => [newItem, ...prev]);
+  };
+
+  const handleCreateRemoteFolder = async () => {
+    const dirName = prompt("Enter new remote folder name:");
+    if (!dirName || !dirName.trim()) return;
+    const cleanPath = remotePath.endsWith('/') ? `${remotePath}${dirName.trim()}` : `${remotePath}/${dirName.trim()}`;
+    const ok = await createRemoteDir(sessionName, cleanPath);
+    if (ok) {
+      await loadRemoteFiles();
+    }
+  };
+
+  const handleDeleteRemoteItem = async () => {
+    if (!selectedRemote || selectedRemote === '..') return;
+    if (!confirm(`Are you sure you want to delete "${selectedRemote}" on ${sessionName}?`)) return;
+    const cleanPath = remotePath.endsWith('/') ? `${remotePath}${selectedRemote}` : `${remotePath}/${selectedRemote}`;
+    const ok = await removeRemoteFile(sessionName, cleanPath);
+    if (ok) {
+      setSelectedRemote(null);
+      await loadRemoteFiles();
+    }
   };
 
   const handleDownload = () => {
@@ -307,15 +330,32 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
             </div>
             <div className="flex items-center justify-between">
               {renderBreadcrumbs(remotePath, setRemotePath)}
-              <div className="relative flex items-center w-28">
-                <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Filter..."
-                  value={remoteFilter}
-                  onChange={(e) => setRemoteFilter(e.target.value)}
-                  className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
-                />
+              <div className="flex items-center space-x-1.5">
+                <button
+                  onClick={handleCreateRemoteFolder}
+                  className="p-1 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 hover:text-white transition"
+                  title="New Remote Folder (mkdir)"
+                >
+                  <FolderPlus className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
+                <button
+                  onClick={handleDeleteRemoteItem}
+                  disabled={!selectedRemote || selectedRemote === '..'}
+                  className="p-1 rounded bg-plinky-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:pointer-events-none transition"
+                  title="Delete Selected Remote Item (rm)"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                </button>
+                <div className="relative flex items-center w-28">
+                  <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={remoteFilter}
+                    onChange={(e) => setRemoteFilter(e.target.value)}
+                    className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
+                  />
+                </div>
               </div>
             </div>
           </div>

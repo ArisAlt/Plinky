@@ -3,7 +3,7 @@ use tauri::{State, ipc::Channel, Emitter};
 use putty_compat::sessions::PuttySession;
 use putty_compat::hostkeys::HostKeyEntry;
 use putty_compat::ppk::PpkHeader;
-use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer, SyncChannelId};
+use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer, SyncChannelId, PsftpClient, SftpFileEntry};
 use tokio::sync::mpsc;
 
 #[tauri::command]
@@ -194,6 +194,36 @@ fn broadcast_sync_input(
         .map_err(|e| format!("Failed to broadcast sync input: {e}"))
 }
 
+#[tauri::command]
+async fn sftp_list(
+    session_name: String,
+    remote_path: String,
+) -> Result<Vec<SftpFileEntry>, String> {
+    PsftpClient::list_dir(&session_name, &remote_path)
+        .await
+        .map_err(|e| format!("Failed to list remote directory: {e}"))
+}
+
+#[tauri::command]
+async fn sftp_mkdir(
+    session_name: String,
+    remote_path: String,
+) -> Result<(), String> {
+    PsftpClient::create_dir(&session_name, &remote_path)
+        .await
+        .map_err(|e| format!("Failed to create remote directory: {e}"))
+}
+
+#[tauri::command]
+async fn sftp_rm(
+    session_name: String,
+    remote_path: String,
+) -> Result<(), String> {
+    PsftpClient::remove_file(&session_name, &remote_path)
+        .await
+        .map_err(|e| format!("Failed to remove remote file: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -228,7 +258,10 @@ pub fn run() {
             set_sync_channel,
             set_sync_protected,
             set_sync_armed,
-            broadcast_sync_input
+            broadcast_sync_input,
+            sftp_list,
+            sftp_mkdir,
+            sftp_rm
         ])
         .run(tauri::generate_context!())
         .expect("error while running plinky desktop application");
