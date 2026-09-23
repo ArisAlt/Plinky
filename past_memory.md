@@ -205,3 +205,20 @@
   - `SyncBroadcastBar.tsx` wired directly to backend broadcast fanout.
 * Verification: Added `test_sync_input_router_d6_safety`. 15/15 tests pass in `cargo test --workspace` (`putty-compat`: 7, `plinky-core`: 8). `npm run build` compiles 1,912 modules with 0 TS errors.
 
+### 19. UX OVERHAUL & CLAUDE MSG #175 AUDIT RESOLUTIONS
+* PTY Return Byte Standardisation: Updated `crates/plinky-core::session::manager::answer_prompt` to send `\r` (carriage return: `b"y\r"`, `b"n\r"`, `b"\r"`) instead of `\n`, matching standard terminal line-discipline and PTY expectations for plink CLI prompts.
+* Free Type Mode Gating Hardening (M6 Verified):
+  - DECCKM Application Cursor Keys Mode: Added inspection of `term.modes.applicationCursorKeysMode`. When DECCKM is active, emits SS3 sequences (`\x1bOC` / `\x1bOD`); when normal, emits CSI sequences (`\x1b[C` / `\x1b[D`).
+  - OSC 133 Semantic Prompt Gating: Registered OSC 133 parser handler in `@xterm/xterm`. Tracks `B..C` input region (command line editing). Suppresses Free Type cursor repositioning when outside the editable prompt region.
+* D6 Multi-Line Broadcast Safety Warning (`SyncBroadcastBar.tsx`):
+  - Detects multi-line pastes or multi-line commands ($\ge 2$ lines) before calling `broadcastSyncInput`.
+  - Displays a modal warning dialog previewing the script and line count, requiring explicit confirmation before multi-session execution.
+* IDE-Grade Terminal UX Features:
+  - In-Terminal Search Bar: Integrated `@xterm/addon-search` with floating UI, match counting, regex, whole-word, case-sensitivity toggles, and `Ctrl+F` / `Esc` hotkeys.
+  - Multi-Pane Split Layout Engine: Supported Single, 2-Pane Vertical Split (Columns), 2-Pane Horizontal Split (Rows), and 4-Pane Cluster Grid (2x2) with active pane focus indicators.
+  - Quick Snippet Bar (`QuickSnippetBar.tsx`): Parameterized DevOps macros (Docker, System, Network, Logs, Custom) with 1-click execution into the active terminal or broadcast channel.
+  - Interactive SFTP Dual-Pane (`SftpDualPane.tsx`): Double-click directory drill-down, `..` upward navigation, clickable breadcrumb paths, in-pane search filters, and real-time transfer queue.
+  - Custom Dark Context Menu: Copy, Paste, Select All, Find (`Ctrl+F`), Clear, and Split actions on right-click.
+* Verification: Full workspace test suite passes (15/15 tests, `cargo test --workspace`). Frontend compiles cleanly (`npm run build`, 1,916 modules, 0 TS errors in 1.83s).
+
+

@@ -49,6 +49,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const isLivePtyRef = useRef<boolean>(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const isOsc133IntegratedRef = useRef<boolean>(false);
+  const isPromptInputRegionRef = useRef<boolean>(true);
 
   const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
@@ -108,6 +110,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const searchAddon = new SearchAddon();
     term.loadAddon(searchAddon);
     searchAddonRef.current = searchAddon;
+
+    // Register OSC 133 Shell Integration Handler (Semantic Prompt Gating)
+    const osc133Disposable = term.parser.registerOscHandler(133, (data) => {
+      isOsc133IntegratedRef.current = true;
+      const code = data.charAt(0).toUpperCase();
+      if (code === 'B') {
+        isPromptInputRegionRef.current = true;
+      } else if (code === 'C' || code === 'D') {
+        isPromptInputRegionRef.current = false;
+      }
+      return false;
+    });
 
     searchAddon.onDidChangeResults((e) => {
       if (e) {
@@ -282,6 +296,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
       setSyncChannel(tab.id, null);
       terminalManager.unregisterTerminal(tab.id);
+      osc133Disposable.dispose();
       if (isLivePtyRef.current) {
         closeTerminalSession(tab.id);
       }
@@ -336,6 +351,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       return;
     }
 
+    // Gating 2: Suppress if OSC 133 semantic prompt is integrated and outside B..C input region
+    if (isOsc133IntegratedRef.current && !isPromptInputRegionRef.current) {
+      return;
+    }
+
     const screenEl = containerRef.current.querySelector('.xterm-screen');
     if (!screenEl) return;
 
@@ -357,16 +377,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Line gating: only move cursor if clicking on the active input row
     if (targetRow === cursorRow && targetCol >= 0 && targetCol < term.cols) {
+      // Gating 3: DECCKM (Application Cursor Keys Mode)
+      // When DECCKM is active, arrow keys send SS3 (\x1bO[A-D]) instead of CSI (\x1b[[A-D])
+      const isDecckm = (term.modes as { applicationCursorKeysMode?: boolean } | undefined)?.applicationCursorKeysMode === true;
+      const rightSeqToken = isDecckm ? '\x1bOC' : '\x1b[C';
+      const leftSeqToken = isDecckm ? '\x1bOD' : '\x1b[D';
+
       const delta = targetCol - cursorCol;
       if (delta > 0) {
-        const rightSeq = '\x1b[C'.repeat(delta);
+        const rightSeq = rightSeqToken.repeat(delta);
         if (isLivePtyRef.current) {
           writeTerminalInput(tab.id, new TextEncoder().encode(rightSeq));
         } else {
           term.write(rightSeq);
         }
       } else if (delta < 0) {
-        const leftSeq = '\x1b[D'.repeat(Math.abs(delta));
+        const leftSeq = leftSeqToken.repeat(Math.abs(delta));
         if (isLivePtyRef.current) {
           writeTerminalInput(tab.id, new TextEncoder().encode(leftSeq));
         } else {
