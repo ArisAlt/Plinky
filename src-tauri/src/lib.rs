@@ -413,7 +413,13 @@ pub fn run() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let mut rx = reg_for_setup.subscribe_prompts();
-            tokio::spawn(async move {
+            // tauri::async_runtime::spawn, NOT tokio::spawn: setup() runs
+            // before Tauri's own async runtime context is entered around
+            // this closure, so a bare tokio::spawn here panics with "there
+            // is no reactor running" on startup. Tauri's wrapper dispatches
+            // onto whatever runtime it's actually using instead of assuming
+            // an ambient tokio::runtime::Handle is already current.
+            tauri::async_runtime::spawn(async move {
                 while let Ok(event) = rx.recv().await {
                     let _ = app_handle.emit("session:prompt", &event);
                 }
