@@ -395,8 +395,13 @@ fn inject_shell_integration(
     let shell_type = ShellType::parse(&shell)
         .ok_or_else(|| format!("Unsupported shell: '{shell}'. Expected bash, zsh, or fish."))?;
     let script = get_bootstrap_script(shell_type);
+    // write_input_live_only, NOT write_input: this is a programmatic bulk
+    // write, not the user's own keystrokes. Using the looser write_input
+    // here previously let the bootstrap script get submitted as a series
+    // of password guesses if injected while a session sat at its remote
+    // password prompt -- see the doc comment on write_input_live_only.
     registry
-        .write_input(&session_id, script.as_bytes())
+        .write_input_live_only(&session_id, script.as_bytes())
         .map_err(|e| format!("Failed to inject shell integration: {e}"))?;
     Ok(())
 }

@@ -250,3 +250,99 @@ async fn test_sync_input_router_d6_safety() {
     registry.close_session("sess-1").unwrap();
     registry.close_session("sess-2").unwrap();
 }
+
+// Regression tests for the password-prompt-injection incident: a real SSH
+// login had its bash shell-integration bootstrap script submitted to the
+// remote server as a series of password guesses because write_input's guard
+// only checked for HostKeyPending, never the general PreAuth state a session
+// sits in at a password/passphrase prompt.
+
+#[tokio::test]
+async fn test_write_input_live_only_blocked_during_plain_preauth() {
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("test-live-only-preauth", "Test", 80, 24, tx).unwrap();
+    registry.reset_session_preauth("test-live-only-preauth").unwrap();
+
+    // Session is in plain PreAuth (e.g. sitting at a remote password prompt),
+    // not HostKeyPending. Automated writes must still be rejected.
+    let write_res = registry.write_input_live_only("test-live-only-preauth", b"some bootstrap script\n");
+    assert!(write_res.is_err(), "write_input_live_only should be rejected during plain PreAuth");
+    assert!(write_res.unwrap_err().to_string().contains("not Live yet"));
+
+    registry.close_session("test-live-only-preauth").unwrap();
+}
+
+#[tokio::test]
+async fn test_write_input_live_only_blocked_during_hostkey_pending() {
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("test-live-only-hostkey", "Test", 80, 24, tx).unwrap();
+    registry.reset_session_preauth("test-live-only-hostkey").unwrap();
+
+    let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+    let action = registry.simulate_preauth_bytes("test-live-only-hostkey", prompt_chunk).unwrap();
+    assert!(matches!(action, PreAuthAction::HostKeyPrompt(_)));
+
+    let write_res = registry.write_input_live_only("test-live-only-hostkey", b"injected\n");
+    assert!(write_res.is_err(), "write_input_live_only should be rejected during HostKeyPending");
+
+    registry.close_session("test-live-only-hostkey").unwrap();
+}
+
+#[tokio::test]
+async fn test_write_input_still_allowed_during_plain_preauth_for_password_typing() {
+    // This must NOT regress: R3 requires a password prompt to be
+    // display-only, with the user typing their own credential directly.
+    // write_input (the user's own-keystroke path) must remain permissive
+    // during plain PreAuth -- only write_input_live_only tightens to Live.
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("test-password-typing", "Test", 80, 24, tx).unwrap();
+    registry.reset_session_preauth("test-password-typing").unwrap();
+
+    let write_res = registry.write_input("test-password-typing", b"my-actual-password\n");
+    assert!(write_res.is_ok(), "write_input must still allow the user's own keystrokes during a password prompt");
+
+    registry.close_session("test-password-typing").unwrap();
+}
+
+#[tokio::test]
+async fn test_sync_input_router_skips_plain_preauth_not_just_hostkey_pending() {
+    use plinky_core::sync::SyncChannelId;
+
+    let registry = SessionRegistry::new();
+    let (tx1, mut rx1) = mpsc::unbounded_channel();
+    let (tx2, _rx2) = mpsc::unbounded_channel();
+
+    registry.create_local_session("sess-a", "A", 80, 24, tx1).unwrap();
+    registry.create_local_session("sess-b", "B", 80, 24, tx2).unwrap();
+
+    registry.set_sync_channel("sess-a", Some(SyncChannelId::A));
+    registry.set_sync_channel("sess-b", Some(SyncChannelId::A));
+
+    // sess-b sits at a plain PreAuth password prompt -- not HostKeyPending.
+    registry.reset_session_preauth("sess-b").unwrap();
+
+    let count = registry.broadcast_sync_input(SyncChannelId::A, b"echo SYNC_TEST\n").unwrap();
+    assert_eq!(count, 1, "Only Live sess-a should receive broadcast; PreAuth sess-b must be skipped");
+
+    let mut buf = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(chunk) = rx1.recv() => {
+                buf.extend_from_slice(&chunk);
+                if String::from_utf8_lossy(&buf).contains("SYNC_TEST") {
+                    break;
+                }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+    assert!(String::from_utf8_lossy(&buf).contains("SYNC_TEST"));
+
+    registry.close_session("sess-a").unwrap();
+    registry.close_session("sess-b").unwrap();
+}

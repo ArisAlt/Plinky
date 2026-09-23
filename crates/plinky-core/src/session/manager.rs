@@ -244,8 +244,21 @@ impl SessionRegistry {
         session.transport.write(bytes)
     }
 
-    /// Writes raw input directly into session PTY master.
-    /// Explicitly blocks raw terminal keystrokes if the session is awaiting a trust decision.
+    /// Writes raw input directly into session PTY master, for the user's OWN
+    /// keystrokes typed into THEIR OWN terminal.
+    ///
+    /// Only blocks HostKeyPending, not the whole PreAuth phase -- per R3, a
+    /// password/passphrase prompt is deliberately display-only: it must
+    /// reach the terminal, and the user must be able to type their own
+    /// credential into it directly (Plinky does not auto-fill one). Do NOT
+    /// use this for anything other than a session's own direct keystrokes --
+    /// shell-integration injection, sync-broadcast fanout, or any other
+    /// programmatic/automated write belongs on write_input_live_only below,
+    /// which is what actually keeps R3's "typed by the user, once, into
+    /// their own prompt" property true. This method alone cannot: it would
+    /// let ANY caller write into a session sitting at its own password
+    /// prompt, since PreAuth (not HostKeyPending) is what a password/
+    /// passphrase prompt state maps to today.
     pub fn write_input(&self, id: &str, data: &[u8]) -> Result<()> {
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
@@ -254,6 +267,36 @@ impl SessionRegistry {
             return Err(PlinkyError::ProcessError(
                 "Terminal input blocked: session is awaiting host key trust approval via dialog".into(),
             ));
+        }
+
+        session.transport.write(data)
+    }
+
+    /// Writes raw input directly into session PTY master, for PROGRAMMATIC /
+    /// AUTOMATED writes only -- shell-integration bootstrap injection,
+    /// sync-broadcast fanout from another session, or any future feature
+    /// that writes into a session the user isn't the one directly typing
+    /// into right now.
+    ///
+    /// Requires the session to be genuinely Live, not merely "not
+    /// HostKeyPending" -- refuses during ANY PreAuth substate, including
+    /// a password/passphrase prompt. This is the fix for a real incident:
+    /// shell-integration injection reused the looser write_input (which
+    /// only blocks HostKeyPending) and got accepted while a session sat at
+    /// its remote password prompt, so the bootstrap script's lines were
+    /// each submitted to the remote server as a separate password guess,
+    /// exhausting the server's auth-attempt limit and disconnecting it.
+    pub fn write_input_live_only(&self, id: &str, data: &[u8]) -> Result<()> {
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+
+        if !session.state_machine.is_live() {
+            return Err(PlinkyError::ProcessError(format!(
+                "Input blocked: session is not Live yet (state: {:?}). Automated writes \
+                 (shell integration, sync broadcast) are only allowed once a session has \
+                 authenticated -- never during a host-key or credential prompt.",
+                session.state_machine.state()
+            )));
         }
 
         session.transport.write(data)
