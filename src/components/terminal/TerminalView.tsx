@@ -13,7 +13,8 @@ import {
   answerHostKeyPrompt,
   listenHostKeyPrompts,
   setSyncChannel,
-  HostKeyPromptInfo
+  HostKeyPromptInfo,
+  injectShellIntegration
 } from '../../services/tauriBridge';
 import { 
   Radio, 
@@ -29,19 +30,22 @@ import {
   Trash2, 
   CheckSquare,
   Columns,
-  Rows
+  Rows,
+  Zap
 } from 'lucide-react';
 
 interface TerminalViewProps {
   tab: TerminalTab;
   onUpdateTab: (tabId: string, updates: Partial<TerminalTab>) => void;
   onSplitPane?: (direction: 'vertical' | 'horizontal') => void;
+  onCwdChange?: (cwd: string) => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
   tab, 
   onUpdateTab,
-  onSplitPane 
+  onSplitPane,
+  onCwdChange
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -51,7 +55,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isOsc133IntegratedRef = useRef<boolean>(false);
   const isPromptInputRegionRef = useRef<boolean>(true);
+  const promptLinesRef = useRef<number[]>([]);
 
+  const [hooksInjected, setHooksInjected] = useState(false);
   const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<HostKeyPromptInfo | null>(null);
@@ -111,7 +117,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     term.loadAddon(searchAddon);
     searchAddonRef.current = searchAddon;
 
-    // Register OSC 133 Shell Integration Handler (Semantic Prompt Gating)
+    // Register OSC 133 Shell Integration Handler (Semantic Prompt Gating & Prompt Jumping)
     const osc133Disposable = term.parser.registerOscHandler(133, (data) => {
       isOsc133IntegratedRef.current = true;
       const code = data.charAt(0).toUpperCase();
@@ -119,6 +125,35 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         isPromptInputRegionRef.current = true;
       } else if (code === 'C' || code === 'D') {
         isPromptInputRegionRef.current = false;
+      } else if (code === 'A') {
+        const line = term.buffer.active.cursorY + term.buffer.active.baseY;
+        if (!promptLinesRef.current.includes(line)) {
+          promptLinesRef.current.push(line);
+          if (promptLinesRef.current.length > 500) promptLinesRef.current.shift();
+        }
+      }
+      return false;
+    });
+
+    // Register OSC 7 Handler (Current Working Directory Reporting for SFTP Directory Following)
+    const osc7Disposable = term.parser.registerOscHandler(7, (data) => {
+      try {
+        const filePrefix = 'file://';
+        let path = '';
+        if (data.startsWith(filePrefix)) {
+          const rest = data.slice(filePrefix.length);
+          const slashIdx = rest.indexOf('/');
+          if (slashIdx !== -1) {
+            path = rest.slice(slashIdx);
+          }
+        } else if (data.startsWith('/')) {
+          path = data;
+        }
+        if (path) {
+          onCwdChange?.(path);
+        }
+      } catch (e) {
+        console.warn('Failed to parse OSC 7 directory:', e);
       }
       return false;
     });
@@ -263,7 +298,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
-    // Handle Ctrl+F for searching inside terminal
+    // Handle Ctrl+F for search and Ctrl+Up/Down for prompt navigation
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
@@ -273,6 +308,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         setIsSearchOpen(false);
         searchAddonRef.current?.clearDecorations();
         term.focus();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp') {
+        // OSC 133 semantic prompt jump previous
+        e.preventDefault();
+        const currentScrollY = term.buffer.active.viewportY;
+        const sorted = [...promptLinesRef.current].sort((a, b) => a - b);
+        const prev = sorted.reverse().find(l => l < currentScrollY);
+        if (prev !== undefined) {
+          term.scrollToLine(prev);
+        } else if (sorted.length > 0) {
+          term.scrollToLine(sorted[0]);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowDown') {
+        // OSC 133 semantic prompt jump next
+        e.preventDefault();
+        const currentScrollY = term.buffer.active.viewportY;
+        const sorted = [...promptLinesRef.current].sort((a, b) => a - b);
+        const next = sorted.find(l => l > currentScrollY);
+        if (next !== undefined) {
+          term.scrollToLine(next);
+        } else {
+          term.scrollToBottom();
+        }
       }
     };
 
@@ -297,6 +354,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       setSyncChannel(tab.id, null);
       terminalManager.unregisterTerminal(tab.id);
       osc133Disposable.dispose();
+      osc7Disposable.dispose();
       if (isLivePtyRef.current) {
         closeTerminalSession(tab.id);
       }
@@ -469,6 +527,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
   };
 
+  const handleInjectHooks = async () => {
+    try {
+      const ok = await injectShellIntegration(tab.id, 'bash');
+      if (ok) {
+        setHooksInjected(true);
+      }
+    } catch (e) {
+      console.warn('Failed to inject hooks:', e);
+    }
+  };
+
   const getChannelColor = (ch: SyncChannel) => {
     switch (ch) {
       case 'A': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40';
@@ -493,6 +562,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Shell Integration Hook Injector Button */}
+          <button
+            onClick={handleInjectHooks}
+            title="Inject OSC 133 semantic prompt markers & OSC 7 directory tracking into bash"
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-all ${
+              hooksInjected
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-300'
+            }`}
+          >
+            <Zap className="w-3 h-3 text-emerald-400" />
+            <span>{hooksInjected ? 'Hooks Active' : 'Shell Hooks'}</span>
+          </button>
+
           {/* Find In Terminal Button */}
           <button
             onClick={() => {

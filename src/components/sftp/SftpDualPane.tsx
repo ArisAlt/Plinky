@@ -22,11 +22,19 @@ import {
 interface SftpDualPaneProps {
   sessionName: string;
   hostname: string;
+  initialRemotePath?: string;
 }
 
-export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostname }) => {
-  const [remotePath, setRemotePath] = useState('/var/www');
+export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostname, initialRemotePath }) => {
+  const [remotePath, setRemotePath] = useState(initialRemotePath || '/var/www');
   const [localPath, setLocalPath] = useState('/home/user/workspace');
+
+  useEffect(() => {
+    if (initialRemotePath) {
+      setRemotePath(initialRemotePath);
+    }
+  }, [initialRemotePath]);
+
   const [localFilter, setLocalFilter] = useState('');
   const [remoteFilter, setRemoteFilter] = useState('');
 

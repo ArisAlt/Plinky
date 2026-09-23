@@ -716,3 +716,33 @@ export async function vaultListKeys(): Promise<string[]> {
   return [];
 }
 
+export async function getShellIntegrationScript(shell: 'bash' | 'zsh' | 'fish'): Promise<string> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<string>('get_shell_integration_script', { shell });
+    } catch (e) {
+      console.warn("Failed to get shell integration script via Tauri:", e);
+    }
+  }
+  return `# Fallback shell integration for ${shell}`;
+}
+
+export async function injectShellIntegration(
+  sessionId: string,
+  shell: 'bash' | 'zsh' | 'fish'
+): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('inject_shell_integration', { sessionId, shell });
+      return true;
+    } catch (e) {
+      console.error("Failed to inject shell integration via Tauri:", e);
+      return false;
+    }
+  }
+  return true;
+}
+
+

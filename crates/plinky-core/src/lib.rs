@@ -14,4 +14,6 @@ pub use session::ring_buffer::ScrollbackRingBuffer;
 pub use sync::{SyncChannelId, SyncInputRouter};
 pub use sftp::{PsftpClient, SftpFileEntry};
 pub use vault::{Vault, VaultEntry, SecretString, VaultHeader};
+pub use session::shell_integration::{ShellType, get_bootstrap_script};
+
 
