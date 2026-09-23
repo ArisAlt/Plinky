@@ -8,6 +8,7 @@ import { TerminalView } from './components/terminal/TerminalView';
 import { SftpDualPane } from './components/sftp/SftpDualPane';
 import { TunnelManager } from './components/tunnels/TunnelManager';
 import { HostKeyManager } from './components/keys/HostKeyManager';
+import { VaultManager } from './components/vault/VaultManager';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
@@ -25,7 +26,7 @@ export const App: React.FC = () => {
   const [sessions, setSessions] = useState<PuttySession[]>([]);
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys'>('sessions');
+  const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
   const [sftpSession, setSftpSession] = useState<{ name: string; host: string }>({
@@ -412,6 +413,10 @@ export const App: React.FC = () => {
 
           {activeView === 'keys' && (
             <HostKeyManager />
+          )}
+
+          {activeView === 'vault' && (
+            <VaultManager />
           )}
         </div>
       </div>

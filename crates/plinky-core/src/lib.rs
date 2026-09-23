@@ -3,6 +3,7 @@ pub mod transport;
 pub mod session;
 pub mod sync;
 pub mod sftp;
+pub mod vault;
 
 pub use errors::{PlinkyError, Result};
 pub use transport::Transport;
@@ -12,3 +13,5 @@ pub use session::state_machine::{PreAuthStateMachine, SessionState, PreAuthActio
 pub use session::ring_buffer::ScrollbackRingBuffer;
 pub use sync::{SyncChannelId, SyncInputRouter};
 pub use sftp::{PsftpClient, SftpFileEntry};
+pub use vault::{Vault, VaultEntry, SecretString, VaultHeader};
+

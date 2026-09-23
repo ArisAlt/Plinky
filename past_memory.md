@@ -246,6 +246,25 @@
   - UI visualizes TCP pipes, source/destination endpoints, and transfer metrics with feedback notifications.
 * Verification: 18/18 workspace tests pass, frontend builds cleanly with 0 TS errors.
 
+### 22. M4 CREDENTIAL VAULT (ARGON2ID + AES-256-GCM WITH AAD & ZEROIZE HYGIENE)
+* Cryptographic Container Architecture (`crates/plinky-core::vault`):
+  - Storage Format (`storage.rs`): 36-byte binary header (`PLKV` magic, `u32` version 1, `u32` m_cost, `u32` t_cost, `u32` p_cost, 16-byte random salt). OWASP interactive defaults: Argon2id with 64 MiB memory (`65536 KiB`), 3 iterations, 1 lane.
+  - AAD Binding: AES-256-GCM authenticated encryption binds domain prefix `b"PLKV_AAD_v1:"` + 36-byte header to guarantee tamper-evidence across Argon2 parameters and salt. Bit-flipped header or ciphertext fails closed immediately.
+  - Memory Hygiene & Redaction (`mod.rs`): `SecretString` wrapper implementing `zeroize::Zeroize` and `zeroize::ZeroizeOnDrop`. Custom `Debug` and `Display` implementations strictly redact plaintext (`"[REDACTED]"`).
+  - Atomic File Persistence: Writes via temporary hidden file (`.vault.tmp.<rand>`) with POSIX 0600 restrictive file permissions, `sync_all()`, and atomic rename.
+  - In-Memory Lifecycle (`Vault`): Holds zeroizing master key and secrets. Methods: `create`, `create_fast`, `load`, `save`, `lock`, `is_locked`, `get`, `get_entry`, `set`, `set_entry`, `remove`, `list_keys`. Locking immediately purges the key and all entries from memory.
+* Tauri v2 IPC Command Suite (`src-tauri/src/lib.rs`):
+  - Managed `VaultState` with mutex-protected unlocked `Option<Vault>`.
+  - Registered commands: `vault_is_initialized`, `vault_is_unlocked`, `vault_create`, `vault_unlock`, `vault_lock`, `vault_get`, `vault_set`, `vault_get_entry`, `vault_set_entry`, `vault_delete`, `vault_list_keys`.
+* Frontend UI & TypeScript Bindings:
+  - `src/services/tauriBridge.ts`: TypeScript async API bindings with fallback support.
+  - `src/components/vault/VaultManager.tsx`: Interactive credential management workbench allowing vault initialization, master password unlocking, instant locking, secret addition, reveal/copy toggles, and deletion. Integrated into `TitleBar.tsx` and `App.tsx` via the Shield tab.
+* Verification:
+  - 6 new vault tests in `plinky-core` (redaction, create/save/load roundtrip, wrong password rejection, tampered header detection, tampered ciphertext detection, memory zeroization).
+  - 29/29 tests pass across workspace (`cargo test --workspace`: 7 `putty-compat`, 22 `plinky-core`).
+  - `npm run build` compiles 1,917 modules with 0 TS errors in 1.90s.
+
+
 
 
 

@@ -58,6 +58,9 @@ This document tracks the directory architecture, file structure, component relat
 │           │   ├── mod.rs
 │           │   ├── parser.rs             # psftp ls -l parser, space-in-filename tokenizer, symlink handling
 │           │   └── client.rs             # PsftpClient process runner (list_dir, create_dir, remove_file)
+│           ├── vault/                    # Credential Vault (M4 Argon2id + AES-256-GCM + Zeroize)
+│           │   ├── mod.rs                # Vault in-memory struct, SecretString with ZeroizeOnDrop and redaction
+│           │   └── storage.rs            # PLKV container format (36-byte header, AAD binding, atomic disk writes)
 │           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
 │               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events
@@ -105,6 +108,8 @@ This document tracks the directory architecture, file structure, component relat
         │   └── TunnelManager.tsx         # Visual SSH tunnels (Local -L, Remote -R, Dynamic -D SOCKS5)
         ├── keys/
         │   └── HostKeyManager.tsx        # Trusted PuTTY host keys viewer and PPK header inspection
+        ├── vault/
+        │   └── VaultManager.tsx          # Argon2id + AES-256-GCM Credential Vault UI with redaction & zeroize
         ├── sync/
         │   └── SyncBroadcastBar.tsx      # Multi-session command broadcast bar (All, A, B, C, D)
         └── modals/
@@ -124,7 +129,7 @@ This document tracks the directory architecture, file structure, component relat
 | **M1** | **CI & Threat Model**: GitHub Actions CI (Linux + Windows), `cargo-deny`, threat-model doc, localhost `sshd` test fixture | All automated CI jobs green on both platforms. |
 | **M2** | **Walking Skeleton**: Hard-coded session, single tab, `tauri::ipc::Channel` + flow control + ring buffer, reload-and-reattach | Webview reload keeps session alive; keystroke latency & throughput meet M0 thresholds. |
 | **M3** | **`putty-compat` v1**: Sessions r/w, `.ppk` header parser/fingerprinter, read-only hostkey listing, session tree | Fixtures generated via real `/usr/bin/puttygen 0.85`; parser edge cases covered; `cargo-fuzz` clean. |
-| **M4** | **Pre-Auth State Machine & Vault**: State machine (D3), Argon2id vault (R1–R3), `putty_detect` command | Scripted host-key and password flows pass; hostile banner cannot trigger credential auto-fill. |
+| **M4** | **Pre-Auth State Machine & Vault**: ✅ **DONE** - PreAuth state machine (D3/D9), Argon2id + AES-256-GCM vault (R1–R3, AAD, zeroize), `putty_detect` | 6/6 vault tests pass, 29/29 workspace tests pass; hostile banner cannot trigger credential auto-fill; full memory zeroization. |
 | **M5** | **Docking Layout & Sync Router**: `dockview` multi-tab/split layout, layout persistence, `SyncInputRouter` (D6), shell integration bootstrap | Sync race conditions audited; state-filtering tests pass (`Live` sessions only). |
 | **M6** | **WindTerm Productivity Features**: Free Type Mode, regex markers/link provider, snippet bar | Gating tests pass (alternate buffer suppression, DECCKM, OSC 133 semantic region). |
 | **M7** | **SFTP & Port Forwarding**: Dual-pane file manager, directory following, visual tunnels (scoped by S3/S4) | Transfers resume; unsupported tunnel types cleanly documented. |

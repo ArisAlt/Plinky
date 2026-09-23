@@ -7,14 +7,15 @@ import {
   Network, 
   Settings, 
   Play, 
-  Key
+  Key,
+  Shield
 } from 'lucide-react';
 
 interface TitleBarProps {
   onQuickConnect: (host: string, port: number) => void;
   onNewSession: () => void;
-  activeView: 'sessions' | 'sftp' | 'tunnels' | 'keys';
-  setActiveView: (view: 'sessions' | 'sftp' | 'tunnels' | 'keys') => void;
+  activeView: 'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault';
+  setActiveView: (view: 'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault') => void;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -104,6 +105,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           >
             <Key className="w-3.5 h-3.5" />
             <span>Host Keys</span>
+          </button>
+
+          <button
+            onClick={() => setActiveView('vault')}
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
+              activeView === 'vault'
+                ? 'bg-plinky-800 text-sky-400 font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/60'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Vault</span>
           </button>
         </div>
       </div>
