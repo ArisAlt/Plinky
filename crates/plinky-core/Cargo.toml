@@ -13,6 +13,10 @@ thiserror = "2.0"
 tracing = "0.1"
 regex = "1.10"
 putty-compat = { path = "../putty-compat" }
+argon2 = "0.5"
+aes-gcm = "0.10"
+zeroize = { version = "1.8", features = ["derive"] }
+rand = "0.8"
 
 [dev-dependencies]
 tempfile = "3.10"

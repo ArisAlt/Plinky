@@ -22,6 +22,9 @@ pub enum PlinkyError {
 
     #[error("PuTTY compatibility error: {0}")]
     PuttyCompatError(#[from] putty_compat::errors::PuttyCompatError),
+
+    #[error("Vault error: {0}")]
+    VaultError(String),
 }
 
 pub type Result<T> = std::result::Result<T, PlinkyError>;

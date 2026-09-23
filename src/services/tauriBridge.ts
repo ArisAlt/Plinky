@@ -558,3 +558,161 @@ export async function broadcastSyncInput(
   }
   return 0;
 }
+
+export interface VaultEntry {
+  id: string;
+  username?: string;
+  secret: string;
+  notes?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function vaultIsInitialized(): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<boolean>('vault_is_initialized');
+    } catch (e) {
+      console.warn("Failed to check vault_is_initialized:", e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function vaultIsUnlocked(): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<boolean>('vault_is_unlocked');
+    } catch (e) {
+      console.warn("Failed to check vault_is_unlocked:", e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function vaultCreate(masterPassword: string): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('vault_create', { masterPassword });
+      return true;
+    } catch (e) {
+      console.error("Failed to create vault:", e);
+      throw e;
+    }
+  }
+  return true;
+}
+
+export async function vaultUnlock(masterPassword: string): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('vault_unlock', { masterPassword });
+      return true;
+    } catch (e) {
+      console.error("Failed to unlock vault:", e);
+      throw e;
+    }
+  }
+  return true;
+}
+
+export async function vaultLock(): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('vault_lock');
+      return true;
+    } catch (e) {
+      console.warn("Failed to lock vault:", e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function vaultGet(key: string): Promise<string | null> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<string | null>('vault_get', { key });
+    } catch (e) {
+      console.warn(`Failed to get key '${key}' from vault:`, e);
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function vaultSet(key: string, secret: string): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('vault_set', { key, secret });
+      return true;
+    } catch (e) {
+      console.error(`Failed to set key '${key}' in vault:`, e);
+      throw e;
+    }
+  }
+  return true;
+}
+
+export async function vaultGetEntry(key: string): Promise<VaultEntry | null> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<VaultEntry | null>('vault_get_entry', { key });
+    } catch (e) {
+      console.warn(`Failed to get entry '${key}' from vault:`, e);
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function vaultSetEntry(entry: VaultEntry): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('vault_set_entry', { entry });
+      return true;
+    } catch (e) {
+      console.error(`Failed to set entry '${entry.id}' in vault:`, e);
+      throw e;
+    }
+  }
+  return true;
+}
+
+export async function vaultDelete(key: string): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<boolean>('vault_delete', { key });
+    } catch (e) {
+      console.warn(`Failed to delete key '${key}' from vault:`, e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function vaultListKeys(): Promise<string[]> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<string[]>('vault_list_keys');
+    } catch (e) {
+      console.warn("Failed to list vault keys:", e);
+      return [];
+    }
+  }
+  return [];
+}
+

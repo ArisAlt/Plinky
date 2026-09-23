@@ -1,10 +1,16 @@
+use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{State, ipc::Channel, Emitter};
+use tauri::{ipc::Channel, Emitter, Manager, State};
+use tokio::sync::Mutex;
 use putty_compat::sessions::PuttySession;
 use putty_compat::hostkeys::HostKeyEntry;
 use putty_compat::ppk::PpkHeader;
-use plinky_core::{SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer, SyncChannelId, PsftpClient, SftpFileEntry};
+use plinky_core::{
+    SessionRegistry, PlinkTransport, PuttyInfo, AttachInfo, PromptAnswer,
+    SyncChannelId, PsftpClient, SftpFileEntry, Vault, VaultEntry,
+};
 use tokio::sync::mpsc;
+
 
 #[tauri::command]
 fn putty_detect() -> PuttyInfo {
@@ -224,6 +230,141 @@ async fn sftp_rm(
         .map_err(|e| format!("Failed to remove remote file: {e}"))
 }
 
+pub struct VaultState {
+    pub inner: Mutex<Option<Vault>>,
+    pub custom_path: Mutex<Option<PathBuf>>,
+}
+
+impl VaultState {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(None),
+            custom_path: Mutex::new(None),
+        }
+    }
+}
+
+fn resolve_vault_path(app: &tauri::AppHandle, state: &VaultState) -> PathBuf {
+    if let Ok(guard) = state.custom_path.try_lock() {
+        if let Some(p) = guard.as_ref() {
+            return p.clone();
+        }
+    }
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        return app_dir.join("vault.bin");
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault.bin")
+}
+
+#[tauri::command]
+fn vault_is_initialized(app: tauri::AppHandle, state: State<'_, VaultState>) -> Result<bool, String> {
+    let path = resolve_vault_path(&app, &state);
+    Ok(path.exists())
+}
+
+#[tauri::command]
+async fn vault_is_unlocked(state: State<'_, VaultState>) -> Result<bool, String> {
+    let guard = state.inner.lock().await;
+    Ok(guard.as_ref().map(|v| !v.is_locked()).unwrap_or(false))
+}
+
+#[tauri::command]
+async fn vault_create(
+    app: tauri::AppHandle,
+    state: State<'_, VaultState>,
+    master_password: String,
+) -> Result<(), String> {
+    let path = resolve_vault_path(&app, &state);
+    let vault = Vault::create(&path, &master_password)
+        .map_err(|e| format!("Failed to create vault: {e}"))?;
+    let mut guard = state.inner.lock().await;
+    *guard = Some(vault);
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_unlock(
+    app: tauri::AppHandle,
+    state: State<'_, VaultState>,
+    master_password: String,
+) -> Result<(), String> {
+    let path = resolve_vault_path(&app, &state);
+    let vault = Vault::load(&path, &master_password)
+        .map_err(|e| format!("Failed to unlock vault: {e}"))?;
+    let mut guard = state.inner.lock().await;
+    *guard = Some(vault);
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_lock(state: State<'_, VaultState>) -> Result<(), String> {
+    let mut guard = state.inner.lock().await;
+    if let Some(mut v) = guard.take() {
+        v.lock();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_get(state: State<'_, VaultState>, key: String) -> Result<Option<String>, String> {
+    let guard = state.inner.lock().await;
+    let vault = guard.as_ref().ok_or_else(|| "Vault is locked".to_string())?;
+    Ok(vault.get(&key).map(|s| s.to_string()))
+}
+
+#[tauri::command]
+async fn vault_set(
+    state: State<'_, VaultState>,
+    key: String,
+    secret: String,
+) -> Result<(), String> {
+    let mut guard = state.inner.lock().await;
+    let vault = guard.as_mut().ok_or_else(|| "Vault is locked".to_string())?;
+    vault.set(&key, &secret);
+    vault.save().map_err(|e| format!("Failed to save vault: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_get_entry(
+    state: State<'_, VaultState>,
+    key: String,
+) -> Result<Option<VaultEntry>, String> {
+    let guard = state.inner.lock().await;
+    let vault = guard.as_ref().ok_or_else(|| "Vault is locked".to_string())?;
+    Ok(vault.get_entry(&key).cloned())
+}
+
+#[tauri::command]
+async fn vault_set_entry(
+    state: State<'_, VaultState>,
+    entry: VaultEntry,
+) -> Result<(), String> {
+    let mut guard = state.inner.lock().await;
+    let vault = guard.as_mut().ok_or_else(|| "Vault is locked".to_string())?;
+    vault.set_entry(entry);
+    vault.save().map_err(|e| format!("Failed to save vault: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_delete(state: State<'_, VaultState>, key: String) -> Result<bool, String> {
+    let mut guard = state.inner.lock().await;
+    let vault = guard.as_mut().ok_or_else(|| "Vault is locked".to_string())?;
+    let removed = vault.remove(&key).is_some();
+    if removed {
+        vault.save().map_err(|e| format!("Failed to save vault: {e}"))?;
+    }
+    Ok(removed)
+}
+
+#[tauri::command]
+async fn vault_list_keys(state: State<'_, VaultState>) -> Result<Vec<String>, String> {
+    let guard = state.inner.lock().await;
+    let vault = guard.as_ref().ok_or_else(|| "Vault is locked".to_string())?;
+    Ok(vault.list_keys())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -232,6 +373,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(registry)
+        .manage(VaultState::new())
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let mut rx = reg_for_setup.subscribe_prompts();
@@ -261,8 +403,20 @@ pub fn run() {
             broadcast_sync_input,
             sftp_list,
             sftp_mkdir,
-            sftp_rm
+            sftp_rm,
+            vault_is_initialized,
+            vault_is_unlocked,
+            vault_create,
+            vault_unlock,
+            vault_lock,
+            vault_get,
+            vault_set,
+            vault_get_entry,
+            vault_set_entry,
+            vault_delete,
+            vault_list_keys
         ])
         .run(tauri::generate_context!())
         .expect("error while running plinky desktop application");
 }
+
