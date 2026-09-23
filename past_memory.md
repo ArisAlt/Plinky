@@ -221,4 +221,18 @@
   - Custom Dark Context Menu: Copy, Paste, Select All, Find (`Ctrl+F`), Clear, and Split actions on right-click.
 * Verification: Full workspace test suite passes (15/15 tests, `cargo test --workspace`). Frontend compiles cleanly (`npm run build`, 1,916 modules, 0 TS errors in 1.83s).
 
+### 20. M7 SFTP DATA PATH ENGINE & TAURI IPC INTEGRATION (ADR-003 OPTION B)
+* Core Subsystem Architecture:
+  - ADR-003 Option B: Plain dedicated `psftp` subprocess spawned per SFTP operation/session, avoiding the PuTTY 0.85 `-share` socket hang identified in S4 spikes. Host keys and auth inherit existing PuTTY registry/session credentials silently.
+* `crates/plinky-core::sftp`:
+  - `parser.rs`: `parse_psftp_ls_line` and `parse_psftp_ls_output`. Uses 9th-column token boundary scanning to preserve arbitrary whitespace and spaces in filenames. Normalizes symlink targets (`link_target -> real_file`). Filters `.` and `..` listings. Uses `#[serde(rename_all = "camelCase")]` matching frontend `SftpFileEntry` TypeScript interface.
+  - `client.rs`: `PsftpClient` discovers `psftp` binary across system paths and `PUTTY_PSFTP_PATH`. Runs non-blocking asynchronous batch I/O (`stdin.write_all(..).await; stdin.flush().await;`) on `tokio::process::ChildStdin`. Implements `list_dir`, `create_dir`, and `remove_file`.
+* Tauri v2 IPC Command Registration (`src-tauri/src/lib.rs`):
+  - Registered `sftp_list`, `sftp_mkdir`, and `sftp_rm` in Tauri `invoke_handler!`.
+* Frontend Wiring & Interactive File Management:
+  - `src/services/tauriBridge.ts`: Implemented `listRemoteFiles`, `createRemoteDir`, and `removeRemoteFile` calling Tauri native commands with fallback for browser preview mode.
+  - `src/components/sftp/SftpDualPane.tsx`: Added remote directory creation (`FolderPlus` / `mkdir`), remote file deletion (`Trash2` / `rm` with confirmation prompt), breadcrumbs, double-click traversal, and transfer queue status.
+* Verification: 18/18 tests pass across workspace (`cargo test --workspace`: 7 `putty-compat`, 11 `plinky-core`). `npm run build` succeeds with 0 TS errors (1,916 modules).
+
+
 

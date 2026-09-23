@@ -42,7 +42,7 @@ This document tracks the directory architecture, file structure, component relat
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
-│       │                                 # ✅ IMPLEMENTED & VERIFIED (7/7 tests pass)
+│       │                                 # ✅ IMPLEMENTED & VERIFIED (18/18 tests pass across workspace)
 │       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror
 │       └── src/
 │           ├── lib.rs
@@ -54,6 +54,10 @@ This document tracks the directory architecture, file structure, component relat
 │           ├── sync/                     # Multi-session command broadcast (M5 SyncInputRouter)
 │           │   ├── mod.rs
 │           │   └── router.rs             # In-memory fan-out, D6 state filtering (Live-only), protected exclusion
+│           ├── sftp/                     # SFTP subsystem via dedicated psftp process (ADR-003 Option B)
+│           │   ├── mod.rs
+│           │   ├── parser.rs             # psftp ls -l parser, space-in-filename tokenizer, symlink handling
+│           │   └── client.rs             # PsftpClient process runner (list_dir, create_dir, remove_file)
 │           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
 │               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events
@@ -69,7 +73,8 @@ This document tracks the directory architecture, file structure, component relat
 │       ├── main.rs                       # Desktop entrypoint & windows subsystem flags
 │       └── lib.rs                        # Tauri plugin setup & command registration:
 │                                         # list_putty_sessions, read_putty_session, write_putty_session,
-│                                         # list_putty_hostkeys, inspect_ppk
+│                                         # list_putty_hostkeys, inspect_ppk, start/attach/write/resize/close,
+│                                         # sync channels & broadcast, sftp_list, sftp_mkdir, sftp_rm
 │
 └── src/                                  # Frontend UI Workbench (TypeScript + React 19 + xterm.js)
     ├── package.json                      # Dependencies: React 19, @xterm/xterm, dockview, lucide-react, tailwindcss
