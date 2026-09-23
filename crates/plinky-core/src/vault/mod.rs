@@ -93,6 +93,33 @@ pub struct VaultEntry {
     pub updated_at: u64,
 }
 
+/// Metadata for a vault entry WITHOUT its secret -- for listing views.
+///
+/// The secret is deliberately not present on this type (not even redacted),
+/// so it is structurally impossible for a listing call to leak plaintext:
+/// callers must fetch a specific entry's full `VaultEntry` on demand
+/// (e.g. when the user explicitly reveals or copies it) to see the secret.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultEntryMeta {
+    pub id: String,
+    pub username: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl From<&VaultEntry> for VaultEntryMeta {
+    fn from(e: &VaultEntry) -> Self {
+        Self {
+            id: e.id.clone(),
+            username: e.username.clone(),
+            notes: e.notes.clone(),
+            created_at: e.created_at,
+            updated_at: e.updated_at,
+        }
+    }
+}
+
 impl VaultEntry {
     pub fn new(id: impl Into<String>, secret: impl Into<String>) -> Self {
         let now = SystemTime::now()
@@ -283,6 +310,13 @@ impl Vault {
         self.entries.keys().cloned().collect()
     }
 
+    /// List entry metadata (id, username, notes, timestamps) for every stored
+    /// credential, WITHOUT decrypted secrets. Use `get_entry`/`get` for the
+    /// secret of one specific entry, on demand, not this for a bulk listing.
+    pub fn list_entries_meta(&self) -> Vec<VaultEntryMeta> {
+        self.entries.values().map(VaultEntryMeta::from).collect()
+    }
+
     /// Return total number of stored credentials.
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -405,6 +439,32 @@ mod tests {
         assert!(res.is_err());
         let err = res.unwrap_err();
         assert!(format!("{}", err).contains("Authentication failed"));
+    }
+
+    #[test]
+    fn test_list_entries_meta_never_contains_secrets() {
+        let dir = tempdir().unwrap();
+        let vault_file = dir.path().join("vault.bin");
+
+        let mut vault = Vault::create_fast(&vault_file, "meta_test_pw").unwrap();
+        vault.set_entry(
+            VaultEntry::new("session:server1", "top-secret-password")
+                .with_username("root")
+                .with_notes("prod db"),
+        );
+
+        let meta = vault.list_entries_meta();
+        assert_eq!(meta.len(), 1);
+        assert_eq!(meta[0].id, "session:server1");
+        assert_eq!(meta[0].username.as_deref(), Some("root"));
+        assert_eq!(meta[0].notes.as_deref(), Some("prod db"));
+
+        // VaultEntryMeta has no `secret` field at all -- this is a compile-time
+        // guarantee, not just a runtime check, but confirm the serialized form
+        // never contains the plaintext either, in case that ever changes.
+        let json = serde_json::to_string(&meta[0]).unwrap();
+        assert!(!json.contains("top-secret-password"));
+        assert!(!json.contains("secret"));
     }
 
     #[test]
