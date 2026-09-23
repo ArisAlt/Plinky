@@ -63,8 +63,44 @@ impl PsftpClient {
         ))
     }
 
+    /// Validates remote path against injection characters (\n, \r, \0).
+    pub fn validate_path(path: &str) -> Result<()> {
+        if path.contains('\n') || path.contains('\r') || path.contains('\0') {
+            return Err(PlinkyError::ProcessError(
+                "Security violation: path contains prohibited newline or null characters".into(),
+            ));
+        }
+        if path.trim().is_empty() {
+            return Err(PlinkyError::ProcessError("Path cannot be empty".into()));
+        }
+        Ok(())
+    }
+
+    /// Validates session name against injection characters.
+    pub fn validate_session_name(session_name: &str) -> Result<()> {
+        if session_name.contains('\n') || session_name.contains('\r') || session_name.contains('\0') {
+            return Err(PlinkyError::ProcessError(
+                "Security violation: session name contains prohibited control characters".into(),
+            ));
+        }
+        if session_name.trim().is_empty() {
+            return Err(PlinkyError::ProcessError("Session name cannot be empty".into()));
+        }
+        Ok(())
+    }
+
+    /// Escapes double quotes using PuTTY's "" convention and wraps in double quotes.
+    pub fn escape_psftp_path(path: &str) -> String {
+        let escaped = path.replace('"', "\"\"");
+        format!("\"{}\"", escaped)
+    }
+
     /// Lists files in `remote_path` for `session_name` via plain `psftp`.
     pub async fn list_dir(session_name: &str, remote_path: &str) -> Result<Vec<SftpFileEntry>> {
+        Self::validate_session_name(session_name)?;
+        Self::validate_path(remote_path)?;
+        let escaped_path = Self::escape_psftp_path(remote_path);
+
         let psftp_path = Self::find_binary()?;
         let mut cmd = Command::new(psftp_path);
 
@@ -80,7 +116,7 @@ impl PsftpClient {
         })?;
 
         // Prepare commands to execute
-        let script = format!("cd \"{}\"\nls\nquit\n", remote_path);
+        let script = format!("cd {}\nls\nquit\n", escaped_path);
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(script.as_bytes()).await;
             let _ = stdin.flush().await;
@@ -97,6 +133,10 @@ impl PsftpClient {
 
     /// Creates a directory on the remote server.
     pub async fn create_dir(session_name: &str, remote_path: &str) -> Result<()> {
+        Self::validate_session_name(session_name)?;
+        Self::validate_path(remote_path)?;
+        let escaped_path = Self::escape_psftp_path(remote_path);
+
         let psftp_path = Self::find_binary()?;
         let mut cmd = Command::new(psftp_path);
 
@@ -111,7 +151,7 @@ impl PsftpClient {
             PlinkyError::ProcessError(format!("Failed to spawn psftp: {}", e))
         })?;
 
-        let script = format!("mkdir \"{}\"\nquit\n", remote_path);
+        let script = format!("mkdir {}\nquit\n", escaped_path);
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(script.as_bytes()).await;
             let _ = stdin.flush().await;
@@ -131,6 +171,10 @@ impl PsftpClient {
 
     /// Removes a file on the remote server.
     pub async fn remove_file(session_name: &str, remote_path: &str) -> Result<()> {
+        Self::validate_session_name(session_name)?;
+        Self::validate_path(remote_path)?;
+        let escaped_path = Self::escape_psftp_path(remote_path);
+
         let psftp_path = Self::find_binary()?;
         let mut cmd = Command::new(psftp_path);
 
@@ -145,7 +189,7 @@ impl PsftpClient {
             PlinkyError::ProcessError(format!("Failed to spawn psftp: {}", e))
         })?;
 
-        let script = format!("rm \"{}\"\nquit\n", remote_path);
+        let script = format!("rm {}\nquit\n", escaped_path);
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(script.as_bytes()).await;
             let _ = stdin.flush().await;
@@ -161,5 +205,49 @@ impl PsftpClient {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_path_accepts_clean_paths() {
+        assert!(PsftpClient::validate_path("/var/www/html").is_ok());
+        assert!(PsftpClient::validate_path("my folder with spaces").is_ok());
+        assert!(PsftpClient::validate_path("file_name-123.tar.gz").is_ok());
+        assert!(PsftpClient::validate_path(r#"path with "quotes""#).is_ok());
+    }
+
+    #[test]
+    fn test_validate_path_rejects_newline_injection() {
+        let poc = "/var/www\n!touch /tmp/plinky_poc_test\ncd \"bar";
+        let res = PsftpClient::validate_path(poc);
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        assert!(err_msg.contains("Security violation"));
+    }
+
+    #[test]
+    fn test_validate_path_rejects_carriage_return_and_null() {
+        assert!(PsftpClient::validate_path("path\rwith\rCR").is_err());
+        assert!(PsftpClient::validate_path("path\0with\0NULL").is_err());
+    }
+
+    #[test]
+    fn test_escape_psftp_path() {
+        assert_eq!(
+            PsftpClient::escape_psftp_path("/simple/path"),
+            "\"/simple/path\""
+        );
+        assert_eq!(
+            PsftpClient::escape_psftp_path("path with spaces"),
+            "\"path with spaces\""
+        );
+        assert_eq!(
+            PsftpClient::escape_psftp_path(r#"path with "quotes""#),
+            r#""path with ""quotes""""#
+        );
     }
 }

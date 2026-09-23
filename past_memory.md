@@ -234,5 +234,18 @@
   - `src/components/sftp/SftpDualPane.tsx`: Added remote directory creation (`FolderPlus` / `mkdir`), remote file deletion (`Trash2` / `rm` with confirmation prompt), breadcrumbs, double-click traversal, and transfer queue status.
 * Verification: 18/18 tests pass across workspace (`cargo test --workspace`: 7 `putty-compat`, 11 `plinky-core`). `npm run build` succeeds with 0 TS errors (1,916 modules).
 
+### 21. M7 VISUAL SSH TUNNEL MANAGER & PUTTY SESSION FORWARDINGS PERSISTENCE
+* Protocol & Format Integration:
+  - PuTTY `PortForwardings` format: `L<src>=<destHost>:<destPort>`, `R<src>=<destHost>:<destPort>`, `D<src>`.
+  - Implemented `parsePortForwardings` and `serializePortForwardings` in `src/services/tauriBridge.ts`.
+  - Added serde aliases in `crates/putty-compat::sessions::PuttySession` for bidirectional compatibility between snake_case Rust and camelCase TypeScript models.
+* Dynamic Tunnel Management (`src/components/tunnels/TunnelManager.tsx`):
+  - Automatically loads session port forwardings from PuTTY configuration on mount/session selection.
+  - Adding, deleting (`Trash2`), or toggling tunnels immediately updates and persists the session configuration to disk/registry via `writePuttySession`.
+  - PuTTY's native `plink` runner inherits these port forwardings on session connection without requiring external proxy processes.
+  - UI visualizes TCP pipes, source/destination endpoints, and transfer metrics with feedback notifications.
+* Verification: 18/18 workspace tests pass, frontend builds cleanly with 0 TS errors.
+
+
 
 

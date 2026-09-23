@@ -16,10 +16,15 @@ pub struct SessionRef {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PuttySession {
     pub name: String,
+    #[serde(alias = "hostname")]
     pub host_name: String,
+    #[serde(alias = "port")]
     pub port_number: u16,
+    #[serde(alias = "username", default)]
     pub user_name: String,
+    #[serde(default)]
     pub protocol: String,
+    #[serde(alias = "publicKeyFile", default)]
     pub public_key_file: String,
     #[serde(default)]
     pub extra: BTreeMap<String, String>,
