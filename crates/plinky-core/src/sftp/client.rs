@@ -1,8 +1,13 @@
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+use tokio::time::timeout;
 use crate::errors::{PlinkyError, Result};
 use super::parser::{parse_psftp_ls_output, SftpFileEntry};
+
+/// Default timeout duration for psftp batch operations to prevent indefinite hangs.
+pub const SFTP_TIMEOUT_SECS: u64 = 30;
 
 /// Client wrapper around PuTTY's `psftp` CLI binary (ADR-003 Option B).
 pub struct PsftpClient;
@@ -107,6 +112,7 @@ impl PsftpClient {
         cmd.arg("-batch")
             .arg("-load")
             .arg(session_name)
+            .kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -122,9 +128,15 @@ impl PsftpClient {
             let _ = stdin.flush().await;
         }
 
-        let output = child.wait_with_output().await.map_err(|e| {
-            PlinkyError::ProcessError(format!("psftp execution failed: {}", e))
-        })?;
+        let output = match timeout(Duration::from_secs(SFTP_TIMEOUT_SECS), child.wait_with_output()).await {
+            Ok(res) => res.map_err(|e| PlinkyError::ProcessError(format!("psftp execution failed: {}", e)))?,
+            Err(_) => {
+                return Err(PlinkyError::ProcessError(format!(
+                    "psftp command timed out after {} seconds",
+                    SFTP_TIMEOUT_SECS
+                )));
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let files = parse_psftp_ls_output(&stdout);
@@ -143,6 +155,7 @@ impl PsftpClient {
         cmd.arg("-batch")
             .arg("-load")
             .arg(session_name)
+            .kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -157,9 +170,15 @@ impl PsftpClient {
             let _ = stdin.flush().await;
         }
 
-        let output = child.wait_with_output().await.map_err(|e| {
-            PlinkyError::ProcessError(format!("psftp execution failed: {}", e))
-        })?;
+        let output = match timeout(Duration::from_secs(SFTP_TIMEOUT_SECS), child.wait_with_output()).await {
+            Ok(res) => res.map_err(|e| PlinkyError::ProcessError(format!("psftp execution failed: {}", e)))?,
+            Err(_) => {
+                return Err(PlinkyError::ProcessError(format!(
+                    "psftp command timed out after {} seconds",
+                    SFTP_TIMEOUT_SECS
+                )));
+            }
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -181,6 +200,7 @@ impl PsftpClient {
         cmd.arg("-batch")
             .arg("-load")
             .arg(session_name)
+            .kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -195,9 +215,15 @@ impl PsftpClient {
             let _ = stdin.flush().await;
         }
 
-        let output = child.wait_with_output().await.map_err(|e| {
-            PlinkyError::ProcessError(format!("psftp execution failed: {}", e))
-        })?;
+        let output = match timeout(Duration::from_secs(SFTP_TIMEOUT_SECS), child.wait_with_output()).await {
+            Ok(res) => res.map_err(|e| PlinkyError::ProcessError(format!("psftp execution failed: {}", e)))?,
+            Err(_) => {
+                return Err(PlinkyError::ProcessError(format!(
+                    "psftp command timed out after {} seconds",
+                    SFTP_TIMEOUT_SECS
+                )));
+            }
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
