@@ -31,6 +31,7 @@ export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<PuttySession | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
     '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono", "FiraCode Nerd Font", "Fira Code", "DejaVu Sans Mono", monospace'
@@ -171,6 +172,11 @@ export const App: React.FC = () => {
     await loadSessions();
   };
 
+  const handleEditSession = (session: PuttySession) => {
+    setEditingSession(session);
+    setIsNewSessionOpen(true);
+  };
+
   const handleSplitPane = (direction: 'vertical' | 'horizontal') => {
     if (direction === 'vertical') {
       setLayoutMode('split-vertical');
@@ -236,6 +242,7 @@ export const App: React.FC = () => {
             onConnectSession={handleConnectSession}
             onOpenSftp={handleOpenSftp}
             onCreateSession={() => setIsNewSessionOpen(true)}
+            onEditSession={handleEditSession}
           />
         </div>
 
@@ -518,7 +525,11 @@ export const App: React.FC = () => {
       {/* New Session Modal */}
       <NewSessionModal
         isOpen={isNewSessionOpen}
-        onClose={() => setIsNewSessionOpen(false)}
+        editingSession={editingSession}
+        onClose={() => {
+          setIsNewSessionOpen(false);
+          setEditingSession(null);
+        }}
         onSave={handleSaveSession}
       />
 

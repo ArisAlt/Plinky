@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PuttySession, Protocol } from '../../types/session';
 import { Terminal, X, Save, Key, Folder, Tag } from 'lucide-react';
 
@@ -6,12 +6,14 @@ interface NewSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (session: PuttySession) => void;
+  editingSession?: PuttySession | null;
 }
 
 export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  editingSession,
 }) => {
   const [name, setName] = useState('');
   const [hostname, setHostname] = useState('');
@@ -21,6 +23,31 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [folder, setFolder] = useState('Default');
   const [tags, setTags] = useState('');
   const [publicKeyFile, setPublicKeyFile] = useState('');
+
+  // Re-seed the form whenever the modal opens -- either blank for a new
+  // session, or pre-filled with the session being edited.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (editingSession) {
+      setName(editingSession.name);
+      setHostname(editingSession.hostname);
+      setPort(String(editingSession.port || 22));
+      setProtocol(editingSession.protocol);
+      setUsername(editingSession.username || '');
+      setFolder(editingSession.folder || 'Default');
+      setTags((editingSession.tags || []).join(', '));
+      setPublicKeyFile(editingSession.publicKeyFile || '');
+    } else {
+      setName('');
+      setHostname('');
+      setPort('22');
+      setProtocol('SSH');
+      setUsername('');
+      setFolder('Default');
+      setTags('');
+      setPublicKeyFile('');
+    }
+  }, [isOpen, editingSession]);
 
   if (!isOpen) return null;
 
@@ -54,7 +81,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         <div className="p-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Terminal className="w-4 h-4 text-sky-400" />
-            <h3 className="font-semibold text-slate-100 text-sm">New PuTTY Session</h3>
+            <h3 className="font-semibold text-slate-100 text-sm">
+              {editingSession ? `Edit "${editingSession.name}"` : 'New PuTTY Session'}
+            </h3>
           </div>
           <button
             onClick={onClose}
@@ -76,6 +105,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               onChange={e => setName(e.target.value)}
               className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
             />
+            {editingSession && name.trim() !== editingSession.name && (
+              <p className="text-amber-400 text-[11px]">
+                Changing the name saves this as a new session -- "{editingSession.name}" will still exist separately.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -186,7 +220,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium shadow-sm transition"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Save PuTTY Session</span>
+              <span>{editingSession ? 'Save Changes' : 'Save PuTTY Session'}</span>
             </button>
           </div>
         </form>
