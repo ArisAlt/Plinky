@@ -13,6 +13,15 @@ pub struct PuttyInfo {
     pub reason: Option<String>,
 }
 
+/// Direct connection target used when a session name doesn't resolve to a
+/// persisted PuTTY session file (see spawn_session).
+#[derive(Debug, Clone)]
+pub struct ExplicitTarget {
+    pub hostname: String,
+    pub port: u16,
+    pub username: Option<String>,
+}
+
 pub struct PlinkTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -131,9 +140,57 @@ impl PlinkTransport {
         }
     }
 
+    /// Builds the plink CLI args for a connection, given whether
+    /// `session_name` matches a real persisted PuTTY session.
+    ///
+    /// `explicit_target`, when given, is used whenever `session_name` isn't
+    /// a real persisted PuTTY session (Quick Connect and split-pane clones
+    /// invent a display name like "Quick (host:port)" or "X (Split)" that
+    /// was never written to ~/.putty/sessions). Previously this always ran
+    /// `-load <session_name>` regardless -- for those synthetic names, plink
+    /// found no matching saved session, ended up with no host configured at
+    /// all, and the connection silently went nowhere (looked like a "dummy"
+    /// terminal). A real saved session still takes the `-load` path so it
+    /// keeps whatever proxy/key/terminal settings it was saved with.
+    /// Pulled out as a pure function so the branching is unit-testable
+    /// without spawning a real plink process.
+    pub fn build_args(
+        session_name: &str,
+        has_saved_session: bool,
+        explicit_target: Option<&ExplicitTarget>,
+    ) -> Vec<String> {
+        let mut args = Vec::new();
+
+        if has_saved_session {
+            // Interactive flags per D8 and PUTTY_WRAPPER_SPEC §4:
+            args.push("-load".to_string());
+            args.push(session_name.to_string());
+            // Note: -agent is intentionally omitted per Claude architecture review:
+            // -load already applies the session's own AgentFwd configuration.
+        } else if let Some(target) = explicit_target {
+            if let Some(user) = target.username.as_deref().filter(|u| !u.is_empty()) {
+                args.push(format!("{user}@{}", target.hostname));
+            } else {
+                args.push(target.hostname.clone());
+            }
+            args.push("-P".to_string());
+            args.push(target.port.to_string());
+        } else {
+            // No saved session and nothing explicit to connect with -- fall
+            // back to -load so plink's own "no hostname specified" error
+            // still surfaces through the existing FATAL ERROR handling
+            // instead of the process hanging with no target.
+            args.push("-load".to_string());
+            args.push(session_name.to_string());
+        }
+        args.push("-t".to_string()); // Force PTY
+        args
+    }
+
     /// Spawns an interactive plink process attached to a new PTY pair.
     pub fn spawn_session(
         session_name: &str,
+        explicit_target: Option<&ExplicitTarget>,
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
@@ -149,13 +206,11 @@ impl PlinkTransport {
             })
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
+        let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
         let mut cmd = CommandBuilder::new(plink_bin);
-        // Interactive flags per D8 and PUTTY_WRAPPER_SPEC §4:
-        cmd.arg("-load");
-        cmd.arg(session_name);
-        cmd.arg("-t"); // Force PTY
-        // Note: -agent is intentionally omitted per Claude architecture review:
-        // -load already applies the session's own AgentFwd configuration.
+        for arg in Self::build_args(session_name, has_saved_session, explicit_target) {
+            cmd.arg(arg);
+        }
 
         #[cfg(not(windows))]
         cmd.env("TERM", "xterm-256color");

@@ -3,6 +3,7 @@ name = "plinky-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core terminal engine, PTY lifecycle, pre-auth state machine, and connection registry for Plinky"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 portable-pty = "0.8"
@@ -12,7 +13,7 @@ serde_json = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
 regex = "1.10"
-putty-compat = { path = "../putty-compat" }
+putty-compat = { path = "../putty-compat", version = "0.1.0" }
 argon2 = "0.5"
 aes-gcm = "0.10"
 zeroize = { version = "1.8", features = ["derive"] }

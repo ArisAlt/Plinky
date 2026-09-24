@@ -274,7 +274,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           (chunk) => {
             isLivePtyRef.current = true;
             term.write(chunk);
-          }
+          },
+          tab.hostname,
+          tab.port,
+          tab.username
         ).then((started) => {
           if (!started) {
             // Browser development preview fallback banner

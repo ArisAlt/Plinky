@@ -137,12 +137,13 @@ impl SessionRegistry {
         &self,
         id: &str,
         session_name: &str,
+        explicit_target: Option<crate::transport::plink::ExplicitTarget>,
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let transport = PlinkTransport::spawn_session(session_name, cols, rows, raw_tx)?;
+        let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), cols, rows, raw_tx)?;
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));
@@ -381,5 +382,17 @@ impl SessionRegistry {
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
         Ok(session.state_machine.feed_bytes(chunk))
+    }
+
+    /// Returns the current state of a session's pre-auth state machine.
+    pub fn get_session_state(&self, id: &str) -> Option<SessionState> {
+        let lock = self.sessions.lock().unwrap();
+        lock.get(id).map(|s| s.state_machine.state().clone())
+    }
+
+    /// Returns whether the given session has reached Live state.
+    pub fn is_session_live(&self, id: &str) -> bool {
+        let lock = self.sessions.lock().unwrap();
+        lock.get(id).map(|s| s.state_machine.is_live()).unwrap_or(false)
     }
 }
