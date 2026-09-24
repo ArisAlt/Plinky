@@ -14,7 +14,7 @@ interface SessionExplorerProps {
   sessions: PuttySession[];
   tabs: TerminalTab[];
   activeTabId: string | null;
-  onConnectSession: (session: PuttySession) => void;
+  onConnectSession: (session: PuttySession, forceNew?: boolean) => void;
   onOpenSftp: (session: PuttySession) => void;
   onCreateSession: () => void;
   onEditSession: (session: PuttySession) => void;
@@ -137,13 +137,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                     return (
                     <div
                       key={session.name}
-                      onDoubleClick={() => onConnectSession(session)}
+                      onDoubleClick={() => onConnectSession(session, true)}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         setContextMenu({ x: e.clientX, y: e.clientY, session });
                       }}
-                      title={openTab ? 'Already open -- click to switch to it' : 'Click or double-click to connect'}
+                      title={openTab ? 'Double-click, or right-click -> Connect, to open another tab' : 'Double-click, or right-click -> Connect'}
                       className={`group flex flex-col p-2 rounded border cursor-pointer transition select-none shadow-xs ${
                         isActiveTab
                           ? 'bg-sky-500/10 border-sky-500/60'
@@ -153,10 +153,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div
-                          onClick={() => onConnectSession(session)}
-                          className="flex items-center space-x-1.5 flex-1 min-w-0"
-                        >
+                        <div className="flex items-center space-x-1.5 flex-1 min-w-0">
                           {openTab ? (
                             <span
                               className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500/60'}`}
@@ -178,18 +175,6 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                         </span>
 
                         <div className="flex items-center space-x-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onConnectSession(session);
-                            }}
-                            title="Connect Terminal"
-                            className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 border border-sky-500/30 transition text-[10px] font-medium"
-                          >
-                            <Terminal className="w-3 h-3" />
-                            <span>Connect</span>
-                          </button>
                           {session.protocol === 'SSH' && (
                             <button
                               type="button"
@@ -282,7 +267,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           </div>
           <button
             onClick={() => {
-              onConnectSession(contextMenu.session);
+              onConnectSession(contextMenu.session, true);
               setContextMenu(null);
             }}
             className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-sky-600/30 transition text-left"
