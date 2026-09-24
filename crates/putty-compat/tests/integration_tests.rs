@@ -39,6 +39,7 @@ fn test_round_trip_session_with_unknown_fields_and_backup() {
         user_name: "admin".to_string(),
         protocol: "ssh".to_string(),
         public_key_file: "/home/user/.ssh/id_ed25519.ppk".to_string(),
+        log_file_name: String::new(),
         extra,
     };
 

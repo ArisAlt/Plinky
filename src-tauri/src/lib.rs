@@ -68,6 +68,7 @@ fn start_terminal_session(
     hostname: Option<String>,
     port: Option<u16>,
     username: Option<String>,
+    log_file_name: Option<String>,
 ) -> Result<(), String> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
@@ -81,7 +82,7 @@ fn start_terminal_session(
 
     if is_local {
         registry
-            .create_local_session(&session_id, &session_name, cols, rows, tx)
+            .create_local_session(&session_id, &session_name, log_file_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create local session: {e}"))
     } else {
         // Quick Connect and split-pane clones invent a display name that was
@@ -96,7 +97,7 @@ fn start_terminal_session(
                 username,
             });
         registry
-            .create_plink_session(&session_id, &session_name, explicit_target, cols, rows, tx)
+            .create_plink_session(&session_id, &session_name, explicit_target, log_file_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create plink session: {e}"))
     }
 }
