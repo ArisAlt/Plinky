@@ -88,3 +88,15 @@ export function loadLayout(): LayoutState | null {
     return null;
   }
 }
+
+/**
+ * Clear persisted layout state.
+ */
+export function clearLayout(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    console.error("Failed to clear layout state:", e);
+  }
+}
+

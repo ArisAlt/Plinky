@@ -6,7 +6,7 @@ use crate::errors::{PlinkyError, Result};
 use crate::transport::Transport;
 use crate::transport::local::LocalTransport;
 use crate::transport::plink::PlinkTransport;
-use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo};
+use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo, CloseReason};
 use crate::session::ring_buffer::ScrollbackRingBuffer;
 
 /// Opens (or creates) a session log file in append mode, matching PuTTY's
@@ -117,7 +117,11 @@ impl SessionRegistry {
                 };
 
                 match action {
-                    PreAuthAction::Hold => {}
+                    PreAuthAction::Hold => {
+                        if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
+                            let _ = tx.send(chunk);
+                        }
+                    }
                     PreAuthAction::PassThrough(bytes) | PreAuthAction::TransitionToLive(bytes) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
                             let _ = tx.send(bytes);
@@ -133,7 +137,24 @@ impl SessionRegistry {
                     }
                     PreAuthAction::Closed(reason) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let msg = format!("\r\n[Plinky: Session closed ({:?})]\r\n", reason);
+                            let msg = match reason {
+                                CloseReason::AuthFailed(err) => {
+                                    if let Some(pos) = err.find("FATAL ERROR:") {
+                                        format!("\r\n\x1b[31m{}\x1b[0m\r\n", &err[pos..].trim())
+                                    } else {
+                                        format!("\r\n\x1b[31m[Plinky: Session closed ({})]\x1b[0m\r\n", err)
+                                    }
+                                }
+                                CloseReason::HostKeyRejected => {
+                                    "\r\n\x1b[31m[Plinky: Host key was rejected]\x1b[0m\r\n".to_string()
+                                }
+                                CloseReason::Error(err) => {
+                                    format!("\r\n\x1b[31m[Plinky: Error: {}]\x1b[0m\r\n", err)
+                                }
+                                CloseReason::Ok => {
+                                    "\r\n[Plinky: Session closed]\r\n".to_string()
+                                }
+                            };
                             let _ = tx.send(msg.into_bytes());
                         }
                         break;
@@ -199,7 +220,13 @@ impl SessionRegistry {
                 };
 
                 match action {
-                    PreAuthAction::Hold => {}
+                    PreAuthAction::Hold => {
+                        // Forward pre-auth interactive bytes (username prompt, password prompt, login banner)
+                        // directly to the subscriber so the user can see prompts and enter credentials.
+                        if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
+                            let _ = tx.send(chunk);
+                        }
+                    }
                     PreAuthAction::PassThrough(bytes) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
                             let _ = tx.send(bytes);
@@ -232,7 +259,24 @@ impl SessionRegistry {
                     }
                     PreAuthAction::Closed(reason) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let msg = format!("\r\n[Plinky: Session closed ({:?})]\r\n", reason);
+                            let msg = match reason {
+                                CloseReason::AuthFailed(err) => {
+                                    if let Some(pos) = err.find("FATAL ERROR:") {
+                                        format!("\r\n\x1b[31m{}\x1b[0m\r\n", &err[pos..].trim())
+                                    } else {
+                                        format!("\r\n\x1b[31m[Plinky: Session closed ({})]\x1b[0m\r\n", err)
+                                    }
+                                }
+                                CloseReason::HostKeyRejected => {
+                                    "\r\n\x1b[31m[Plinky: Host key was rejected]\x1b[0m\r\n".to_string()
+                                }
+                                CloseReason::Error(err) => {
+                                    format!("\r\n\x1b[31m[Plinky: Error: {}]\x1b[0m\r\n", err)
+                                }
+                                CloseReason::Ok => {
+                                    "\r\n[Plinky: Session closed]\r\n".to_string()
+                                }
+                            };
                             let _ = tx.send(msg.into_bytes());
                         }
                         break;

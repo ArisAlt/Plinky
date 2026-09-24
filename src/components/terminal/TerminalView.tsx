@@ -14,7 +14,8 @@ import {
   listenHostKeyPrompts,
   setSyncChannel,
   HostKeyPromptInfo,
-  injectShellIntegration
+  injectShellIntegration,
+  isTauriEnvironment
 } from '../../services/tauriBridge';
 import {
   Radio,
@@ -85,10 +86,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const [hooksInjected, setHooksInjected] = useState(false);
   const [hooksError, setHooksError] = useState<string | null>(null);
-  // Same condition used to pick isLocal when starting the PTY -- if this is
-  // true the backend actually spawned a local shell, not an SSH session, so
-  // the header shouldn't show a fabricated "(localhost:22)" network target.
-  const isLocalSession = tab.hostname === 'localhost' || !tab.hostname;
+  // Only consider local if it's explicitly "Local Shell" or flagged as local.
+  // PuTTY sessions or SSH targets (even localhost:22) must connect via plink.
+  const isLocalSession = tab.sessionName === 'Local Shell' || (tab as any).isLocal === true;
   // Free Type mode's toggle was removed (confusing, no visible feedback) --
   // isFreeType is kept read-only at whatever the tab was created with
   // (always false now, see App.tsx) since the cursor-style/click-to-edit
@@ -340,22 +340,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         startTerminalSession(
           tab.id,
           tab.sessionName,
-          tab.hostname === 'localhost' || !tab.hostname,
+          isLocalSession,
           term.cols,
           term.rows,
           handleIncomingChunk,
           tab.hostname,
           tab.port,
-          tab.username
+          tab.username,
+          (tab as any).logFileName
         ).then((started) => {
           if (!started) {
-            // Browser development preview fallback banner
-            term.writeln(`\x1b[36m╔══════════════════════════════════════════════════════════════════╗\x1b[0m`);
-            term.writeln(`\x1b[36m║\x1b[0m  \x1b[1mPlinky PuTTY Wrapper (Preview)\x1b[0m — ${tab.sessionName} (${tab.hostname}:${tab.port})  \x1b[36m║\x1b[0m`);
-            term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
-            term.writeln(`\x1b[36m╚══════════════════════════════════════════════════════════════════╝\x1b[0m\r\n`);
-            term.write(`\x1b[32m${tab.username || 'deploy'}@${tab.sessionName.toLowerCase().replace(/\s+/g, '-')}\x1b[0m:\x1b[34m~\x1b[0m$ `);
-            addEventLog("Running in browser development preview mode", 'info');
+            if (isTauriEnvironment()) {
+              term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}". Verify that PuTTY (plink) is installed and target host is reachable.]\x1b[0m\r\n`);
+              addEventLog(`Failed to start PTY session "${tab.sessionName}"`, 'error');
+            } else {
+              // Browser development preview fallback banner (non-Tauri mode)
+              term.writeln(`\x1b[33m[Plinky: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
+              addEventLog("Running in browser development preview mode", 'info');
+            }
           } else {
             addEventLog(`PTY session live. Terminal ready.`, 'success');
           }
@@ -367,11 +369,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     term.onData((data) => {
       if (isLivePtyRef.current) {
         writeTerminalInput(tab.id, new TextEncoder().encode(data));
-      } else {
+      } else if (!isTauriEnvironment()) {
         // Echo input locally for browser preview
         if (data === '\r') {
           term.write('\r\n');
-          term.write(`\x1b[32m${tab.username || 'deploy'}@server\x1b[0m:\x1b[34m~\x1b[0m$ `);
         } else if (data === '\u007F') {
           term.write('\b \b');
         } else {

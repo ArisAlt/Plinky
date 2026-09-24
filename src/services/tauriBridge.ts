@@ -2,7 +2,7 @@ import { PuttySession, HostKeyEntry, PpkInfo, SftpFileEntry, TunnelEntry } from 
 
 // Check if running inside Tauri runtime
 export const isTauriEnvironment = (): boolean => {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window || !!(window as any).isTauri);
 };
 
 export interface PuttyDetectInfo {
@@ -368,7 +368,8 @@ export async function startTerminalSession(
   onData: (chunk: Uint8Array) => void,
   hostname?: string,
   port?: number,
-  username?: string
+  username?: string,
+  logFileName?: string
 ): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
@@ -387,6 +388,7 @@ export async function startTerminalSession(
         hostname,
         port,
         username,
+        logFileName: logFileName || null,
       });
       return true;
     } catch (e) {
