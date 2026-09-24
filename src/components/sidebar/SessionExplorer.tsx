@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { PuttySession } from '../../types/session';
-import { 
-  Folder, 
-  Terminal, 
-  Search, 
-  Plus, 
-  HardDrive, 
+import { PuttySession, TerminalTab } from '../../types/session';
+import {
+  Folder,
+  Terminal,
+  Search,
+  Plus,
+  HardDrive,
   Tag
 } from 'lucide-react';
 
 interface SessionExplorerProps {
   sessions: PuttySession[];
+  tabs: TerminalTab[];
+  activeTabId: string | null;
   onConnectSession: (session: PuttySession) => void;
   onOpenSftp: (session: PuttySession) => void;
   onCreateSession: () => void;
@@ -18,12 +20,21 @@ interface SessionExplorerProps {
 
 export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   sessions,
+  tabs,
+  activeTabId,
   onConnectSession,
   onOpenSftp,
   onCreateSession,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: PuttySession } | null>(null);
+
+  React.useEffect(() => {
+    const handleOutsideClick = () => setContextMenu(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   const toggleFolder = (folder: string) => {
     setCollapsedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
@@ -59,7 +70,10 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-plinky-900 border-r border-plinky-800 select-none text-slate-200">
+    <div 
+      onContextMenu={(e) => e.preventDefault()}
+      className="flex flex-col h-full bg-plinky-900 border-r border-plinky-800 select-none text-slate-200 relative"
+    >
       {/* Sidebar Header */}
       <div className="p-3 border-b border-plinky-800 flex items-center justify-between">
         <div className="flex items-center space-x-2">
@@ -110,40 +124,75 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
 
               {/* Folder Items */}
               {!isCollapsed && (
-                <div className="ml-3 pl-2 border-l border-plinky-800/80 space-y-1">
-                  {folderSessions.map((session) => (
+                <div className="ml-3 pl-2 border-l border-plinky-800/80 space-y-1.5">
+                  {folderSessions.map((session) => {
+                    const openTab = tabs.find(t => t.sessionName === session.name);
+                    const isActiveTab = !!openTab && openTab.id === activeTabId;
+                    return (
                     <div
                       key={session.name}
-                      className="group flex flex-col p-1.5 rounded hover:bg-plinky-800 border border-transparent hover:border-plinky-700 transition"
+                      onDoubleClick={() => onConnectSession(session)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setContextMenu({ x: e.clientX, y: e.clientY, session });
+                      }}
+                      title={openTab ? 'Already open -- click to switch to it' : 'Click or double-click to connect'}
+                      className={`group flex flex-col p-2 rounded border cursor-pointer transition select-none shadow-xs ${
+                        isActiveTab
+                          ? 'bg-sky-500/10 border-sky-500/60'
+                          : openTab
+                          ? 'bg-plinky-800/50 border-plinky-700 hover:border-sky-500/50'
+                          : 'bg-plinky-950/60 hover:bg-plinky-800/90 border-plinky-800/70 hover:border-sky-500/50'
+                      }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span 
+                        <div
                           onClick={() => onConnectSession(session)}
-                          className="font-medium text-xs text-slate-200 truncate cursor-pointer hover:text-sky-300 flex-1"
+                          className="flex items-center space-x-1.5 flex-1 min-w-0"
                         >
-                          {session.name}
-                        </span>
+                          {openTab ? (
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500/60'}`}
+                              title={isActiveTab ? 'Connected -- this is the active tab' : 'Connected -- open in another tab'}
+                            />
+                          ) : (
+                            <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          )}
+                          <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition">
+                            {session.name}
+                          </span>
+                        </div>
                         {getProtocolBadge(session.protocol)}
                       </div>
 
-                      <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400">
-                        <span className="truncate max-w-[120px]">
-                          {session.hostname ? `${session.hostname}:${session.port}` : 'Default config'}
+                      <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-400">
+                        <span className="truncate max-w-[120px] font-mono text-[10px]">
+                          {session.hostname ? `${session.hostname}:${session.port}` : 'Local Shell'}
                         </span>
 
-                        <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition">
+                        <div className="flex items-center space-x-1">
                           <button
-                            onClick={() => onConnectSession(session)}
-                            title="Open Terminal"
-                            className="p-1 rounded bg-sky-500/20 text-sky-400 hover:bg-sky-500/40 transition"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onConnectSession(session);
+                            }}
+                            title="Connect Terminal"
+                            className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 border border-sky-500/30 transition text-[10px] font-medium"
                           >
                             <Terminal className="w-3 h-3" />
+                            <span>Connect</span>
                           </button>
                           {session.protocol === 'SSH' && (
                             <button
-                              onClick={() => onOpenSftp(session)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenSftp(session);
+                              }}
                               title="Open Dual-Pane SFTP"
-                              className="p-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition"
+                              className="p-1 rounded bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 transition"
                             >
                               <HardDrive className="w-3 h-3" />
                             </button>
@@ -162,7 +211,8 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -198,6 +248,57 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <span>Native PuTTY</span>
         </span>
       </div>
+
+      {/* Custom Context Menu */}
+      {contextMenu && (
+        <div
+          style={{ 
+            position: 'fixed', 
+            left: Math.min(contextMenu.x, window.innerWidth - 180), 
+            top: Math.min(contextMenu.y, window.innerHeight - 150) 
+          }}
+          className="z-50 w-44 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 text-[10px] text-slate-500 font-mono border-b border-plinky-800/80 truncate">
+            {contextMenu.session.name}
+          </div>
+          <button
+            onClick={() => {
+              onConnectSession(contextMenu.session);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-sky-600/30 transition text-left"
+          >
+            <Terminal className="w-3.5 h-3.5 text-sky-400" />
+            <span>Connect Terminal</span>
+          </button>
+          {contextMenu.session.protocol === 'SSH' && (
+            <button
+              onClick={() => {
+                onOpenSftp(contextMenu.session);
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-emerald-600/30 transition text-left"
+            >
+              <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Open SFTP Pane</span>
+            </button>
+          )}
+          <button
+            onClick={() => {
+              if (contextMenu.session.hostname) {
+                navigator.clipboard.writeText(contextMenu.session.hostname);
+              }
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition text-left"
+          >
+            <Tag className="w-3.5 h-3.5 text-slate-500" />
+            <span>Copy Hostname</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -39,13 +39,19 @@ interface TerminalViewProps {
   onUpdateTab: (tabId: string, updates: Partial<TerminalTab>) => void;
   onSplitPane?: (direction: 'vertical' | 'horizontal') => void;
   onCwdChange?: (cwd: string) => void;
+  fontFamily?: string;
+  fontSize?: number;
+  cursorStyle?: 'block' | 'bar' | 'underline';
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
   tab, 
   onUpdateTab,
   onSplitPane,
-  onCwdChange
+  onCwdChange,
+  fontFamily,
+  fontSize,
+  cursorStyle,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -77,11 +83,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     if (!containerRef.current) return;
 
     // Initialize xterm.js instance with modern dark theme
+    const defaultFontStack = '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono", "FiraCode Nerd Font", "Fira Code", "DejaVu Sans Mono", monospace';
     const term = new Terminal({
       cursorBlink: true,
-      cursorStyle: isFreeType ? 'bar' : 'block',
-      fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-      fontSize: 13,
+      cursorStyle: cursorStyle || (isFreeType ? 'bar' : 'block'),
+      fontFamily: fontFamily || defaultFontStack,
+      fontSize: fontSize || 13,
       lineHeight: 1.25,
       allowTransparency: true,
       theme: {
@@ -393,6 +400,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       setSearchStats(null);
     }
   }, [searchQuery, caseSensitive, wholeWord, isRegex, isSearchOpen, performSearch]);
+
+  // Dynamically update font family, font size, or cursor style from settings
+  useEffect(() => {
+    if (terminalRef.current) {
+      if (fontFamily) {
+        terminalRef.current.options.fontFamily = fontFamily;
+      }
+      if (fontSize) {
+        terminalRef.current.options.fontSize = fontSize;
+      }
+      if (cursorStyle) {
+        terminalRef.current.options.cursorStyle = cursorStyle;
+      }
+      fitAddonRef.current?.fit();
+    }
+  }, [fontFamily, fontSize, cursorStyle]);
 
   // WindTerm Free Type Mode: Arbitrary cursor placement and delta computation
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
