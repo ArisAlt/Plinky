@@ -8,20 +8,28 @@ This document tracks the directory architecture, file structure, component relat
 ├── past_memory.md                        # Dense ledger of architectural decisions and context
 ├── README.md                             # Master user guide, project vision, feature breakdown
 ├── scaffold.md                           # Living directory and module architecture map (this file)
+├── deny.toml                             # Cargo-deny configuration (licenses, bans, advisories, sources)
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                        # Multi-platform CI (Ubuntu + Windows, cargo-deny, Xvfb smoke)
+│
+├── docs/
+│   └── THREAT_MODEL.md                   # Threat model & security architecture specification
 │
 ├── specs/                                # Technical Specifications & Proposal Suite
-│   ├── README.md                         # Overview of the research & specifications
-│   ├── SYSTEM_DESIGN.md                  # Comprehensive v1 System Design (M0-M7, IPC, security, threat model)
-│   ├── wrapper/                          # PuTTY Wrapper Deep Technical Subsystem Design
-│   │   └── DEEP_DESIGN.md                # Empirical evidence (0.85), D8 (-batch), D9 (Access granted), R3, share ownership
-│   ├── PROPOSAL.md                       # Comprehensive proposal: PuTTY Wrapper + WindTerm features
-│   ├── WINDTERM_ANALYSIS.md              # In-depth autopsy of kingToolbox/WindTerm & community requests
-│   ├── PUTTY_WRAPPER_SPEC.md             # Technical specification for PuTTY bridge & wrappers
-│   ├── FEATURE_MATRIX.md                 # Detailed feature comparison: WindTerm vs PuTTY vs Plinky
-│   └── adr/                              # Architecture Decision Records
-│       ├── README.md                     # ADR index and status table
-│       ├── ADR-001-primary-ssh-transport.md # Decision: plink-only in v1, russh deferred
-│       └── ADR-002-putty-discovery-and-versioning.md # Decision: detect installed PuTTY (0.75+), no bundling
+├── specs/README.md                       # Overview of the research & specifications
+├── specs/SYSTEM_DESIGN.md                # Comprehensive v1 System Design (M0-M7, IPC, security, threat model)
+├── specs/wrapper/                        # PuTTY Wrapper Deep Technical Subsystem Design
+│   └── DEEP_DESIGN.md                    # Empirical evidence (0.85), D8 (-batch), D9 (Access granted), R3, share ownership
+├── specs/PROPOSAL.md                     # Comprehensive proposal: PuTTY Wrapper + WindTerm features
+├── specs/WINDTERM_ANALYSIS.md            # In-depth autopsy of kingToolbox/WindTerm & community requests
+├── specs/PUTTY_WRAPPER_SPEC.md           # Technical specification for PuTTY bridge & wrappers
+├── specs/FEATURE_MATRIX.md               # Detailed feature comparison: WindTerm vs PuTTY vs Plinky
+└── specs/adr/                            # Architecture Decision Records
+    ├── README.md                         # ADR index and status table
+    ├── ADR-001-primary-ssh-transport.md  # Decision: plink-only in v1, russh deferred
+    └── ADR-002-putty-discovery-and-versioning.md # Decision: detect installed PuTTY (0.75+), no bundling
 │
 ├── Cargo.toml                            # Root Cargo Workspace definition
 │
@@ -115,7 +123,8 @@ This document tracks the directory architecture, file structure, component relat
         ├── sync/
         │   └── SyncBroadcastBar.tsx      # Multi-session command broadcast bar (All, A, B, C, D)
         └── modals/
-            └── NewSessionModal.tsx       # New PuTTY session modal with atomic persistence
+            ├── NewSessionModal.tsx       # New PuTTY session modal with atomic persistence
+            └── SettingsModal.tsx         # User preferences (fonts, cursor, PuTTY status, cache clear)
     │   └── useSFTP.ts                    # Remote filesystem navigation and directory following
     └── styles/                           # Styling & Theme Variables
         ├── themes/                       # WindTerm Dark, PuTTY Classic, Dracula, Nord
@@ -128,7 +137,7 @@ This document tracks the directory architecture, file structure, component relat
 | Milestone | Deliverable | Acceptance Criteria |
 | :--- | :--- | :--- |
 | **M0** | **Phase 0 Spikes (S1–S4)**: WebGL throughput, plink under PTY (auth boundary, resize, exact prompt text), `-share` lifecycle, psftp parsing on Linux and Windows | Numeric thresholds fixed before spikes; results documented as ADRs; unknowns tagged `[?]` resolved. |
-| **M1** | **CI & Threat Model**: GitHub Actions CI (Linux + Windows), `cargo-deny`, threat-model doc, localhost `sshd` test fixture | All automated CI jobs green on both platforms. |
+| **M1** | **CI & Threat Model**: ✅ **DONE** - GitHub Actions CI (Linux + Windows), `cargo-deny` (0 errors), `docs/THREAT_MODEL.md`, localhost `sshd` test fixture (`sshd_fixture_tests.rs`) | All automated CI jobs defined; cargo-deny passing; 39/39 workspace tests pass. |
 | **M2** | **Walking Skeleton**: Hard-coded session, single tab, `tauri::ipc::Channel` + flow control + ring buffer, reload-and-reattach | Webview reload keeps session alive; keystroke latency & throughput meet M0 thresholds. |
 | **M3** | **`putty-compat` v1**: Sessions r/w, `.ppk` header parser/fingerprinter, read-only hostkey listing, session tree | Fixtures generated via real `/usr/bin/puttygen 0.85`; parser edge cases covered; `cargo-fuzz` clean. |
 | **M4** | **Pre-Auth State Machine & Vault**: ✅ **DONE** - PreAuth state machine (D3/D9), Argon2id + AES-256-GCM vault (R1–R3, AAD, zeroize), `putty_detect` | 6/6 vault tests pass, 29/29 workspace tests pass; hostile banner cannot trigger credential auto-fill; full memory zeroization. |

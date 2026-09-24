@@ -300,6 +300,35 @@
   - Pinned requirement for CI (M1 / `T-002`): Build AppImages inside an older LTS container (Ubuntu 20.04/22.04) for glibc compatibility and include a headless Xvfb launch smoke test to catch launch-time panics.
 * Verification: 38/38 tests pass across workspace (`cargo test --workspace`). `npm run build` succeeds with 0 errors.
 
+### 25. M1 CI WORKFLOWS, CARGO-DENY, THREAT MODEL & SSHD FIXTURE (T-002)
+* `deny.toml`:
+  - Complete cargo-deny configuration for licenses, bans, advisories, and sources.
+  - Allowed licenses: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Unicode-3.0/DFS-2016, OpenSSL, MPL-2.0.
+  - Audited transitive advisories waived: `RUSTSEC-2024-0370`, `RUSTSEC-2017-0008`, `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098`, `RUSTSEC-2025-0100`.
+  - Passes cleanly with 0 errors (`advisories ok, bans ok, licenses ok, sources ok`).
+* `.github/workflows/ci.yml`:
+  - Multi-platform matrix (`ubuntu-latest` and `windows-latest`).
+  - Automates system package installations (`putty-tools`, `openssh-server`, `xvfb`, `libwebkit2gtk-4.1-dev`), `npm run build`, `cargo test --workspace`, `cargo-deny`, and headless Xvfb launch smoke test (`timeout 8s ./target/debug/plinky-desktop`).
+* `docs/THREAT_MODEL.md`:
+  - Living security specification detailing system architecture, trust boundaries, and mitigations for attack vectors T1-T6 (terminal escape sequences, pre-auth state machine bypass, sync input leakage, psftp path traversal, vault compromise, and IPC context isolation).
+* Localhost SSHD Test Fixture (`crates/plinky-core/tests/sshd_fixture_tests.rs`):
+  - Ephemeral unprivileged `sshd` runner running on loopback high port.
+  - Generates ed25519 host key and client PPK via `puttygen`, with isolated `PUTTYDIR`.
+  - Spawns real `plink` session, catches `HostKeyPrompt`, answers `AcceptAndStore` via `answer_prompt`, validates D9 `Access granted` transition to `Live`, and verifies `attach_session` scrollback replay.
+* GUI Polish & Usability Hardening:
+  - Session rows feature visible "Connect" buttons, double-click to connect, and active session status indicators.
+  - Browser right-click reload context menu suppressed via global `onContextMenu` handler; dedicated session context menu added.
+  - Added `SettingsModal.tsx` for font family, font size, cursor style, PuTTY path status, and layout cache reset.
+  - Font stack prioritized for `MesloLGS Nerd Font`, `FiraCode Nerd Font`, `JetBrainsMono Nerd Font` for seamless Starship prompt rendering.
+  - Target forwarding for Quick Connect / split-pane clones in `plink.rs` via `ExplicitTarget`.
+  - Visible error banner on Shell Hooks failure and toast hint on Free Type toggle.
+* Verification:
+  - 39/39 workspace tests pass (`cargo test --workspace`).
+  - `cargo deny check` exits with 0 errors.
+  - `npm run build` succeeds with 0 errors.
+  - Task `T-002` marked `in_review` and submitted to Claude for peer review.
+
+
 
 
 
