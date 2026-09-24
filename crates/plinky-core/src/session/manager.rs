@@ -164,9 +164,26 @@ impl SessionRegistry {
 
                 match action {
                     PreAuthAction::Hold => {}
-                    PreAuthAction::PassThrough(bytes) | PreAuthAction::TransitionToLive(bytes) => {
+                    PreAuthAction::PassThrough(bytes) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
                             let _ = tx.send(bytes);
+                        }
+                    }
+                    PreAuthAction::TransitionToLive(bytes) => {
+                        if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
+                            let _ = tx.send(bytes.clone());
+                        }
+                        // plink prints "Press Return to begin session." as a
+                        // one-time continuation gate right after auth
+                        // succeeds -- it's not a credential or a decision,
+                        // just a "press any key" pause, so auto-advance past
+                        // it instead of making the user hit Enter a second
+                        // time (once for their password, once more for this).
+                        if String::from_utf8_lossy(&bytes).contains("Press Return to begin session") {
+                            let mut lock = registry_clone.sessions.lock().unwrap();
+                            if let Some(session) = lock.get_mut(&id_for_task) {
+                                let _ = session.transport.write(b"\r");
+                            }
                         }
                     }
                     PreAuthAction::HostKeyPrompt(info) => {
