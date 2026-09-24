@@ -368,10 +368,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Attempt to reattach to existing session or start a new PTY session
     attachTerminalSession(tab.id, 0, handleIncomingChunk).then((attachInfo) => {
-      if (attachInfo && attachInfo.replay_data.length > 0) {
-        handleIncomingChunk(new Uint8Array(attachInfo.replay_data));
-        addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
-        onUpdateTab(tab.id, { status: 'live' });
+      if (attachInfo) {
+        if (attachInfo.replay_data && attachInfo.replay_data.length > 0) {
+          handleIncomingChunk(new Uint8Array(attachInfo.replay_data));
+          addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
+        } else {
+          addEventLog(`Attached to active session "${tab.sessionName}"`, 'success');
+        }
+        onUpdateTab(tab.id, { status: attachInfo.is_live ? 'live' : 'preauth' });
       } else {
         // Fresh start
         addEventLog(`Spawning session "${tab.sessionName}" (${tab.hostname || 'local'}:${tab.port || 22})`, 'info');

@@ -396,12 +396,20 @@
   - Added 3-way toggle button group (`[Dual | Remote | Local]`) in SFTP header for cramped split-screen environments.
 * Verification: 19/19 Vitest tests pass across 5 test suites; `npm run build` compiles with 0 TS errors in 1.88s; 44/44 workspace tests pass; `cargo deny check` clean.
 
-
-
-
-
-
-
-
-
+### 30. DEEP LOGIC ERRORS AUDIT & COMPREHENSIVE SYSTEM HARDENING
+* 1. `attachTerminalSession` Fall-Through Spawning Duplicate PTY (`TerminalView.tsx`):
+  - Fix: Checked `if (attachInfo)` instead of `if (attachInfo && attachInfo.replay_data.length > 0)`. Fresh sessions (0 bytes scrollback) no longer fall through into `startTerminalSession`, preventing duplicate PTY allocation and orphaned processes in `SessionRegistry`.
+* 2. Closed Tabs Resurrecting on App Restart (`App.tsx`):
+  - Fix: Added `else { clearLayout(); }` to layout persistence effect when `tabs.length === 0`. Closing all tabs now properly clears `localStorage`, preventing zombie tabs resurrecting on relaunch.
+* 3. "ALL TABS" Broadcast Router Coverage (`SyncBroadcastBar.tsx`, `router.rs`, `manager.rs`, `lib.rs`):
+  - Fix: "ALL TABS" broadcast previously looped over channels A-D, missing default `none` tabs. Implemented `SyncInputRouter::broadcast_all`, `SessionRegistry::broadcast_sync_all`, and wired Tauri IPC `broadcast_sync_input` to fan out across all live, unprotected sessions. Added full unit tests in `core_tests.rs`.
+* 4. PuTTY `extra` Fields Preserved on Session Edit (`NewSessionModal.tsx`):
+  - Fix: Preserved existing `extra: editingSession?.extra ? { ...editingSession.extra } : {}` and `lastConnected` instead of overwriting with `{}`. Avoids wiping PuTTY-specific configurations (port forwardings, proxies, keys).
+* 5. Phantom Demo Tunnels Elimination in Real PuTTY Sessions (`TunnelManager.tsx`):
+  - Fix: Real PuTTY sessions without port forwardings now initialize with `tunnels: []` rather than hardcoded mock tunnels (`8080->localhost:80`, `1080 SOCKS5`). Added clean "+ Configure a tunnel" empty state.
+* 6. Memory Leak in `protected_sessions` Purged on Session Close (`router.rs`, `manager.rs`):
+  - Fix: Implemented `SyncInputRouter::remove_session` to clear both channel mapping and protected set when a session closes. Re-created sessions no longer inherit stale protection flags. Added unit test in `core_tests.rs`.
+* 7. SFTP Support for Unsaved & Quick Connect Sessions (`client.rs`, `lib.rs`, `tauriBridge.ts`, `SftpDualPane.tsx`):
+  - Fix: Replaced hardcoded `-load <session_name>` with `build_psftp_args` matching `PlinkTransport::build_args`: uses `[user@]host -P port` when session is unsaved. Added unit tests for arg generation in `client.rs`.
+* Verification: 19/19 Vitest tests passing; 49/49 Cargo tests passing (+5 new tests); `cargo deny check` clean; `npm run build` 0 TS errors.
 

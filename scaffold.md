@@ -50,7 +50,7 @@ This document tracks the directory architecture, file structure, component relat
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
-│       │                                 # ✅ IMPLEMENTED & VERIFIED (18/18 tests pass across workspace)
+│       │                                 # ✅ IMPLEMENTED & VERIFIED (27/27 core unit tests, 49/49 workspace tests pass)
 │       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror
 │       └── src/
 │           ├── lib.rs

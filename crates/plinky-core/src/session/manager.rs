@@ -432,13 +432,25 @@ impl SessionRegistry {
         router.broadcast(self, channel, data)
     }
 
+    /// Broadcasts input data to ALL Live, unbuffered, and unprotected sessions across the registry.
+    pub fn broadcast_sync_all(&self, data: &[u8]) -> Result<usize> {
+        let router = self.sync_router.lock().unwrap();
+        router.broadcast_all(self, data)
+    }
+
+    /// Returns a snapshot of all active session IDs currently registered.
+    pub fn list_session_ids(&self) -> Vec<String> {
+        let lock = self.sessions.lock().unwrap();
+        lock.keys().cloned().collect()
+    }
+
     /// Terminates and removes a session.
     pub fn close_session(&self, id: &str) -> Result<()> {
         let mut lock = self.sessions.lock().unwrap();
         if let Some(mut session) = lock.remove(id) {
             let _ = session.transport.kill();
         }
-        self.sync_router.lock().unwrap().set_session_channel(id, None);
+        self.sync_router.lock().unwrap().remove_session(id);
         Ok(())
     }
 

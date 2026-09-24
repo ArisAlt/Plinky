@@ -113,7 +113,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
   }, [sessionName, remotePath]);
 
   const loadRemoteFiles = async () => {
-    const files = await listRemoteFiles(sessionName, remotePath);
+    const files = await listRemoteFiles(sessionName, remotePath, hostname);
     // Ensure parent directory ".." exists
     if (!files.some(f => f.name === '..')) {
       setRemoteFiles([
@@ -180,7 +180,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
     const dirName = prompt("Enter new remote folder name:");
     if (!dirName || !dirName.trim()) return;
     const cleanPath = remotePath.endsWith('/') ? `${remotePath}${dirName.trim()}` : `${remotePath}/${dirName.trim()}`;
-    const ok = await createRemoteDir(sessionName, cleanPath);
+    const ok = await createRemoteDir(sessionName, cleanPath, hostname);
     if (ok) {
       await loadRemoteFiles();
     }
@@ -190,7 +190,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
     if (!selectedRemote || selectedRemote === '..') return;
     if (!confirm(`Are you sure you want to delete "${selectedRemote}" on ${sessionName}?`)) return;
     const cleanPath = remotePath.endsWith('/') ? `${remotePath}${selectedRemote}` : `${remotePath}/${selectedRemote}`;
-    const ok = await removeRemoteFile(sessionName, cleanPath);
+    const ok = await removeRemoteFile(sessionName, cleanPath, hostname);
     if (ok) {
       setSelectedRemote(null);
       await loadRemoteFiles();

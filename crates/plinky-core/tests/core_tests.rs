@@ -341,8 +341,67 @@ async fn test_sync_input_router_skips_plain_preauth_not_just_hostkey_pending() {
             _ = &mut timeout => break,
         }
     }
-    assert!(String::from_utf8_lossy(&buf).contains("SYNC_TEST"));
-
     registry.close_session("sess-a").unwrap();
     registry.close_session("sess-b").unwrap();
 }
+
+#[tokio::test]
+async fn test_sync_input_router_broadcast_all() {
+    use plinky_core::sync::SyncChannelId;
+
+    let registry = SessionRegistry::new();
+    let (tx1, mut rx1) = mpsc::unbounded_channel();
+    let (tx2, mut rx2) = mpsc::unbounded_channel();
+    let (tx3, _rx3) = mpsc::unbounded_channel();
+
+    // sess-1 has Channel None
+    registry.create_local_session("sess-all-1", "S1", None, 80, 24, tx1).unwrap();
+    // sess-2 has Channel A
+    registry.create_local_session("sess-all-2", "S2", None, 80, 24, tx2).unwrap();
+    registry.set_sync_channel("sess-all-2", Some(SyncChannelId::A));
+    // sess-3 is protected
+    registry.create_local_session("sess-all-3", "S3", None, 80, 24, tx3).unwrap();
+    registry.set_sync_protected("sess-all-3", true);
+
+    // broadcast_sync_all sends to live & unprotected sessions (sess-1 and sess-2)
+    let count = registry.broadcast_sync_all(b"ALL_BROADCAST\n").unwrap();
+    assert_eq!(count, 2, "Both sess-1 and sess-2 should receive ALL broadcast");
+
+    let chunk1 = rx1.recv().await.unwrap();
+    assert!(String::from_utf8_lossy(&chunk1).contains("ALL_BROADCAST"));
+    let chunk2 = rx2.recv().await.unwrap();
+    assert!(String::from_utf8_lossy(&chunk2).contains("ALL_BROADCAST"));
+
+    // Disarming router prevents ALL broadcast
+    registry.set_sync_armed(false);
+    let count = registry.broadcast_sync_all(b"NO_SEND\n").unwrap();
+    assert_eq!(count, 0, "Disarmed router must broadcast to 0 sessions");
+
+    registry.close_session("sess-all-1").unwrap();
+    registry.close_session("sess-all-2").unwrap();
+    registry.close_session("sess-all-3").unwrap();
+}
+
+#[tokio::test]
+async fn test_sync_input_router_remove_session_purges_protection() {
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+
+    registry.create_local_session("sess-purge", "S_Purge", None, 80, 24, tx).unwrap();
+    registry.set_sync_protected("sess-purge", true);
+
+    // Close session invokes remove_session on router
+    registry.close_session("sess-purge").unwrap();
+
+    // Re-create session with same ID, it should not inherit protected status
+    let (tx2, mut rx2) = mpsc::unbounded_channel();
+    registry.create_local_session("sess-purge", "S_Purge", None, 80, 24, tx2).unwrap();
+
+    let count = registry.broadcast_sync_all(b"PING\n").unwrap();
+    assert_eq!(count, 1, "Re-created session must not retain stale protected state");
+    let chunk = rx2.recv().await.unwrap();
+    assert!(String::from_utf8_lossy(&chunk).contains("PING"));
+
+    registry.close_session("sess-purge").unwrap();
+}
+

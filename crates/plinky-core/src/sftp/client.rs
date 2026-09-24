@@ -100,8 +100,38 @@ impl PsftpClient {
         format!("\"{}\"", escaped)
     }
 
+    /// Builds the psftp CLI args for a session, supporting both real saved sessions
+    /// and explicit targets (Quick Connect or split pane sessions).
+    pub fn build_psftp_args(
+        session_name: &str,
+        has_saved_session: bool,
+        explicit_target: Option<&crate::transport::plink::ExplicitTarget>,
+    ) -> Vec<String> {
+        let mut args = vec!["-batch".to_string()];
+        if has_saved_session {
+            args.push("-load".to_string());
+            args.push(session_name.to_string());
+        } else if let Some(target) = explicit_target {
+            if let Some(user) = target.username.as_deref().filter(|u| !u.is_empty()) {
+                args.push(format!("{user}@{}", target.hostname));
+            } else {
+                args.push(target.hostname.clone());
+            }
+            args.push("-P".to_string());
+            args.push(target.port.to_string());
+        } else {
+            args.push("-load".to_string());
+            args.push(session_name.to_string());
+        }
+        args
+    }
+
     /// Lists files in `remote_path` for `session_name` via plain `psftp`.
-    pub async fn list_dir(session_name: &str, remote_path: &str) -> Result<Vec<SftpFileEntry>> {
+    pub async fn list_dir(
+        session_name: &str,
+        remote_path: &str,
+        explicit_target: Option<&crate::transport::plink::ExplicitTarget>,
+    ) -> Result<Vec<SftpFileEntry>> {
         Self::validate_session_name(session_name)?;
         Self::validate_path(remote_path)?;
         let escaped_path = Self::escape_psftp_path(remote_path);
@@ -109,10 +139,12 @@ impl PsftpClient {
         let psftp_path = Self::find_binary()?;
         let mut cmd = Command::new(psftp_path);
 
-        cmd.arg("-batch")
-            .arg("-load")
-            .arg(session_name)
-            .kill_on_drop(true)
+        let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
+        for arg in Self::build_psftp_args(session_name, has_saved_session, explicit_target) {
+            cmd.arg(arg);
+        }
+
+        cmd.kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -144,7 +176,11 @@ impl PsftpClient {
     }
 
     /// Creates a directory on the remote server.
-    pub async fn create_dir(session_name: &str, remote_path: &str) -> Result<()> {
+    pub async fn create_dir(
+        session_name: &str,
+        remote_path: &str,
+        explicit_target: Option<&crate::transport::plink::ExplicitTarget>,
+    ) -> Result<()> {
         Self::validate_session_name(session_name)?;
         Self::validate_path(remote_path)?;
         let escaped_path = Self::escape_psftp_path(remote_path);
@@ -152,10 +188,12 @@ impl PsftpClient {
         let psftp_path = Self::find_binary()?;
         let mut cmd = Command::new(psftp_path);
 
-        cmd.arg("-batch")
-            .arg("-load")
-            .arg(session_name)
-            .kill_on_drop(true)
+        let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
+        for arg in Self::build_psftp_args(session_name, has_saved_session, explicit_target) {
+            cmd.arg(arg);
+        }
+
+        cmd.kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -189,7 +227,11 @@ impl PsftpClient {
     }
 
     /// Removes a file on the remote server.
-    pub async fn remove_file(session_name: &str, remote_path: &str) -> Result<()> {
+    pub async fn remove_file(
+        session_name: &str,
+        remote_path: &str,
+        explicit_target: Option<&crate::transport::plink::ExplicitTarget>,
+    ) -> Result<()> {
         Self::validate_session_name(session_name)?;
         Self::validate_path(remote_path)?;
         let escaped_path = Self::escape_psftp_path(remote_path);
@@ -197,10 +239,12 @@ impl PsftpClient {
         let psftp_path = Self::find_binary()?;
         let mut cmd = Command::new(psftp_path);
 
-        cmd.arg("-batch")
-            .arg("-load")
-            .arg(session_name)
-            .kill_on_drop(true)
+        let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
+        for arg in Self::build_psftp_args(session_name, has_saved_session, explicit_target) {
+            cmd.arg(arg);
+        }
+
+        cmd.kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -276,4 +320,28 @@ mod tests {
             r#""path with ""quotes""""#
         );
     }
+
+    #[test]
+    fn test_build_psftp_args_saved_session() {
+        let args = PsftpClient::build_psftp_args("myserver", true, None);
+        assert_eq!(args, vec!["-batch", "-load", "myserver"]);
+    }
+
+    #[test]
+    fn test_build_psftp_args_unsaved_with_target() {
+        let target = crate::transport::plink::ExplicitTarget {
+            hostname: "192.168.1.100".to_string(),
+            port: 2222,
+            username: Some("root".to_string()),
+        };
+        let args = PsftpClient::build_psftp_args("unsaved_quick", false, Some(&target));
+        assert_eq!(args, vec!["-batch", "root@192.168.1.100", "-P", "2222"]);
+    }
+
+    #[test]
+    fn test_build_psftp_args_unsaved_without_target_fallback() {
+        let args = PsftpClient::build_psftp_args("unsaved_quick", false, None);
+        assert_eq!(args, vec!["-batch", "-load", "unsaved_quick"]);
+    }
 }
+

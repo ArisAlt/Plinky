@@ -67,7 +67,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       folder: folder.trim() || 'Default',
       tags: tagArray.length > 0 ? tagArray : undefined,
       publicKeyFile: publicKeyFile.trim() || undefined,
-      extra: {},
+      extra: editingSession?.extra ? { ...editingSession.extra } : {},
+      lastConnected: editingSession?.lastConnected,
     };
 
     onSave(session);
