@@ -12,6 +12,7 @@ import { VaultManager } from './components/vault/VaultManager';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
+import { SettingsModal } from './components/modals/SettingsModal';
 import { saveLayout, loadLayout } from './services/layoutPersistence';
 import { 
   X, 
@@ -30,11 +31,26 @@ export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
+    '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono", "FiraCode Nerd Font", "Fira Code", "DejaVu Sans Mono", monospace'
+  );
+  const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
+  const [terminalCursorStyle, setTerminalCursorStyle] = useState<'block' | 'bar' | 'underline'>('bar');
   const [sftpSession, setSftpSession] = useState<{ name: string; host: string; remotePath?: string }>({
     name: 'Production Cluster Alpha',
     host: '192.0.2.10',
     remotePath: '/var/www',
   });
+
+  const handleResetLayout = () => {
+    localStorage.removeItem('plinky_workbench_layout_v1');
+    setLayoutMode('single');
+    if (tabs.length > 1) {
+      setTabs([tabs[0]]);
+      setActiveTabId(tabs[0].id);
+    }
+  };
 
   // Load PuTTY sessions and restored layout on startup
   useEffect(() => {
@@ -81,6 +97,16 @@ export const App: React.FC = () => {
   };
 
   const handleConnectSession = (session: PuttySession) => {
+    // A session that's already open should be focused, not duplicated --
+    // clicking Connect on an already-connected session previously just
+    // appended another tab with no visible confirmation anything happened.
+    const existing = tabs.find(t => t.sessionName === session.name);
+    if (existing) {
+      setActiveTabId(existing.id);
+      setActiveView('sessions');
+      return;
+    }
+
     const newTab: TerminalTab = {
       id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       title: session.name,
@@ -186,11 +212,15 @@ export const App: React.FC = () => {
     : tabs;
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-plinky-950 text-slate-100 overflow-hidden font-sans">
+    <div 
+      onContextMenu={(e) => e.preventDefault()}
+      className="h-screen w-screen flex flex-col bg-plinky-950 text-slate-100 overflow-hidden font-sans select-none"
+    >
       {/* Top Application Title & Navigation */}
       <TitleBar
         onQuickConnect={handleQuickConnect}
         onNewSession={() => setIsNewSessionOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         activeView={activeView}
         setActiveView={setActiveView}
       />
@@ -201,6 +231,8 @@ export const App: React.FC = () => {
         <div className="w-64 flex-shrink-0 flex flex-col h-full">
           <SessionExplorer
             sessions={sessions}
+            tabs={tabs}
+            activeTabId={activeTabId}
             onConnectSession={handleConnectSession}
             onOpenSftp={handleOpenSftp}
             onCreateSession={() => setIsNewSessionOpen(true)}
@@ -326,6 +358,9 @@ export const App: React.FC = () => {
                       onUpdateTab={handleUpdateTab}
                       onSplitPane={handleSplitPane}
                       onCwdChange={handleCwdChange}
+                      fontFamily={terminalFontFamily}
+                      fontSize={terminalFontSize}
+                      cursorStyle={terminalCursorStyle}
                     />
                   </div>
                 ) : layoutMode === 'split-vertical' ? (
@@ -340,6 +375,9 @@ export const App: React.FC = () => {
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={handleCwdChange}
+                        fontFamily={terminalFontFamily}
+                        fontSize={terminalFontSize}
+                        cursorStyle={terminalCursorStyle}
                       />
                     </div>
                     {splitTabs[1] ? (
@@ -353,6 +391,9 @@ export const App: React.FC = () => {
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={handleCwdChange}
+                          fontFamily={terminalFontFamily}
+                          fontSize={terminalFontSize}
+                          cursorStyle={terminalCursorStyle}
                         />
                       </div>
                     ) : (
@@ -380,6 +421,9 @@ export const App: React.FC = () => {
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={handleCwdChange}
+                        fontFamily={terminalFontFamily}
+                        fontSize={terminalFontSize}
+                        cursorStyle={terminalCursorStyle}
                       />
                     </div>
                     {splitTabs[1] ? (
@@ -393,6 +437,9 @@ export const App: React.FC = () => {
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={handleCwdChange}
+                          fontFamily={terminalFontFamily}
+                          fontSize={terminalFontSize}
+                          cursorStyle={terminalCursorStyle}
                         />
                       </div>
                     ) : (
@@ -422,6 +469,9 @@ export const App: React.FC = () => {
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={handleCwdChange}
+                          fontFamily={terminalFontFamily}
+                          fontSize={terminalFontSize}
+                          cursorStyle={terminalCursorStyle}
                         />
                       </div>
                     ))}
@@ -470,6 +520,19 @@ export const App: React.FC = () => {
         isOpen={isNewSessionOpen}
         onClose={() => setIsNewSessionOpen(false)}
         onSave={handleSaveSession}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        fontFamily={terminalFontFamily}
+        onChangeFontFamily={setTerminalFontFamily}
+        fontSize={terminalFontSize}
+        onChangeFontSize={setTerminalFontSize}
+        cursorStyle={terminalCursorStyle}
+        onChangeCursorStyle={setTerminalCursorStyle}
+        onResetLayout={handleResetLayout}
       />
     </div>
   );

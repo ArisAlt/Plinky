@@ -16,6 +16,7 @@ interface TitleBarProps {
   onNewSession: () => void;
   activeView: 'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault';
   setActiveView: (view: 'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault') => void;
+  onOpenSettings?: () => void;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -23,6 +24,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onNewSession,
   activeView,
   setActiveView,
+  onOpenSettings,
 }) => {
   const [quickHost, setQuickHost] = useState('');
 
@@ -151,6 +153,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </button>
 
         <button
+          onClick={onOpenSettings}
           title="Settings & PuTTY Path"
           className="p-1.5 rounded hover:bg-plinky-800 text-slate-400 hover:text-slate-200 transition"
         >
