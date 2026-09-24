@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 interface TitleBarProps {
-  onQuickConnect: (host: string, port: number) => void;
+  onQuickConnect: (host: string, port: number, username?: string) => void;
   onNewSession: () => void;
   activeView: 'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault';
   setActiveView: (view: 'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault') => void;
@@ -32,16 +32,27 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     e.preventDefault();
     if (!quickHost.trim()) return;
 
-    let host = quickHost.trim();
+    let target = quickHost.trim();
+    let username: string | undefined;
     let port = 22;
 
-    if (host.includes(':')) {
-      const parts = host.split(':');
-      host = parts[0];
+    // The placeholder advertises "user@host[:port]" but this never actually
+    // split on '@' -- the whole "user@host" string was passed through as
+    // the hostname itself, so plink connected to a literal, invalid
+    // "root@user@host" target instead of the host the user typed.
+    if (target.includes('@')) {
+      const atIdx = target.indexOf('@');
+      username = target.slice(0, atIdx);
+      target = target.slice(atIdx + 1);
+    }
+
+    if (target.includes(':')) {
+      const parts = target.split(':');
+      target = parts[0];
       port = parseInt(parts[1], 10) || 22;
     }
 
-    onQuickConnect(host, port);
+    onQuickConnect(target, port, username);
     setQuickHost('');
   };
 
@@ -129,6 +140,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           type="text"
           value={quickHost}
           onChange={(e) => setQuickHost(e.target.value)}
+          onKeyDown={(e) => {
+            // Some webview engines don't reliably implicit-submit a form
+            // via Enter when its submit button's `disabled` state is tied
+            // to the same input being typed into -- the button can still
+            // read as disabled at the instant Enter fires, so Enter (and
+            // sometimes even the first click right after) silently does
+            // nothing. Submitting directly here removes that dependency.
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleQuickConnectSubmit(e as unknown as React.FormEvent);
+            }
+          }}
           placeholder="Quick Connect: user@host[:port]..."
           className="flex-1 px-2.5 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500 transition"
         />

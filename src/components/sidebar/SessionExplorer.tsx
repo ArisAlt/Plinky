@@ -45,11 +45,14 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
 
   const filteredSessions = sessions.filter(s => {
     const q = searchQuery.toLowerCase();
+    const name = (s.name || '').toLowerCase();
+    const host = (s.hostname || s.host_name || '').toLowerCase();
+    const folder = (s.folder || '').toLowerCase();
     return (
-      s.name.toLowerCase().includes(q) ||
-      s.hostname.toLowerCase().includes(q) ||
+      name.includes(q) ||
+      host.includes(q) ||
       (s.tags && s.tags.some(t => t.toLowerCase().includes(q))) ||
-      (s.folder && s.folder.toLowerCase().includes(q))
+      folder.includes(q)
     );
   });
 
