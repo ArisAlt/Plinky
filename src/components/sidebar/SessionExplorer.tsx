@@ -6,7 +6,8 @@ import {
   Search,
   Plus,
   HardDrive,
-  Tag
+  Tag,
+  Pencil
 } from 'lucide-react';
 
 interface SessionExplorerProps {
@@ -16,6 +17,7 @@ interface SessionExplorerProps {
   onConnectSession: (session: PuttySession) => void;
   onOpenSftp: (session: PuttySession) => void;
   onCreateSession: () => void;
+  onEditSession: (session: PuttySession) => void;
 }
 
 export const SessionExplorer: React.FC<SessionExplorerProps> = ({
@@ -25,6 +27,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   onConnectSession,
   onOpenSftp,
   onCreateSession,
+  onEditSession,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
@@ -197,6 +200,17 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                               <HardDrive className="w-3 h-3" />
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditSession(session);
+                            }}
+                            title="Edit Session Settings"
+                            className="p-1 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-400 hover:text-slate-200 border border-plinky-700 transition"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
                         </div>
                       </div>
 
@@ -285,6 +299,16 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               <span>Open SFTP Pane</span>
             </button>
           )}
+          <button
+            onClick={() => {
+              onEditSession(contextMenu.session);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-plinky-800 transition text-left"
+          >
+            <Pencil className="w-3.5 h-3.5 text-slate-400" />
+            <span>Edit Session</span>
+          </button>
           <button
             onClick={() => {
               if (contextMenu.session.hostname) {
