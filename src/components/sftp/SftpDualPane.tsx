@@ -28,6 +28,7 @@ interface SftpDualPaneProps {
 export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostname, initialRemotePath }) => {
   const [remotePath, setRemotePath] = useState(initialRemotePath || '/var/www');
   const [localPath, setLocalPath] = useState('/home/user/workspace');
+  const [viewMode, setViewMode] = useState<'dual' | 'remote' | 'local'>('dual');
 
   useEffect(() => {
     if (initialRemotePath) {
@@ -269,6 +270,29 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
           <span className="text-slate-500 font-mono">({hostname})</span>
         </div>
         <div className="flex items-center space-x-2">
+          <div className="flex items-center bg-plinky-950 p-0.5 rounded border border-plinky-800 text-[10px]">
+            <button
+              onClick={() => setViewMode('dual')}
+              className={`px-1.5 py-0.5 rounded transition ${viewMode === 'dual' ? 'bg-plinky-800 text-sky-300 font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+              title="Dual Pane (Local & Remote)"
+            >
+              Dual
+            </button>
+            <button
+              onClick={() => setViewMode('remote')}
+              className={`px-1.5 py-0.5 rounded transition ${viewMode === 'remote' ? 'bg-plinky-800 text-emerald-300 font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+              title="Remote Only (compact view for split terminal)"
+            >
+              Remote
+            </button>
+            <button
+              onClick={() => setViewMode('local')}
+              className={`px-1.5 py-0.5 rounded transition ${viewMode === 'local' ? 'bg-plinky-800 text-sky-300 font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+              title="Local Only"
+            >
+              Local
+            </button>
+          </div>
           <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono">
             Plain psftp (ADR-003)
           </span>
@@ -285,194 +309,200 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
       {/* Main Dual-Pane Filesystem Canvas */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Local Filesystem */}
-        <div className="flex-1 flex flex-col border-r border-plinky-800">
-          {/* Local Path Input & Breadcrumbs */}
-          <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
-            <div className="flex items-center space-x-1.5">
-              <HardDrive className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
-              <span className="font-medium text-slate-300">Local:</span>
-              <input
-                type="text"
-                value={localPath}
-                onChange={(e) => setLocalPath(e.target.value)}
-                className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              {renderBreadcrumbs(localPath, setLocalPath)}
-              <div className="relative flex items-center w-28">
-                <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+        {(viewMode === 'dual' || viewMode === 'local') && (
+          <div className="flex-1 flex flex-col border-r border-plinky-800">
+            {/* Local Path Input & Breadcrumbs */}
+            <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
+              <div className="flex items-center space-x-1.5">
+                <HardDrive className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                <span className="font-medium text-slate-300">Local:</span>
                 <input
                   type="text"
-                  placeholder="Filter..."
-                  value={localFilter}
-                  onChange={(e) => setLocalFilter(e.target.value)}
-                  className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
+                  value={localPath}
+                  onChange={(e) => setLocalPath(e.target.value)}
+                  className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
                 />
               </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
-                <tr>
-                  <th className="py-1 px-2 font-medium">Name</th>
-                  <th className="py-1 px-2 font-medium w-20">Size</th>
-                  <th className="py-1 px-2 font-medium w-24">Modified</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-plinky-800/40">
-                {filteredLocal.map((file) => (
-                  <tr
-                    key={file.name}
-                    onClick={() => setSelectedLocal(file.name)}
-                    onDoubleClick={() => handleNavigateLocal(file)}
-                    className={`cursor-pointer hover:bg-plinky-800/50 transition ${
-                      selectedLocal === file.name ? 'bg-sky-500/20 text-sky-200' : ''
-                    }`}
-                  >
-                    <td className="py-1 px-2 flex items-center space-x-1.5">
-                      {file.isDir ? (
-                        <Folder className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      ) : (
-                        <File className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                      )}
-                      <span className="truncate">{file.name}</span>
-                    </td>
-                    <td className="py-1 px-2 text-slate-400 font-mono text-[11px]">
-                      {file.isDir ? '-' : formatSize(file.size)}
-                    </td>
-                    <td className="py-1 px-2 text-slate-500 text-[11px] truncate">
-                      {file.modified}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Center Transfer Action Column */}
-        <div className="w-10 bg-plinky-900/80 border-r border-plinky-800 flex flex-col items-center justify-center space-y-3">
-          <button
-            onClick={handleUpload}
-            disabled={!selectedLocal}
-            title="Upload Selected File to Remote"
-            className="p-1.5 rounded bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 disabled:opacity-30 disabled:pointer-events-none transition"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleDownload}
-            disabled={!selectedRemote}
-            title="Download Selected File to Local"
-            className="p-1.5 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 disabled:opacity-30 disabled:pointer-events-none transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Right: Remote Filesystem */}
-        <div className="flex-1 flex flex-col">
-          {/* Remote Path Input & Breadcrumbs */}
-          <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
-            <div className="flex items-center space-x-1.5">
-              <Server className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-              <span className="font-medium text-slate-300">Remote:</span>
-              <input
-                type="text"
-                value={remotePath}
-                onChange={(e) => setRemotePath(e.target.value)}
-                className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              {renderBreadcrumbs(remotePath, setRemotePath)}
-              <div className="flex items-center space-x-1.5">
-                <button
-                  onClick={handleCreateRemoteFolder}
-                  className="p-1 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 hover:text-white transition"
-                  title="New Remote Folder (mkdir)"
-                >
-                  <FolderPlus className="w-3.5 h-3.5 text-emerald-400" />
-                </button>
-                <button
-                  onClick={handleDeleteRemoteItem}
-                  disabled={!selectedRemote || selectedRemote === '..'}
-                  className="p-1 rounded bg-plinky-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:pointer-events-none transition"
-                  title="Delete Selected Remote Item (rm)"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                </button>
+              <div className="flex items-center justify-between">
+                {renderBreadcrumbs(localPath, setLocalPath)}
                 <div className="relative flex items-center w-28">
                   <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
                   <input
                     type="text"
                     placeholder="Filter..."
-                    value={remoteFilter}
-                    onChange={(e) => setRemoteFilter(e.target.value)}
+                    value={localFilter}
+                    onChange={(e) => setLocalFilter(e.target.value)}
                     className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
                   />
                 </div>
               </div>
             </div>
-          </div>
 
-          <div 
-            onDragOver={handleRemoteDragOver}
-            onDragLeave={handleRemoteDragLeave}
-            onDrop={handleRemoteDrop}
-            className="flex-1 relative overflow-y-auto"
-          >
-            {isRemoteDragOver && (
-              <div className="absolute inset-0 z-30 pointer-events-none border-2 border-dashed border-emerald-400 bg-emerald-950/70 backdrop-blur-xs flex items-center justify-center text-emerald-300 font-mono text-xs space-x-2 animate-in fade-in duration-100">
-                <Upload className="w-5 h-5 text-emerald-400 animate-bounce" />
-                <span>Drop files to upload to {remotePath}</span>
-              </div>
-            )}
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
-                <tr>
-                  <th className="py-1 px-2 font-medium">Name</th>
-                  <th className="py-1 px-2 font-medium w-20">Size</th>
-                  <th className="py-1 px-2 font-medium w-20">Perms</th>
-                  <th className="py-1 px-2 font-medium w-24">Modified</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-plinky-800/40">
-                {filteredRemote.map((file) => (
-                  <tr
-                    key={file.name}
-                    onClick={() => setSelectedRemote(file.name)}
-                    onDoubleClick={() => handleNavigateRemote(file)}
-                    className={`cursor-pointer hover:bg-plinky-800/50 transition ${
-                      selectedRemote === file.name ? 'bg-emerald-500/20 text-emerald-200' : ''
-                    }`}
-                  >
-                    <td className="py-1 px-2 flex items-center space-x-1.5">
-                      {file.isDir ? (
-                        <Folder className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      ) : (
-                        <File className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                      )}
-                      <span className="truncate">{file.name}</span>
-                    </td>
-                    <td className="py-1 px-2 text-slate-400 font-mono text-[11px]">
-                      {file.isDir ? '-' : formatSize(file.size)}
-                    </td>
-                    <td className="py-1 px-2 text-slate-500 font-mono text-[10px]">
-                      {file.permissions}
-                    </td>
-                    <td className="py-1 px-2 text-slate-500 text-[11px] truncate">
-                      {file.modified}
-                    </td>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
+                  <tr>
+                    <th className="py-1 px-2 font-medium">Name</th>
+                    <th className="py-1 px-2 font-medium w-20">Size</th>
+                    <th className="py-1 px-2 font-medium w-24">Modified</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-plinky-800/40">
+                  {filteredLocal.map((file) => (
+                    <tr
+                      key={file.name}
+                      onClick={() => setSelectedLocal(file.name)}
+                      onDoubleClick={() => handleNavigateLocal(file)}
+                      className={`cursor-pointer hover:bg-plinky-800/50 transition ${
+                        selectedLocal === file.name ? 'bg-sky-500/20 text-sky-200' : ''
+                      }`}
+                    >
+                      <td className="py-1 px-2 flex items-center space-x-1.5">
+                        {file.isDir ? (
+                          <Folder className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        ) : (
+                          <File className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                        )}
+                        <span className="truncate">{file.name}</span>
+                      </td>
+                      <td className="py-1 px-2 text-slate-400 font-mono text-[11px]">
+                        {file.isDir ? '-' : formatSize(file.size)}
+                      </td>
+                      <td className="py-1 px-2 text-slate-500 text-[11px] truncate">
+                        {file.modified}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Center Transfer Action Column */}
+        {viewMode === 'dual' && (
+          <div className="w-10 bg-plinky-900/80 border-r border-plinky-800 flex flex-col items-center justify-center space-y-3">
+            <button
+              onClick={handleUpload}
+              disabled={!selectedLocal}
+              title="Upload Selected File to Remote"
+              className="p-1.5 rounded bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 disabled:opacity-30 disabled:pointer-events-none transition"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={!selectedRemote}
+              title="Download Selected File to Local"
+              className="p-1.5 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 disabled:opacity-30 disabled:pointer-events-none transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Right: Remote Filesystem */}
+        {(viewMode === 'dual' || viewMode === 'remote') && (
+          <div className="flex-1 flex flex-col">
+            {/* Remote Path Input & Breadcrumbs */}
+            <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
+              <div className="flex items-center space-x-1.5">
+                <Server className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <span className="font-medium text-slate-300">Remote:</span>
+                <input
+                  type="text"
+                  value={remotePath}
+                  onChange={(e) => setRemotePath(e.target.value)}
+                  className="flex-1 bg-plinky-950 border border-plinky-700/60 rounded px-2 py-0.5 text-xs text-slate-300 font-mono"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                {renderBreadcrumbs(remotePath, setRemotePath)}
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    onClick={handleCreateRemoteFolder}
+                    className="p-1 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 hover:text-white transition"
+                    title="New Remote Folder (mkdir)"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5 text-emerald-400" />
+                  </button>
+                  <button
+                    onClick={handleDeleteRemoteItem}
+                    disabled={!selectedRemote || selectedRemote === '..'}
+                    className="p-1 rounded bg-plinky-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:pointer-events-none transition"
+                    title="Delete Selected Remote Item (rm)"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                  <div className="relative flex items-center w-28">
+                    <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={remoteFilter}
+                      onChange={(e) => setRemoteFilter(e.target.value)}
+                      className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div 
+              onDragOver={handleRemoteDragOver}
+              onDragLeave={handleRemoteDragLeave}
+              onDrop={handleRemoteDrop}
+              className="flex-1 relative overflow-y-auto"
+            >
+              {isRemoteDragOver && (
+                <div className="absolute inset-0 z-30 pointer-events-none border-2 border-dashed border-emerald-400 bg-emerald-950/70 backdrop-blur-xs flex items-center justify-center text-emerald-300 font-mono text-xs space-x-2 animate-in fade-in duration-100">
+                  <Upload className="w-5 h-5 text-emerald-400 animate-bounce" />
+                  <span>Drop files to upload to {remotePath}</span>
+                </div>
+              )}
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
+                  <tr>
+                    <th className="py-1 px-2 font-medium">Name</th>
+                    <th className="py-1 px-2 font-medium w-20">Size</th>
+                    <th className="py-1 px-2 font-medium w-20">Perms</th>
+                    <th className="py-1 px-2 font-medium w-24">Modified</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-plinky-800/40">
+                  {filteredRemote.map((file) => (
+                    <tr
+                      key={file.name}
+                      onClick={() => setSelectedRemote(file.name)}
+                      onDoubleClick={() => handleNavigateRemote(file)}
+                      className={`cursor-pointer hover:bg-plinky-800/50 transition ${
+                        selectedRemote === file.name ? 'bg-emerald-500/20 text-emerald-200' : ''
+                      }`}
+                    >
+                      <td className="py-1 px-2 flex items-center space-x-1.5">
+                        {file.isDir ? (
+                          <Folder className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        ) : (
+                          <File className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                        )}
+                        <span className="truncate">{file.name}</span>
+                      </td>
+                      <td className="py-1 px-2 text-slate-400 font-mono text-[11px]">
+                        {file.isDir ? '-' : formatSize(file.size)}
+                      </td>
+                      <td className="py-1 px-2 text-slate-500 font-mono text-[10px]">
+                        {file.permissions}
+                      </td>
+                      <td className="py-1 px-2 text-slate-500 text-[11px] truncate">
+                        {file.modified}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Transfer Queue Drawer */}

@@ -130,6 +130,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const loggingModeRef = useRef<'printable' | 'all'>('all');
   const loggedBufferRef = useRef<string[]>([]);
 
+  const copyOnSelectRef = useRef(copyOnSelect);
+  copyOnSelectRef.current = copyOnSelect;
+
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
     setEventLogs(prev => [...prev.slice(-200), { id: `${Date.now()}-${Math.random()}`, time, message, level }]);
@@ -317,23 +320,27 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const text = new TextDecoder().decode(chunk);
 
       // Status transitions
-      if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
-        onUpdateTab(tab.id, { status: 'disconnected' });
-      } else if (
+      const isPreauthPattern = (
         text.includes('password:') || 
         text.includes('Password:') || 
         text.includes('login as:') || 
-        text.includes('Using username')
-      ) {
-        onUpdateTab(tab.id, { status: 'preauth' });
-      } else if (
+        text.includes('Using username') ||
+        text.includes('passphrase') ||
+        text.includes('Passphrase') ||
+        text.includes('(yes/no') ||
+        text.includes('Store key in cache?')
+      );
+      const isLivePattern = (
         text.includes('Access granted') || 
         text.includes('Last login:') || 
-        text.includes('$') || 
-        text.includes('#')
-      ) {
-        onUpdateTab(tab.id, { status: 'live' });
-      } else if (tab.status === 'connecting') {
+        /(?:[\$#%❯]\s*)$/m.test(text.trim())
+      );
+
+      if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
+        onUpdateTab(tab.id, { status: 'disconnected' });
+      } else if (isPreauthPattern) {
+        onUpdateTab(tab.id, { status: 'preauth' });
+      } else if (isLivePattern) {
         onUpdateTab(tab.id, { status: 'live' });
       }
 
@@ -351,7 +358,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // PuTTY Classic: Copy on select
     term.onSelectionChange(() => {
-      if (copyOnSelect) {
+      if (copyOnSelectRef.current) {
         const selection = term.getSelection();
         if (selection && selection.length > 0 && navigator.clipboard) {
           navigator.clipboard.writeText(selection);
@@ -460,6 +467,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handleResize = () => {
       try {
         fitAddon.fit();
+        if (isLivePtyRef.current && term.cols && term.rows) {
+          resizeTerminal(tab.id, term.cols, term.rows);
+        }
       } catch {
         // Ignored
       }
@@ -467,9 +477,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     window.addEventListener('resize', handleResize);
 
+    // Dynamic container resize observer (handles split view toggles, sidebar collapse, sftp pane)
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(handleResize);
+      });
+      resizeObserver.observe(containerRef.current);
+    }
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       if (unlistenPrompts) {
         unlistenPrompts();
       }
