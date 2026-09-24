@@ -209,19 +209,35 @@ fn broadcast_sync_input(
     channel: String,
     data: Vec<u8>,
 ) -> Result<usize, String> {
-    let chan_id = SyncChannelId::parse(&channel)
-        .ok_or_else(|| format!("Invalid sync channel '{channel}'"))?;
-    registry
-        .broadcast_sync_input(chan_id, &data)
-        .map_err(|e| format!("Failed to broadcast sync input: {e}"))
+    if channel.eq_ignore_ascii_case("all") {
+        registry
+            .broadcast_sync_all(&data)
+            .map_err(|e| format!("Failed to broadcast sync input: {e}"))
+    } else {
+        let chan_id = SyncChannelId::parse(&channel)
+            .ok_or_else(|| format!("Invalid sync channel '{channel}'"))?;
+        registry
+            .broadcast_sync_input(chan_id, &data)
+            .map_err(|e| format!("Failed to broadcast sync input: {e}"))
+    }
 }
 
 #[tauri::command]
 async fn sftp_list(
     session_name: String,
     remote_path: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
 ) -> Result<Vec<SftpFileEntry>, String> {
-    PsftpClient::list_dir(&session_name, &remote_path)
+    let explicit_target = hostname
+        .filter(|h| !h.is_empty())
+        .map(|h| plinky_core::transport::plink::ExplicitTarget {
+            hostname: h,
+            port: port.unwrap_or(22),
+            username,
+        });
+    PsftpClient::list_dir(&session_name, &remote_path, explicit_target.as_ref())
         .await
         .map_err(|e| format!("Failed to list remote directory: {e}"))
 }
@@ -230,8 +246,18 @@ async fn sftp_list(
 async fn sftp_mkdir(
     session_name: String,
     remote_path: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
 ) -> Result<(), String> {
-    PsftpClient::create_dir(&session_name, &remote_path)
+    let explicit_target = hostname
+        .filter(|h| !h.is_empty())
+        .map(|h| plinky_core::transport::plink::ExplicitTarget {
+            hostname: h,
+            port: port.unwrap_or(22),
+            username,
+        });
+    PsftpClient::create_dir(&session_name, &remote_path, explicit_target.as_ref())
         .await
         .map_err(|e| format!("Failed to create remote directory: {e}"))
 }
@@ -240,8 +266,18 @@ async fn sftp_mkdir(
 async fn sftp_rm(
     session_name: String,
     remote_path: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
 ) -> Result<(), String> {
-    PsftpClient::remove_file(&session_name, &remote_path)
+    let explicit_target = hostname
+        .filter(|h| !h.is_empty())
+        .map(|h| plinky_core::transport::plink::ExplicitTarget {
+            hostname: h,
+            port: port.unwrap_or(22),
+            username,
+        });
+    PsftpClient::remove_file(&session_name, &remote_path, explicit_target.as_ref())
         .await
         .map_err(|e| format!("Failed to remove remote file: {e}"))
 }

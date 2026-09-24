@@ -299,13 +299,22 @@ export async function inspectPpk(path: string): Promise<PpkInfo | null> {
   };
 }
 
-export async function listRemoteFiles(sessionName: string, path: string): Promise<SftpFileEntry[]> {
+export async function listRemoteFiles(
+  sessionName: string, 
+  path: string,
+  hostname?: string,
+  port?: number,
+  username?: string
+): Promise<SftpFileEntry[]> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       return await invoke<SftpFileEntry[]>('sftp_list', {
         sessionName,
         remotePath: path,
+        hostname: hostname || undefined,
+        port: port || undefined,
+        username: username || undefined,
       });
     } catch (e) {
       console.warn("Failed to invoke sftp_list via Tauri:", e);
@@ -325,13 +334,22 @@ export async function listRemoteFiles(sessionName: string, path: string): Promis
   ];
 }
 
-export async function createRemoteDir(sessionName: string, path: string): Promise<boolean> {
+export async function createRemoteDir(
+  sessionName: string, 
+  path: string,
+  hostname?: string,
+  port?: number,
+  username?: string
+): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('sftp_mkdir', {
         sessionName,
         remotePath: path,
+        hostname: hostname || undefined,
+        port: port || undefined,
+        username: username || undefined,
       });
       return true;
     } catch (e) {
@@ -342,13 +360,22 @@ export async function createRemoteDir(sessionName: string, path: string): Promis
   return true;
 }
 
-export async function removeRemoteFile(sessionName: string, path: string): Promise<boolean> {
+export async function removeRemoteFile(
+  sessionName: string, 
+  path: string,
+  hostname?: string,
+  port?: number,
+  username?: string
+): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('sftp_rm', {
         sessionName,
         remotePath: path,
+        hostname: hostname || undefined,
+        port: port || undefined,
+        username: username || undefined,
       });
       return true;
     } catch (e) {

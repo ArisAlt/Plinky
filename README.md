@@ -131,7 +131,7 @@ npm test
 # Check frontend TypeScript compilation & bundle
 npm run build
 
-# Run workspace Rust tests (44 tests including localhost sshd fixture)
+# Run workspace Rust tests (49 tests including localhost sshd fixture)
 cargo test --workspace
 
 # Run dependency license, advisory, and ban validation

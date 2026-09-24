@@ -113,4 +113,35 @@ impl SyncInputRouter {
 
         Ok(sent_count)
     }
+
+    /// Completely purges a session from channels and protected status upon close.
+    pub fn remove_session(&mut self, session_id: &str) {
+        self.set_session_channel(session_id, None);
+        self.protected_sessions.remove(session_id);
+    }
+
+    /// Broadcasts input data to ALL LIVE and UNPROTECTED sessions in the registry,
+    /// regardless of discrete channel assignment.
+    pub fn broadcast_all(
+        &self,
+        registry: &SessionRegistry,
+        data: &[u8],
+    ) -> Result<usize> {
+        if !self.armed {
+            return Ok(0);
+        }
+
+        let session_ids = registry.list_session_ids();
+        let mut sent_count = 0;
+        for session_id in &session_ids {
+            if self.protected_sessions.contains(session_id) {
+                continue;
+            }
+            if registry.write_input_live_only(session_id, data).is_ok() {
+                sent_count += 1;
+            }
+        }
+
+        Ok(sent_count)
+    }
 }

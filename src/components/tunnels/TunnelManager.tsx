@@ -30,30 +30,12 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
       if (rawForwardings) {
         const parsed = parsePortForwardings(rawForwardings, sessionName);
         setTunnels(parsed);
-        return;
+      } else {
+        setTunnels([]);
       }
+      return;
     }
-    // Default fallback demo tunnels if session has none configured yet
-    setTunnels([
-      {
-        id: '1',
-        type: 'Local',
-        srcPort: 8080,
-        destHost: 'localhost',
-        destPort: 80,
-        active: true,
-        sessionName,
-        bytesTransferred: 482910,
-      },
-      {
-        id: '2',
-        type: 'Dynamic',
-        srcPort: 1080,
-        active: true,
-        sessionName,
-        bytesTransferred: 1294820,
-      },
-    ]);
+    setTunnels([]);
   };
 
   const persistTunnels = async (updatedTunnels: TunnelEntry[]) => {
@@ -136,7 +118,19 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
 
       {/* Cards List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {tunnels.map((t) => (
+        {tunnels.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 border border-dashed border-plinky-800 rounded-lg text-slate-500 space-y-2 p-4 text-center">
+            <Network className="w-8 h-8 text-slate-600" />
+            <p className="text-xs">No port forwardings configured for session "{sessionName}".</p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="text-xs text-sky-400 hover:text-sky-300 font-medium underline cursor-pointer"
+            >
+              + Configure a Local (-L), Remote (-R), or Dynamic (-D) tunnel
+            </button>
+          </div>
+        ) : (
+          tunnels.map((t) => (
           <div
             key={t.id}
             className={`p-3.5 rounded-lg border transition ${
@@ -216,7 +210,8 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
               </div>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Add Forward Modal */}

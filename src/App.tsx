@@ -13,7 +13,7 @@ import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
 import { SettingsModal } from './components/modals/SettingsModal';
-import { saveLayout, loadLayout } from './services/layoutPersistence';
+import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
   X, 
   Plus, 
@@ -100,6 +100,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (tabs.length > 0) {
       saveLayout(layoutMode, activeTabId, tabs);
+    } else {
+      clearLayout();
     }
   }, [layoutMode, activeTabId, tabs]);
 

@@ -18,13 +18,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
     const data = new TextEncoder().encode(formatted);
 
     if (isTauriEnvironment()) {
-      if (broadcastTarget === 'all') {
-        for (const ch of ['A', 'B', 'C', 'D'] as const) {
-          await broadcastSyncInput(ch, data);
-        }
-      } else {
-        await broadcastSyncInput(broadcastTarget, data);
-      }
+      await broadcastSyncInput(broadcastTarget, data);
     } else {
       terminalManager.broadcastInput(broadcastTarget, cmd);
     }
