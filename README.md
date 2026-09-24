@@ -109,8 +109,44 @@ flowchart TD
 * **M2: Walking Skeleton**: ✅ **IMPLEMENTED & AUDIT-HARDENED** (7/7 tests pass) — `crates/plinky-core` Transport trait, `LocalTransport` and `PlinkTransport` under `portable-pty`, D3/D9 PreAuth state machine with verbatim prompt matching, structured `HostKeyPromptInfo`, 8 KiB bounded default-deny, `ScrollbackRingBuffer` with sequence tracking and O(1) replay, `SessionRegistry` with `attach_session`, `answer_prompt`, dedicated `session:prompt` events, keystroke blocking during prompts, and Tauri v2 binary streaming channel (`tauri::ipc::Channel<Vec<u8>>`).
 * **M3: `putty-compat` v1**: ✅ **IMPLEMENTED & VERIFIED** (7/7 tests pass) — Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), atomic `.bak` writes, `.ppk` v2/v3 header parser & SHA256 fingerprinting matching `puttygen -l`, OpenSSH rejection, and real system `sshhostkeys` parsing. *(D1 Option A accepted by owner: hand-written Argon2id decryption deferred to v2)*.
 * **M4: Pre-Auth State Machine & Vault**: ✅ **IMPLEMENTED & AUDIT-HARDENED** (6 vault tests pass, 29/29 workspace tests pass) — OWASP-grade Argon2id KDF (64 MiB, 3 iterations) + AES-256-GCM container authenticated with AAD header binding (`PLKV_AAD_v1`), in-memory zeroization (`ZeroizeOnDrop`), debug redaction (`[REDACTED]`), atomic disk synchronization (`vault.bin.tmp` -> `vault.bin` with 0600 permissions), Tauri IPC (`vault_create`, `vault_unlock`, `vault_lock`, `vault_get`, `vault_set`, `vault_get_entry`, `vault_set_entry`, `vault_delete`, `vault_list_keys`), and interactive UI workbench (`VaultManager.tsx`).
-* **M5: Docking Layout, Sync Router & Shell Integration**: ✅ **IMPLEMENTED & AUDIT-HARDENED** (33/33 workspace tests pass) — `SyncInputRouter` in `crates/plinky-core::sync` (D6 Live-only state filtering, protected session skip, global arm toggle, in-memory fan-out, Tauri IPC). Multi-pane split engine in UI (Single, 2-Pane Column, 2-Pane Row, 4-Pane Grid). Shell integration bootstrap in `crates/plinky-core::session::shell_integration` (`OSC 133` prompt markers A/B/C/D and `OSC 7` working directory reporting for Bash, Zsh, and Fish). Real-time SFTP directory following via OSC 7. `Ctrl+Up` / `Ctrl+Down` prompt jumping via OSC 133. R1–R3 layout persistence with fail-closed quarantine (`layoutPersistence.ts`).
+* **M5: Docking Layout, Sync Router & Shell Integration**: ✅ **DONE & AUDIT-HARDENED** (38/38 workspace tests pass) — `SyncInputRouter` in `crates/plinky-core::sync` (D6 Live-only state filtering, protected session skip, global arm toggle, in-memory fan-out, Tauri IPC). Multi-pane split engine in UI (Single, 2-Pane Column, 2-Pane Row, 4-Pane Grid). Shell integration bootstrap in `crates/plinky-core::session::shell_integration` (`OSC 133` prompt markers A/B/C/D and `OSC 7` working directory reporting for Bash, Zsh, and Fish). Real-time SFTP directory following via OSC 7. `Ctrl+Up` / `Ctrl+Down` prompt jumping via OSC 133. R1–R3 layout persistence with fail-closed quarantine (`layoutPersistence.ts`). Hardened write path with `write_input_live_only` to prevent pre-auth password leakage.
 * **M6: WindTerm Productivity**: ✅ **IMPLEMENTED & AUDIT-HARDENED** — Free Type Mode with coordinate delta calculation, alternate buffer suppression, DECCKM application cursor keys mode check (`\x1bOC`/`\x1bOD` vs `\x1b[C`/`\x1b[D`), and OSC 133 semantic prompt region gating (`B..C`). Real-time regex token decorator (`registerLinkProvider` for IPv4 & URLs), in-terminal search bar (`@xterm/addon-search`), quick snippet macro bar, and custom terminal context menu.
 * **M7: SFTP & Port Forwarding**: ✅ **SFTP BACKEND & UI COMPLETE** — ADR-003 plain `psftp` engine in `crates/plinky-core::sftp` (`parser.rs` with space/symlink support, `client.rs` with non-blocking async I/O). Tauri IPC commands (`sftp_list`, `sftp_mkdir`, `sftp_rm`). Interactive dual-pane file manager (`SftpDualPane.tsx`) with directory drill-down, `mkdir`, `rm`, breadcrumbs, and transfer queue. Visual SSH tunnel manager (`TunnelManager.tsx`).
+
+---
+
+## 6. Development & Build Instructions
+
+### Prerequisites
+- **Rust**: 1.77+ (`rustup toolchain install stable`)
+- **Node.js**: 20+ & `npm`
+- **System Binaries**: `plink`, `psftp`, `puttygen` (version 0.75+, 0.85+ recommended)
+- **Linux Libraries**: `libwebkit2gtk-4.1-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
+
+### Verification & Testing
+```bash
+# Run workspace Rust tests (38 tests)
+cargo test --workspace
+
+# Check frontend TypeScript compilation & bundle
+npm run build
+```
+
+### Local Packaging & AppImage Notice
+```bash
+# Development desktop launch
+npm run tauri dev
+
+# Bundling Linux AppImage
+cargo tauri build
+```
+
+> [!NOTE]
+> **Rolling-Release Linux Build Notice**: On bleeding-edge distributions (CachyOS, Arch Linux) where the system glibc and binutils emit `.relr.dyn` relative relocation sections, `linuxdeploy`'s vendored `strip` tool may abort with an unknown section error. Set `NO_STRIP=true` in your environment prior to packaging:
+> ```bash
+> NO_STRIP=true cargo tauri build
+> ```
+> For release distributions targeting general Linux distributions, AppImages must be packaged within an older, pinned base container (e.g., Ubuntu 20.04/22.04 LTS) to guarantee glibc dynamic linker compatibility across target environments.
+
 
 
