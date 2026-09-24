@@ -288,3 +288,68 @@ impl Transport for PlinkTransport {
         matches!(self.child.try_wait(), Ok(None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn saved_session_uses_load_even_with_explicit_target() {
+        // A real saved session's -load carries proxy/key/terminal settings
+        // an explicit host/port/user pair can't replicate, so it must win
+        // whenever the name actually resolves to one on disk.
+        let target = ExplicitTarget {
+            hostname: "203.0.113.5".to_string(),
+            port: 2222,
+            username: Some("someone".to_string()),
+        };
+        let args = PlinkTransport::build_args("Saved Server", true, Some(&target));
+        assert_eq!(args, vec!["-load", "Saved Server", "-t"]);
+    }
+
+    #[test]
+    fn unsaved_session_with_explicit_target_connects_directly() {
+        // Quick Connect / split-pane clones: no ~/.putty/sessions file
+        // under this name, but the caller has real host/port/user -- this
+        // is the fix for the "dummy server" bug (-load on a name that
+        // doesn't exist left plink with no host at all).
+        let target = ExplicitTarget {
+            hostname: "10.10.10.10".to_string(),
+            port: 22,
+            username: Some("citizenzero".to_string()),
+        };
+        let args = PlinkTransport::build_args("Quick (10.10.10.10:22)", false, Some(&target));
+        assert_eq!(args, vec!["citizenzero@10.10.10.10", "-P", "22", "-t"]);
+    }
+
+    #[test]
+    fn unsaved_session_with_explicit_target_and_no_username() {
+        let target = ExplicitTarget {
+            hostname: "10.10.10.10".to_string(),
+            port: 2200,
+            username: None,
+        };
+        let args = PlinkTransport::build_args("Quick (10.10.10.10:2200)", false, Some(&target));
+        assert_eq!(args, vec!["10.10.10.10", "-P", "2200", "-t"]);
+    }
+
+    #[test]
+    fn unsaved_session_with_empty_username_omits_user_prefix() {
+        let target = ExplicitTarget {
+            hostname: "10.10.10.10".to_string(),
+            port: 22,
+            username: Some(String::new()),
+        };
+        let args = PlinkTransport::build_args("Quick (10.10.10.10:22)", false, Some(&target));
+        assert_eq!(args, vec!["10.10.10.10", "-P", "22", "-t"]);
+    }
+
+    #[test]
+    fn unsaved_session_with_no_explicit_target_falls_back_to_load() {
+        // Nothing to connect with at all -- still emit -load so plink's own
+        // "no hostname specified" error surfaces through the existing
+        // FATAL ERROR handling instead of hanging with no target.
+        let args = PlinkTransport::build_args("Orphaned Name", false, None);
+        assert_eq!(args, vec!["-load", "Orphaned Name", "-t"]);
+    }
+}
