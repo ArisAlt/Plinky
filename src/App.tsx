@@ -43,6 +43,41 @@ export const App: React.FC = () => {
     host: '192.0.2.10',
     remotePath: '/var/www',
   });
+  const [copyOnSelect, setCopyOnSelect] = useState<boolean>(() => {
+    const saved = localStorage.getItem('plinky_copy_on_select');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [rightClickAction, setRightClickAction] = useState<'paste' | 'contextMenu'>(() => {
+    const saved = localStorage.getItem('plinky_right_click_action');
+    return (saved === 'paste' || saved === 'contextMenu') ? saved : 'contextMenu';
+  });
+
+  const handleUpdateCopyOnSelect = (val: boolean) => {
+    setCopyOnSelect(val);
+    localStorage.setItem('plinky_copy_on_select', String(val));
+  };
+
+  const handleUpdateRightClickAction = (val: 'paste' | 'contextMenu') => {
+    setRightClickAction(val);
+    localStorage.setItem('plinky_right_click_action', val);
+  };
+
+  const handleDuplicateTab = (targetTab: TerminalTab) => {
+    const newTab: TerminalTab = {
+      id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      title: `${targetTab.sessionName} (Copy)`,
+      sessionName: targetTab.sessionName,
+      syncChannel: targetTab.syncChannel,
+      status: 'live',
+      freeTypeMode: targetTab.freeTypeMode,
+      activeHighlighting: targetTab.activeHighlighting,
+      hostname: targetTab.hostname,
+      port: targetTab.port,
+      username: targetTab.username,
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
 
   const handleResetLayout = () => {
     localStorage.removeItem('plinky_workbench_layout_v1');
@@ -79,7 +114,7 @@ export const App: React.FC = () => {
         sessionName: t.sessionName,
         syncChannel: t.syncChannel,
         status: 'live',
-        freeTypeMode: true,
+        freeTypeMode: false,
         activeHighlighting: true,
         hostname: t.hostname,
         port: t.port,
@@ -114,7 +149,7 @@ export const App: React.FC = () => {
       sessionName: session.name,
       syncChannel: 'none',
       status: 'live',
-      freeTypeMode: true,
+      freeTypeMode: false,
       activeHighlighting: true,
       hostname: session.hostname || 'localhost',
       port: session.port || 22,
@@ -126,7 +161,7 @@ export const App: React.FC = () => {
     setActiveView('sessions');
   };
 
-  const handleQuickConnect = (host: string, port: number) => {
+  const handleQuickConnect = (host: string, port: number, username?: string) => {
     const sessionName = `Quick (${host}:${port})`;
     const newTab: TerminalTab = {
       id: `tab-${Date.now()}`,
@@ -134,11 +169,11 @@ export const App: React.FC = () => {
       sessionName,
       syncChannel: 'none',
       status: 'live',
-      freeTypeMode: true,
+      freeTypeMode: false,
       activeHighlighting: true,
       hostname: host,
       port,
-      username: 'root',
+      username: username || undefined,
     };
 
     setTabs(prev => [...prev, newTab]);
@@ -365,9 +400,13 @@ export const App: React.FC = () => {
                       onUpdateTab={handleUpdateTab}
                       onSplitPane={handleSplitPane}
                       onCwdChange={handleCwdChange}
+                      onDuplicateTab={handleDuplicateTab}
+                      onOpenSettings={() => setIsSettingsOpen(true)}
                       fontFamily={terminalFontFamily}
                       fontSize={terminalFontSize}
                       cursorStyle={terminalCursorStyle}
+                      copyOnSelect={copyOnSelect}
+                      rightClickAction={rightClickAction}
                     />
                   </div>
                 ) : layoutMode === 'split-vertical' ? (
@@ -382,9 +421,13 @@ export const App: React.FC = () => {
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={handleCwdChange}
+                        onDuplicateTab={handleDuplicateTab}
+                        onOpenSettings={() => setIsSettingsOpen(true)}
                         fontFamily={terminalFontFamily}
                         fontSize={terminalFontSize}
                         cursorStyle={terminalCursorStyle}
+                        copyOnSelect={copyOnSelect}
+                        rightClickAction={rightClickAction}
                       />
                     </div>
                     {splitTabs[1] ? (
@@ -398,9 +441,13 @@ export const App: React.FC = () => {
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={handleCwdChange}
+                          onDuplicateTab={handleDuplicateTab}
+                          onOpenSettings={() => setIsSettingsOpen(true)}
                           fontFamily={terminalFontFamily}
                           fontSize={terminalFontSize}
                           cursorStyle={terminalCursorStyle}
+                          copyOnSelect={copyOnSelect}
+                          rightClickAction={rightClickAction}
                         />
                       </div>
                     ) : (
@@ -428,9 +475,13 @@ export const App: React.FC = () => {
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={handleCwdChange}
+                        onDuplicateTab={handleDuplicateTab}
+                        onOpenSettings={() => setIsSettingsOpen(true)}
                         fontFamily={terminalFontFamily}
                         fontSize={terminalFontSize}
                         cursorStyle={terminalCursorStyle}
+                        copyOnSelect={copyOnSelect}
+                        rightClickAction={rightClickAction}
                       />
                     </div>
                     {splitTabs[1] ? (
@@ -444,9 +495,13 @@ export const App: React.FC = () => {
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={handleCwdChange}
+                          onDuplicateTab={handleDuplicateTab}
+                          onOpenSettings={() => setIsSettingsOpen(true)}
                           fontFamily={terminalFontFamily}
                           fontSize={terminalFontSize}
                           cursorStyle={terminalCursorStyle}
+                          copyOnSelect={copyOnSelect}
+                          rightClickAction={rightClickAction}
                         />
                       </div>
                     ) : (
@@ -476,9 +531,13 @@ export const App: React.FC = () => {
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={handleCwdChange}
+                          onDuplicateTab={handleDuplicateTab}
+                          onOpenSettings={() => setIsSettingsOpen(true)}
                           fontFamily={terminalFontFamily}
                           fontSize={terminalFontSize}
                           cursorStyle={terminalCursorStyle}
+                          copyOnSelect={copyOnSelect}
+                          rightClickAction={rightClickAction}
                         />
                       </div>
                     ))}
@@ -543,6 +602,10 @@ export const App: React.FC = () => {
         onChangeFontSize={setTerminalFontSize}
         cursorStyle={terminalCursorStyle}
         onChangeCursorStyle={setTerminalCursorStyle}
+        copyOnSelect={copyOnSelect}
+        onChangeCopyOnSelect={handleUpdateCopyOnSelect}
+        rightClickAction={rightClickAction}
+        onChangeRightClickAction={handleUpdateRightClickAction}
         onResetLayout={handleResetLayout}
       />
     </div>

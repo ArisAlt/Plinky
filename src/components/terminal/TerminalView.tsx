@@ -16,10 +16,9 @@ import {
   HostKeyPromptInfo,
   injectShellIntegration
 } from '../../services/tauriBridge';
-import { 
-  Radio, 
-  Edit3, 
-  Sparkles, 
+import {
+  Radio,
+  Sparkles,
   ShieldAlert, 
   Search, 
   ChevronUp, 
@@ -31,17 +30,34 @@ import {
   CheckSquare,
   Columns,
   Rows,
-  Zap
+  Zap,
+  FileText,
+  List,
+  RotateCcw,
+  Download,
+  CopyCheck,
+  Settings as SettingsIcon
 } from 'lucide-react';
+
+interface PuTTYEventLog {
+  id: string;
+  time: string;
+  message: string;
+  level: 'info' | 'warn' | 'error' | 'success';
+}
 
 interface TerminalViewProps {
   tab: TerminalTab;
   onUpdateTab: (tabId: string, updates: Partial<TerminalTab>) => void;
   onSplitPane?: (direction: 'vertical' | 'horizontal') => void;
   onCwdChange?: (cwd: string) => void;
+  onDuplicateTab?: (tab: TerminalTab) => void;
+  onOpenSettings?: () => void;
   fontFamily?: string;
   fontSize?: number;
   cursorStyle?: 'block' | 'bar' | 'underline';
+  copyOnSelect?: boolean;
+  rightClickAction?: 'paste' | 'contextMenu';
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
@@ -49,9 +65,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   onUpdateTab,
   onSplitPane,
   onCwdChange,
+  onDuplicateTab,
+  onOpenSettings,
   fontFamily,
   fontSize,
   cursorStyle,
+  copyOnSelect = true,
+  rightClickAction = 'contextMenu',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -65,12 +85,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const [hooksInjected, setHooksInjected] = useState(false);
   const [hooksError, setHooksError] = useState<string | null>(null);
-  const [freeTypeHint, setFreeTypeHint] = useState<string | null>(null);
   // Same condition used to pick isLocal when starting the PTY -- if this is
   // true the backend actually spawned a local shell, not an SSH session, so
   // the header shouldn't show a fabricated "(localhost:22)" network target.
   const isLocalSession = tab.hostname === 'localhost' || !tab.hostname;
-  const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
+  // Free Type mode's toggle was removed (confusing, no visible feedback) --
+  // isFreeType is kept read-only at whatever the tab was created with
+  // (always false now, see App.tsx) since the cursor-style/click-to-edit
+  // logic below still reads it.
+  const [isFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<HostKeyPromptInfo | null>(null);
 
@@ -84,6 +107,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // PuTTY Event Log State
+  const [eventLogs, setEventLogs] = useState<PuTTYEventLog[]>([
+    {
+      id: 'init-1',
+      time: new Date().toTimeString().split(' ')[0],
+      message: `Configured session "${tab.sessionName}" target: ${tab.hostname || 'localhost'}:${tab.port || 22}`,
+      level: 'info',
+    },
+  ]);
+  const [isEventLogOpen, setIsEventLogOpen] = useState(false);
+
+  // PuTTY Session Logging State
+  const [isLogging, setIsLogging] = useState(false);
+  const [loggingMode, setLoggingMode] = useState<'printable' | 'all'>('all');
+  const [loggedBytes, setLoggedBytes] = useState(0);
+  const [isLoggingOpen, setIsLoggingOpen] = useState(false);
+  const isLoggingRef = useRef(false);
+  const loggingModeRef = useRef<'printable' | 'all'>('all');
+  const loggedBufferRef = useRef<string[]>([]);
+
+  const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
+    const time = new Date().toTimeString().split(' ')[0];
+    setEventLogs(prev => [...prev.slice(-200), { id: `${Date.now()}-${Math.random()}`, time, message, level }]);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -255,26 +303,47 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       unlistenPrompts = unlisten;
     });
 
-    // Attempt to reattach to existing session or start a new PTY session
-    attachTerminalSession(tab.id, 0, (chunk) => {
+    const handleIncomingChunk = (chunk: Uint8Array) => {
       isLivePtyRef.current = true;
       term.write(chunk);
-    }).then((attachInfo) => {
+      if (isLoggingRef.current) {
+        const text = new TextDecoder().decode(chunk);
+        if (loggingModeRef.current === 'printable') {
+          const printable = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+          loggedBufferRef.current.push(printable);
+          setLoggedBytes(prev => prev + printable.length);
+        } else {
+          loggedBufferRef.current.push(text);
+          setLoggedBytes(prev => prev + chunk.byteLength);
+        }
+      }
+    };
+
+    // PuTTY Classic: Copy on select
+    term.onSelectionChange(() => {
+      if (copyOnSelect) {
+        const selection = term.getSelection();
+        if (selection && selection.length > 0 && navigator.clipboard) {
+          navigator.clipboard.writeText(selection);
+        }
+      }
+    });
+
+    // Attempt to reattach to existing session or start a new PTY session
+    attachTerminalSession(tab.id, 0, handleIncomingChunk).then((attachInfo) => {
       if (attachInfo && attachInfo.replay_data.length > 0) {
-        isLivePtyRef.current = true;
-        term.write(new Uint8Array(attachInfo.replay_data));
+        handleIncomingChunk(new Uint8Array(attachInfo.replay_data));
+        addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
       } else {
         // Fresh start
+        addEventLog(`Spawning session "${tab.sessionName}" (${tab.hostname || 'local'}:${tab.port || 22})`, 'info');
         startTerminalSession(
           tab.id,
           tab.sessionName,
           tab.hostname === 'localhost' || !tab.hostname,
           term.cols,
           term.rows,
-          (chunk) => {
-            isLivePtyRef.current = true;
-            term.write(chunk);
-          },
+          handleIncomingChunk,
           tab.hostname,
           tab.port,
           tab.username
@@ -283,9 +352,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             // Browser development preview fallback banner
             term.writeln(`\x1b[36m╔══════════════════════════════════════════════════════════════════╗\x1b[0m`);
             term.writeln(`\x1b[36m║\x1b[0m  \x1b[1mPlinky PuTTY Wrapper (Preview)\x1b[0m — ${tab.sessionName} (${tab.hostname}:${tab.port})  \x1b[36m║\x1b[0m`);
-            term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Free Type: \x1b[32mActive\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
+            term.writeln(`\x1b[36m║\x1b[0m  Protocol: \x1b[35mSSH\x1b[0m | Sync Channel: \x1b[36m${tab.syncChannel.toUpperCase()}\x1b[0m     \x1b[36m║\x1b[0m`);
             term.writeln(`\x1b[36m╚══════════════════════════════════════════════════════════════════╝\x1b[0m\r\n`);
             term.write(`\x1b[32m${tab.username || 'deploy'}@${tab.sessionName.toLowerCase().replace(/\s+/g, '-')}\x1b[0m:\x1b[34m~\x1b[0m$ `);
+            addEventLog("Running in browser development preview mode", 'info');
+          } else {
+            addEventLog(`PTY session live. Terminal ready.`, 'success');
           }
         });
       }
@@ -497,8 +569,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // Context Menu Handler
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 220);
-    const y = Math.min(e.clientY, window.innerHeight - 280);
+    if (rightClickAction === 'paste' && !e.shiftKey) {
+      handlePaste();
+      return;
+    }
+    const x = Math.min(e.clientX, window.innerWidth - 240);
+    const y = Math.min(e.clientY, window.innerHeight - 380);
     setContextMenu({ x, y });
   };
 
@@ -506,6 +582,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const selection = terminalRef.current?.getSelection();
     if (selection && navigator.clipboard) {
       navigator.clipboard.writeText(selection);
+    }
+    setContextMenu(null);
+  };
+
+  const handleCopyAll = () => {
+    if (!terminalRef.current) return;
+    const buffer = terminalRef.current.buffer.active;
+    let fullText = '';
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (line) {
+        fullText += line.translateToString(true) + '\n';
+      }
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(fullText.trimEnd());
+      addEventLog(`Copied entire scrollback (${buffer.length} lines) to clipboard`, 'info');
     }
     setContextMenu(null);
   };
@@ -529,9 +622,35 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setContextMenu(null);
   };
 
-  const handleClear = () => {
+  const handleClearScrollback = () => {
     terminalRef.current?.clear();
+    addEventLog("Terminal scrollback cleared", 'info');
     setContextMenu(null);
+  };
+
+  const handleResetTerminal = () => {
+    if (terminalRef.current) {
+      terminalRef.current.reset();
+    }
+    if (isLivePtyRef.current) {
+      writeTerminalInput(tab.id, new TextEncoder().encode('\x1bc'));
+    }
+    addEventLog("Terminal hard reset (RIS) sent", 'info');
+    setContextMenu(null);
+  };
+
+  const handleExportLog = () => {
+    const fullText = loggedBufferRef.current.join('');
+    const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `plinky_${tab.sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addEventLog(`Exported session log (${(fullText.length / 1024).toFixed(1)} KB)`, 'success');
   };
 
   const handleAnswerPrompt = async (answer: 'store' | 'once' | 'reject') => {
@@ -547,26 +666,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     onUpdateTab(tab.id, { syncChannel: nextChannel });
     terminalManager.setSyncChannel(tab.id, nextChannel);
     setSyncChannel(tab.id, nextChannel === 'none' ? null : nextChannel);
-  };
-
-  const toggleFreeType = () => {
-    const nextState = !isFreeType;
-    setIsFreeType(nextState);
-    onUpdateTab(tab.id, { freeTypeMode: nextState });
-    terminalManager.setFreeTypeMode(tab.id, nextState);
-    if (terminalRef.current) {
-      terminalRef.current.options.cursorStyle = nextState ? 'bar' : 'block';
-    }
-    // The toggle's own effect (cursor style bar vs block) is subtle enough
-    // to look like it did nothing -- name what it actually does the first
-    // time it's turned on.
-    if (nextState) {
-      setHooksError(null);
-      setFreeTypeHint('Free Type on -- click anywhere in the terminal to move the cursor there');
-      setTimeout(() => setFreeTypeHint(null), 4000);
-    } else {
-      setFreeTypeHint(null);
-    }
   };
 
   const handleInjectHooks = async () => {
@@ -625,12 +724,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             {hooksError}
           </div>
         )}
-        {freeTypeHint && (
-          <div className="absolute top-full right-3 mt-1 z-40 px-2 py-1 rounded bg-sky-950/95 border border-sky-500/50 text-sky-300 text-[11px] shadow-lg animate-in fade-in slide-in-from-top-1 duration-150">
-            {freeTypeHint}
-          </div>
-        )}
-
         <div className="flex items-center space-x-2">
           {/* Shell Integration Hook Injector Button */}
           <button
@@ -669,20 +762,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             <span>Channel: {tab.syncChannel === 'none' ? 'Off' : tab.syncChannel}</span>
           </button>
 
-          {/* Free Type Mode Toggle */}
-          <button
-            onClick={toggleFreeType}
-            title="Toggle WindTerm Free Type Mode (click anywhere to edit)"
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-all ${
-              isFreeType
-                ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-xs'
-                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-300'
-            }`}
-          >
-            <Edit3 className="w-3 h-3" />
-            <span>Free Type</span>
-          </button>
-
           {/* Regex Highlighting Indicator */}
           <span
             title="Active Regex Highlighting: IPs, UUIDs, Errors, Warnings, URLs (Clickable links enabled)"
@@ -691,6 +770,34 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             <Sparkles className="w-3 h-3" />
             <span>Regex Hi</span>
           </span>
+
+          {/* PuTTY Session Logging Button */}
+          <button
+            onClick={() => setIsLoggingOpen(true)}
+            title="Session Logging (PuTTY-style) - record output to log file"
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-all ${
+              isLogging
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-300'
+            }`}
+          >
+            {isLogging ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-400 animate-ping"></span>
+            ) : (
+              <FileText className="w-3 h-3 text-amber-400" />
+            )}
+            <span>{isLogging ? `Log: ${(loggedBytes / 1024).toFixed(1)}k` : 'Log'}</span>
+          </button>
+
+          {/* PuTTY Event Log Button */}
+          <button
+            onClick={() => setIsEventLogOpen(true)}
+            title="PuTTY Event Log - view connection diagnostics and trace"
+            className="flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 text-[11px] transition"
+          >
+            <List className="w-3 h-3 text-cyan-400" />
+            <span>Events</span>
+          </button>
         </div>
       </div>
 
@@ -803,7 +910,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {/* Custom Terminal Context Menu */}
         {contextMenu && (
           <div
-            className="fixed z-50 w-48 bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-50 w-52 bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -813,6 +920,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             >
               <Copy className="w-3.5 h-3.5 text-sky-400" />
               <span>Copy Selection</span>
+            </button>
+            <button
+              onClick={handleCopyAll}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <CopyCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Copy All to Clipboard</span>
             </button>
             <button
               onClick={handlePaste}
@@ -830,6 +944,66 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             </button>
             <div className="border-t border-plinky-800 my-1" />
             <button
+              onClick={handleClearScrollback}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Clear Scrollback</span>
+            </button>
+            <button
+              onClick={handleResetTerminal}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+              <span>Reset Terminal (RIS)</span>
+            </button>
+            <div className="border-t border-plinky-800 my-1" />
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                setIsEventLogOpen(true);
+              }}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <List className="w-3.5 h-3.5 text-cyan-400" />
+              <span>PuTTY Event Log...</span>
+            </button>
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                setIsLoggingOpen(true);
+              }}
+              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-400" />
+              <span>Session Logging...</span>
+            </button>
+            {onDuplicateTab && (
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  onDuplicateTab(tab);
+                }}
+                className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+              >
+                <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Duplicate Session</span>
+              </button>
+            )}
+            {onOpenSettings && (
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  onOpenSettings();
+                }}
+                className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+              >
+                <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
+                <span>Change Settings...</span>
+              </button>
+            )}
+            <div className="border-t border-plinky-800 my-1" />
+            <button
               onClick={() => {
                 setContextMenu(null);
                 setIsSearchOpen(true);
@@ -840,19 +1014,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <Search className="w-3.5 h-3.5 text-amber-400" />
               <span>Find in Terminal...</span>
             </button>
-            <button
-              onClick={() => {
-                toggleFreeType();
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{isFreeType ? 'Disable Free Type' : 'Enable Free Type'}</span>
-            </button>
-            <div className="border-t border-plinky-800 my-1" />
             {onSplitPane && (
               <>
+                <div className="border-t border-plinky-800 my-1" />
                 <button
                   onClick={() => {
                     onSplitPane('vertical');
@@ -873,16 +1037,193 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   <Rows className="w-3.5 h-3.5 text-sky-400" />
                   <span>Split Horizontally</span>
                 </button>
-                <div className="border-t border-plinky-800 my-1" />
               </>
             )}
-            <button
-              onClick={handleClear}
-              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-rose-500/20 hover:text-rose-300 text-left transition"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-              <span>Clear Terminal</span>
-            </button>
+          </div>
+        )}
+
+        {/* PuTTY Event Log Modal */}
+        {isEventLogOpen && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+            <div className="bg-plinky-900 border border-cyan-500/60 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[80vh] overflow-hidden text-slate-100">
+              <div className="px-4 py-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <List className="w-4 h-4 text-cyan-400" />
+                  <span className="font-semibold text-sm">PuTTY Event Log — {tab.sessionName}</span>
+                </div>
+                <button
+                  onClick={() => setIsEventLogOpen(false)}
+                  className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-950/90 font-mono text-[11px] space-y-1 select-text">
+                {eventLogs.length === 0 ? (
+                  <div className="text-slate-500 italic">No events logged yet.</div>
+                ) : (
+                  eventLogs.map((log) => (
+                    <div key={log.id} className="flex space-x-2 leading-relaxed">
+                      <span className="text-slate-500 select-none">[{log.time}]</span>
+                      <span
+                        className={
+                          log.level === 'error'
+                            ? 'text-rose-400'
+                            : log.level === 'warn'
+                            ? 'text-amber-400'
+                            : log.level === 'success'
+                            ? 'text-emerald-400 font-medium'
+                            : 'text-slate-300'
+                        }
+                      >
+                        {log.message}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="p-3 bg-plinky-950 border-t border-plinky-800 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    const text = eventLogs.map(e => `[${e.time}] ${e.message}`).join('\n');
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(text);
+                    }
+                    addEventLog("Event log copied to clipboard", 'info');
+                  }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition"
+                >
+                  <CopyCheck className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Copy All to Clipboard</span>
+                </button>
+
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setEventLogs([])}
+                    className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={() => setIsEventLogOpen(false)}
+                    className="px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PuTTY Session Logging Modal */}
+        {isLoggingOpen && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+            <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden text-slate-100">
+              <div className="px-4 py-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FileText className="w-4 h-4 text-amber-400" />
+                  <span className="font-semibold text-sm">PuTTY Session Logging</span>
+                </div>
+                <button
+                  onClick={() => setIsLoggingOpen(false)}
+                  className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4 text-xs">
+                {/* Status Bar */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-plinky-950 border border-plinky-800">
+                  <div className="flex items-center space-x-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${isLogging ? 'bg-rose-500 animate-ping' : 'bg-slate-600'}`}></span>
+                    <span className="font-semibold text-slate-200">
+                      {isLogging ? 'Logging is ACTIVE' : 'Logging is STOPPED'}
+                    </span>
+                  </div>
+                  <span className="font-mono text-slate-400">
+                    {(loggedBytes / 1024).toFixed(1)} KB logged
+                  </span>
+                </div>
+
+                {/* Mode Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-slate-400 font-medium">Session Logging Mode</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2 cursor-pointer p-2 rounded bg-plinky-950 border border-plinky-800 hover:border-slate-700">
+                      <input
+                        type="radio"
+                        name="loggingMode"
+                        checked={loggingMode === 'all'}
+                        onChange={() => setLoggingMode('all')}
+                        className="text-sky-500 focus:ring-0"
+                      />
+                      <div>
+                        <span className="text-slate-200 font-medium block">All session output</span>
+                        <span className="text-[10px] text-slate-500 block">Includes terminal escapes, cursor sequences, and raw VT codes.</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center space-x-2 cursor-pointer p-2 rounded bg-plinky-950 border border-plinky-800 hover:border-slate-700">
+                      <input
+                        type="radio"
+                        name="loggingMode"
+                        checked={loggingMode === 'printable'}
+                        onChange={() => setLoggingMode('printable')}
+                        className="text-sky-500 focus:ring-0"
+                      />
+                      <div>
+                        <span className="text-slate-200 font-medium block">Printable output only</span>
+                        <span className="text-[10px] text-slate-500 block">Strips ANSI color and cursor codes, keeping pure printable text.</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-2 border-t border-plinky-800">
+                  <button
+                    onClick={() => {
+                      const next = !isLogging;
+                      setIsLogging(next);
+                      addEventLog(`PuTTY session logging ${next ? 'started' : 'stopped'} (mode: ${loggingMode})`, next ? 'success' : 'info');
+                    }}
+                    className={`px-3 py-1.5 rounded font-medium transition ${
+                      isLogging
+                        ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    }`}
+                  >
+                    {isLogging ? 'Stop Logging' : 'Start Logging'}
+                  </button>
+
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handleExportLog}
+                      disabled={loggedBufferRef.current.length === 0}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium transition"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export .log</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        loggedBufferRef.current = [];
+                        setLoggedBytes(0);
+                        addEventLog("Session log buffer cleared", 'info');
+                      }}
+                      className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
