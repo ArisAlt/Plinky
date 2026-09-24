@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PuttySession, TerminalTab } from '../../types/session';
 import {
   Folder,
+  FolderInput,
   Terminal,
   Search,
   Plus,
@@ -18,6 +19,7 @@ interface SessionExplorerProps {
   onOpenSftp: (session: PuttySession) => void;
   onCreateSession: () => void;
   onEditSession: (session: PuttySession) => void;
+  onMoveToFolder: (session: PuttySession, folder: string) => void;
 }
 
 export const SessionExplorer: React.FC<SessionExplorerProps> = ({
@@ -28,13 +30,22 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   onOpenSftp,
   onCreateSession,
   onEditSession,
+  onMoveToFolder,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: PuttySession } | null>(null);
+  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false);
+  const [newFolderInput, setNewFolderInput] = useState('');
+  const [draggingSession, setDraggingSession] = useState<PuttySession | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
 
   React.useEffect(() => {
-    const handleOutsideClick = () => setContextMenu(null);
+    const handleOutsideClick = () => {
+      setContextMenu(null);
+      setMoveSubmenuOpen(false);
+      setNewFolderInput('');
+    };
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
@@ -42,6 +53,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const toggleFolder = (folder: string) => {
     setCollapsedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
   };
+
+  // All folder names that exist across saved sessions (not just the
+  // currently filtered ones), so the "Move to Folder" list stays complete
+  // while searching.
+  const allFolders = Array.from(new Set(sessions.map(s => s.folder || 'Uncategorized'))).sort();
 
   const filteredSessions = sessions.filter(s => {
     const q = searchQuery.toLowerCase();
@@ -118,10 +134,29 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           const isCollapsed = collapsedFolders[folder];
           return (
             <div key={folder} className="space-y-1">
-              {/* Folder Header */}
+              {/* Folder Header -- also a drop target for dragged sessions */}
               <button
                 onClick={() => toggleFolder(folder)}
-                className="w-full flex items-center space-x-1.5 px-1 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-plinky-800/50 transition text-left"
+                onDragOver={(e) => {
+                  if (!draggingSession) return;
+                  e.preventDefault();
+                  setDragOverFolder(folder);
+                }}
+                onDragLeave={() => setDragOverFolder(prev => (prev === folder ? null : prev))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverFolder(null);
+                  if (draggingSession) {
+                    onMoveToFolder(draggingSession, folder);
+                    setDraggingSession(null);
+                  }
+                }}
+                title={draggingSession ? `Drop to move into "${folder}"` : undefined}
+                className={`w-full flex items-center space-x-1.5 px-1 py-1 rounded text-xs font-medium transition text-left ${
+                  dragOverFolder === folder
+                    ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/50'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/50'
+                }`}
               >
                 <Folder className={`w-3.5 h-3.5 transition-transform ${isCollapsed ? '-rotate-90 text-slate-500' : 'text-sky-400'}`} />
                 <span className="flex-1 truncate">{folder}</span>
@@ -137,13 +172,22 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                     return (
                     <div
                       key={session.name}
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggingSession(session);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => {
+                        setDraggingSession(null);
+                        setDragOverFolder(null);
+                      }}
                       onDoubleClick={() => onConnectSession(session, true)}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         setContextMenu({ x: e.clientX, y: e.clientY, session });
                       }}
-                      title={openTab ? 'Double-click, or right-click -> Connect, to open another tab' : 'Double-click, or right-click -> Connect'}
+                      title={openTab ? 'Double-click, or right-click -> Connect, to open another tab. Drag to move between folders.' : 'Double-click, or right-click -> Connect. Drag to move between folders.'}
                       className={`group flex flex-col p-2 rounded border cursor-pointer transition select-none shadow-xs ${
                         isActiveTab
                           ? 'bg-sky-500/10 border-sky-500/60'
@@ -297,6 +341,56 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <Pencil className="w-3.5 h-3.5 text-slate-400" />
             <span>Edit Session</span>
           </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMoveSubmenuOpen(v => !v);
+            }}
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-plinky-800 transition text-left"
+          >
+            <FolderInput className="w-3.5 h-3.5 text-amber-400" />
+            <span className="flex-1">Move to Folder</span>
+            <span className="text-slate-500">{moveSubmenuOpen ? '▾' : '▸'}</span>
+          </button>
+          {moveSubmenuOpen && (
+            <div className="border-t border-b border-plinky-800/80 py-1">
+              <div className="max-h-32 overflow-y-auto">
+                {allFolders
+                  .filter(f => f !== (contextMenu.session.folder || 'Uncategorized'))
+                  .map(f => (
+                    <button
+                      key={f}
+                      onClick={() => {
+                        onMoveToFolder(contextMenu.session, f);
+                        setContextMenu(null);
+                        setMoveSubmenuOpen(false);
+                      }}
+                      className="w-full flex items-center px-4 py-1 text-[11px] text-slate-300 hover:text-white hover:bg-sky-600/20 transition text-left truncate"
+                    >
+                      {f}
+                    </button>
+                  ))}
+              </div>
+              <div className="px-3 pt-1">
+                <input
+                  type="text"
+                  value={newFolderInput}
+                  onChange={(e) => setNewFolderInput(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newFolderInput.trim()) {
+                      onMoveToFolder(contextMenu.session, newFolderInput.trim());
+                      setContextMenu(null);
+                      setMoveSubmenuOpen(false);
+                      setNewFolderInput('');
+                    }
+                  }}
+                  placeholder="New folder name, Enter to create"
+                  className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                />
+              </div>
+            </div>
+          )}
           <button
             onClick={() => {
               if (contextMenu.session.hostname) {
