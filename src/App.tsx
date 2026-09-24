@@ -202,7 +202,9 @@ export const App: React.FC = () => {
     if (activeTabId === id) {
       setActiveTabId(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
     }
-    if (remaining.length < 2 && layoutMode !== 'single') {
+    if (remaining.length === 0) {
+      setLayoutMode('single');
+    } else if (remaining.length < 2 && layoutMode !== 'single' && layoutMode !== 'terminal-sftp') {
       setLayoutMode('single');
     }
   };

@@ -377,6 +377,25 @@
   - `SftpDualPane.tsx`: Dragging files onto remote files pane triggers upload task queue to current remote directory with visual drop zone indicator.
 * Verification: 18/18 Vitest tests pass across 5 test suites; `npm run build` compiles 0 TS errors in 2.13s; 44/44 workspace tests pass; `cargo deny check` clean.
 
+### 29. UI CODEBASE AUDIT & POLISH REFINEMENTS
+* 1. Terminal Canvas Fit & ResizeObserver (`TerminalView.tsx`):
+  - Solved terminal canvas size mismatch when toggling split views (`terminal-sftp`, `two-horizontal`, etc.) or collapsing sidebar.
+  - Attached `ResizeObserver` on `containerRef.current` dispatching `fitAddon.fit()` and syncing PTY dimensions via `resizeTerminal(tab.id, cols, rows)`.
+* 2. PuTTY Classic `copyOnSelect` Stale Closure (`TerminalView.tsx`):
+  - Retained `copyOnSelectRef` updated on every render to ensure setting changes in modal immediately reflect in `term.onSelectionChange`.
+* 3. Connection Status Detection Hardening (`TerminalView.tsx`):
+  - Eliminated false-positive `'live'` triggers caused by MOTD/banner lines containing `$` or `#`.
+  - Added strict prompt boundary checking `/(?:[\$#%❯]\s*)$/m` and pre-auth marker prioritization (`login as:`, `password:`, `passphrase`, `(yes/no`, `Store key in cache?`).
+* 4. Shell Quoting Security Fix (Claude #31, Commit `022005e`):
+  - Replaced ad-hoc character blocklist in terminal file drag-and-drop with unconditional POSIX single-quoting to prevent command injection via crafted filenames.
+* 5. Layout Mode Preservation on Tab Close (`App.tsx`):
+  - Fixed `handleCloseTab` resetting layout to `'single'` prematurely; `'terminal-sftp'` mode is now preserved when >= 1 terminal tab remains.
+* 6. Bracketed IPv6 Quick Connect Parsing (`TitleBar.tsx`):
+  - Added support for bracketed IPv6 endpoints (e.g., `user@[2001:db8::1]:2222` and `[fe80::1]`) without colon-split corruption. Added 5th test to `TitleBar.test.tsx`.
+* 7. SFTP Single/Dual Pane View Selector (`SftpDualPane.tsx`):
+  - Added 3-way toggle button group (`[Dual | Remote | Local]`) in SFTP header for cramped split-screen environments.
+* Verification: 19/19 Vitest tests pass across 5 test suites; `npm run build` compiles with 0 TS errors in 1.88s; 44/44 workspace tests pass; `cargo deny check` clean.
+
 
 
 

@@ -102,10 +102,21 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       target = target.slice(atIdx + 1);
     }
 
-    if (target.includes(':')) {
+    if (target.startsWith('[')) {
+      const closeBracket = target.indexOf(']');
+      if (closeBracket !== -1) {
+        const afterBracket = target.slice(closeBracket + 1);
+        target = target.slice(1, closeBracket);
+        if (afterBracket.startsWith(':')) {
+          port = parseInt(afterBracket.slice(1), 10) || 22;
+        }
+      }
+    } else if (target.includes(':')) {
       const parts = target.split(':');
-      target = parts[0];
-      port = parseInt(parts[1], 10) || 22;
+      if (parts.length === 2) {
+        target = parts[0];
+        port = parseInt(parts[1], 10) || 22;
+      }
     }
 
     onQuickConnect(target, port, username);

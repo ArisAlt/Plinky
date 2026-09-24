@@ -126,4 +126,30 @@ describe('TitleBar Component - Quick Connect History & Auto-Complete', () => {
     fireEvent.click(clearAllBtn);
     expect(screen.queryByText('another-target:22')).toBeNull();
   });
+
+  it('correctly parses bracketed IPv6 hosts with and without custom ports', () => {
+    const onQuickConnect = vi.fn();
+
+    render(
+      <TitleBar
+        onQuickConnect={onQuickConnect}
+        onNewSession={vi.fn()}
+        activeView="sessions"
+        setActiveView={vi.fn()}
+        sessions={mockSessions}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Quick Connect: user@host[:port]...');
+
+    // With port and user
+    fireEvent.change(input, { target: { value: 'citizenzero@[2001:db8::1]:2222' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(onQuickConnect).toHaveBeenLastCalledWith('2001:db8::1', 2222, 'citizenzero');
+
+    // Without port
+    fireEvent.change(input, { target: { value: '[fe80::1]' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(onQuickConnect).toHaveBeenLastCalledWith('fe80::1', 22, undefined);
+  });
 });

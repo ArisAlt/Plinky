@@ -125,7 +125,7 @@ flowchart TD
 
 ### Verification & Testing
 ```bash
-# Run frontend unit tests (13 tests across 4 suites via Vitest)
+# Run frontend unit tests (19 tests across 5 suites via Vitest)
 npm test
 
 # Check frontend TypeScript compilation & bundle
