@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Type, Shield, Monitor, RotateCcw, Check } from 'lucide-react';
+import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer } from 'lucide-react';
 import { detectPutty, PuttyDetectInfo } from '../../services/tauriBridge';
 
 interface SettingsModalProps {
@@ -11,6 +11,10 @@ interface SettingsModalProps {
   onChangeFontSize: (size: number) => void;
   cursorStyle: 'block' | 'bar' | 'underline';
   onChangeCursorStyle: (style: 'block' | 'bar' | 'underline') => void;
+  copyOnSelect?: boolean;
+  onChangeCopyOnSelect?: (val: boolean) => void;
+  rightClickAction?: 'paste' | 'contextMenu';
+  onChangeRightClickAction?: (action: 'paste' | 'contextMenu') => void;
   onResetLayout: () => void;
 }
 
@@ -32,6 +36,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onChangeFontSize,
   cursorStyle,
   onChangeCursorStyle,
+  copyOnSelect = true,
+  onChangeCopyOnSelect,
+  rightClickAction = 'contextMenu',
+  onChangeRightClickAction,
   onResetLayout,
 }) => {
   const [puttyInfo, setPuttyInfo] = useState<PuttyDetectInfo | null>(null);
@@ -124,6 +132,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {style}
                     </button>
                   ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: PuTTY Mouse & Clipboard */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
+              <MousePointer className="w-3.5 h-3.5 text-amber-400" />
+              <span>PuTTY Mouse & Clipboard Behavior</span>
+            </div>
+
+            <div className="space-y-3 p-3 bg-plinky-950 rounded border border-plinky-800">
+              {/* Copy on select */}
+              <label className="flex items-start space-x-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={copyOnSelect}
+                  onChange={(e) => onChangeCopyOnSelect?.(e.target.checked)}
+                  className="mt-0.5 rounded border-plinky-700 bg-plinky-900 text-sky-500 focus:ring-0 cursor-pointer"
+                />
+                <div className="select-none">
+                  <span className="text-slate-200 font-medium block">Copy on select (Classic PuTTY)</span>
+                  <span className="text-[11px] text-slate-500 block">Selecting text with the mouse immediately copies it to the system clipboard without pressing Ctrl+C.</span>
+                </div>
+              </label>
+
+              {/* Right-click action */}
+              <div className="space-y-1.5 pt-2 border-t border-plinky-800/80">
+                <label className="text-[11px] text-slate-400 font-medium block">Right-Click Action</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onChangeRightClickAction?.('contextMenu')}
+                    className={`py-1.5 px-2 rounded text-left transition border ${
+                      rightClickAction === 'contextMenu'
+                        ? 'bg-sky-500/20 border-sky-500/50 text-sky-300 font-medium'
+                        : 'bg-plinky-900 border-plinky-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="font-semibold text-[11px]">Context Menu</div>
+                    <div className="text-[10px] text-slate-500">Show PuTTY action menu</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onChangeRightClickAction?.('paste')}
+                    className={`py-1.5 px-2 rounded text-left transition border ${
+                      rightClickAction === 'paste'
+                        ? 'bg-sky-500/20 border-sky-500/50 text-sky-300 font-medium'
+                        : 'bg-plinky-900 border-plinky-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="font-semibold text-[11px]">Paste Clipboard (PuTTY)</div>
+                    <div className="text-[10px] text-slate-500">Right click pastes (Shift+Right for menu)</div>
+                  </button>
                 </div>
               </div>
             </div>

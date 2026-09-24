@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SyncChannel } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
-import { broadcastSyncInput } from '../../services/tauriBridge';
+import { broadcastSyncInput, isTauriEnvironment } from '../../services/tauriBridge';
 import { Radio, Send, Terminal, AlertTriangle, X } from 'lucide-react';
 
 interface SyncBroadcastBarProps {
@@ -17,15 +17,17 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
     const formatted = cmd.endsWith('\n') ? cmd : `${cmd}\n`;
     const data = new TextEncoder().encode(formatted);
 
-    if (broadcastTarget === 'all') {
-      for (const ch of ['A', 'B', 'C', 'D'] as const) {
-        await broadcastSyncInput(ch, data);
+    if (isTauriEnvironment()) {
+      if (broadcastTarget === 'all') {
+        for (const ch of ['A', 'B', 'C', 'D'] as const) {
+          await broadcastSyncInput(ch, data);
+        }
+      } else {
+        await broadcastSyncInput(broadcastTarget, data);
       }
     } else {
-      await broadcastSyncInput(broadcastTarget, data);
+      terminalManager.broadcastInput(broadcastTarget, cmd);
     }
-
-    terminalManager.broadcastInput(broadcastTarget, cmd);
     setCommand('');
   };
 

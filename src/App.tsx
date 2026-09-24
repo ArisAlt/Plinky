@@ -132,28 +132,32 @@ export const App: React.FC = () => {
     setSftpSession(prev => ({ ...prev, remotePath: cwd }));
   };
 
-  const handleConnectSession = (session: PuttySession) => {
-    // A session that's already open should be focused, not duplicated --
-    // clicking Connect on an already-connected session previously just
-    // appended another tab with no visible confirmation anything happened.
-    const existing = tabs.find(t => t.sessionName === session.name);
-    if (existing) {
-      setActiveTabId(existing.id);
+  const handleConnectSession = (session: PuttySession, forceNew: boolean = false) => {
+    // If not forcing a new connection and a tab already exists for this session,
+    // switch focus to it. But if forceNew is requested (user clicked Connect button
+    // or double-clicked), spawn a new session tab or duplicate.
+    const existingMatches = tabs.filter(t => t.sessionName === session.name);
+    if (!forceNew && existingMatches.length > 0) {
+      setActiveTabId(existingMatches[0].id);
       setActiveView('sessions');
       return;
     }
 
+    const title = existingMatches.length > 0
+      ? `${session.name} (${existingMatches.length + 1})`
+      : session.name;
+
     const newTab: TerminalTab = {
       id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      title: session.name,
+      title,
       sessionName: session.name,
       syncChannel: 'none',
       status: 'live',
       freeTypeMode: false,
       activeHighlighting: true,
-      hostname: session.hostname || 'localhost',
-      port: session.port || 22,
-      username: session.username || 'deploy',
+      hostname: session.hostname || session.host_name || '',
+      port: session.port || session.port_number || 22,
+      username: session.username || session.user_name || undefined,
     };
 
     setTabs(prev => [...prev, newTab]);

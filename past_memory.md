@@ -322,11 +322,33 @@
   - Font stack prioritized for `MesloLGS Nerd Font`, `FiraCode Nerd Font`, `JetBrainsMono Nerd Font` for seamless Starship prompt rendering.
   - Target forwarding for Quick Connect / split-pane clones in `plink.rs` via `ExplicitTarget`.
   - Visible error banner on Shell Hooks failure and toast hint on Free Type toggle.
+
+### 26. UI TESTING HARNESS, PUTTY PARITY, PREAUTH INTERACTIVE PASS-THROUGH & CONNECT WORKFLOW
+* Frontend Unit Testing Harness:
+  - Installed Vitest, `@testing-library/react`, `jsdom`, `@testing-library/jest-dom`.
+  - Configured `vitest.config.ts`, `src/test/setup.ts`, and `"test": "vitest run"` script.
+  - 13/13 passing tests across 4 suites: `layoutPersistence.test.ts`, `terminalManager.test.ts`, `SettingsModal.test.tsx`, `SessionExplorer.test.tsx`.
+* PuTTY Feature Parity:
+  - PuTTY Classic Mouse & Clipboard: Implemented `copyOnSelect` (default: true) and `rightClickAction` (`'paste'` vs `'contextMenu'`) persisted in `localStorage`. Configurable in `SettingsModal.tsx`.
+  - PuTTY Event Log: Dedicated modal in `TerminalView.tsx` tracking timestamps, connection milestones, PTY stream events, and OSC hooks, with "Copy All to Clipboard" matching classic PuTTY.
+  - PuTTY Session Logging: Backend file writer in `plinky-core::session::manager` (opened in append mode, capturing all raw bytes before state branching) wired with `PuttySession.log_file_name`. Frontend recording indicator badge and `.log` file export.
+* PreAuth Password Prompt Pass-Through Fix (Critical Connection Bug Resolved):
+  - Root Cause: In `crates/plinky-core/src/session/manager.rs`, `PreAuthAction::Hold` discarded output bytes, swallowing username and password prompts (`Using username "citizenzero"`, `password: `). The user terminal sat blank until `sshd` timed out after 60s with `FATAL ERROR: Remote side unexpectedly closed network connection`.
+  - Fix: Forward `chunk` on `PreAuthAction::Hold` to `sub_clone` so prompts and banners stream to the xterm terminal in real time, enabling interactive password entry.
+  - Formatted `CloseReason::AuthFailed` to extract and display clean `FATAL ERROR:` strings in PuTTY red ANSI rather than raw Rust enum debug dumps.
+* Elimination of Fake Server Simulation & Clean Connection UX:
+  - Removed `simulateEcho` and fake prompt responses (`deploy@server:~$`, `ls`, `uptime`) from `src/services/terminalManager.ts`.
+  - Removed redundant mock injection from `SyncBroadcastBar.tsx`.
+  - In `TerminalView.tsx`, replaced preview fallback banner with explicit error notifications in Tauri mode (`[Plinky Error: Failed to start session...]`) and clear non-interactive preview banners in browser dev mode.
+  - Fixed `isLocalSession` detection: only tabs explicitly named `'Local Shell'` or flagged local spawn `/bin/bash`; all other sessions connect via `plink`.
+  - Removed hardcoded `'deploy'` default username fallbacks.
+  - Dropped direct per-row `Connect` button in session tree: sessions connect exclusively via double-click on card or right-click context menu -> "Connect Terminal", preventing accidental connection clicks. Single-clicking a card is a safe no-op.
 * Verification:
-  - 39/39 workspace tests pass (`cargo test --workspace`).
-  - `cargo deny check` exits with 0 errors.
-  - `npm run build` succeeds with 0 errors.
-  - Task `T-002` marked `in_review` and submitted to Claude for peer review.
+  - `npm test`: 13/13 tests pass.
+  - `npm run build`: 0 TypeScript errors (2.13s).
+  - `cargo test --workspace`: 44/44 tests pass.
+  - `cargo deny check`: 0 advisories, bans, licenses, or source errors.
+
 
 
 

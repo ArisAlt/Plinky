@@ -102,16 +102,22 @@ This document tracks the directory architecture, file structure, component relat
     │   └── session.ts                    # TypeScript models (PuttySession, TerminalTab, SyncChannel, Sftp, Tunnels)
     ├── services/
     │   ├── tauriBridge.ts                # Dual-mode IPC bridge (Tauri native + browser preview fallbacks)
-    │   ├── terminalManager.ts            # Terminal registry, broadcast sync router, prompt simulation
+    │   ├── terminalManager.ts            # Terminal registry, broadcast sync router
     │   └── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
+    ├── test/                             # Frontend Vitest Test Suites
+    │   ├── setup.ts                      # jsdom and canvas test polyfills
+    │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
+    │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests
+    │   ├── SettingsModal.test.tsx        # Preference modal rendering and change callbacks
+    │   └── SessionExplorer.test.tsx      # Tree rendering, double-click connect, context menu tests
     └── components/
         ├── layout/
         │   ├── TitleBar.tsx              # Quick connect, view switchers, new session action
         │   └── StatusBar.tsx             # Active tabs, plink transport status, sync channel metrics, R3 safety
         ├── sidebar/
-        │   └── SessionExplorer.tsx       # Native PuTTY session tree, fuzzy search, tags/folders, launch actions
+        │   └── SessionExplorer.tsx       # Native PuTTY session tree, fuzzy search, tags/folders, double-click connect
         ├── terminal/
-        │   └── TerminalView.tsx          # xterm.js canvas, Free Type Mode, live regex highlighting, channel badge
+        │   └── TerminalView.tsx          # xterm.js canvas, PuTTY Event Log modal, Session Logging, live regex highlighting
         ├── sftp/
         │   └── SftpDualPane.tsx          # Dual-pane local/remote filesystem explorer, transfer queue, ADR-003 Option B
         ├── tunnels/
@@ -123,9 +129,8 @@ This document tracks the directory architecture, file structure, component relat
         ├── sync/
         │   └── SyncBroadcastBar.tsx      # Multi-session command broadcast bar (All, A, B, C, D)
         └── modals/
-            ├── NewSessionModal.tsx       # New PuTTY session modal with atomic persistence
-            └── SettingsModal.tsx         # User preferences (fonts, cursor, PuTTY status, cache clear)
-    │   └── useSFTP.ts                    # Remote filesystem navigation and directory following
+            ├── NewSessionModal.tsx       # PuTTY session modal with atomic persistence and edit capability
+            └── SettingsModal.tsx         # User preferences (fonts, cursor, copy on select, right-click action, cache clear)
     └── styles/                           # Styling & Theme Variables
         ├── themes/                       # WindTerm Dark, PuTTY Classic, Dracula, Nord
 ```

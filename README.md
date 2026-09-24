@@ -125,14 +125,17 @@ flowchart TD
 
 ### Verification & Testing
 ```bash
-# Run workspace Rust tests (39 tests including localhost sshd fixture)
+# Run frontend unit tests (13 tests across 4 suites via Vitest)
+npm test
+
+# Check frontend TypeScript compilation & bundle
+npm run build
+
+# Run workspace Rust tests (44 tests including localhost sshd fixture)
 cargo test --workspace
 
 # Run dependency license, advisory, and ban validation
 cargo deny check
-
-# Check frontend TypeScript compilation & bundle
-npm run build
 ```
 
 ### Local Packaging & AppImage Notice
