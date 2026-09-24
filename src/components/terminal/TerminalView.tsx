@@ -229,6 +229,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     term.open(containerRef.current);
     fitAddon.fit();
+    // A freshly connected session needs keyboard focus immediately -- the
+    // user is about to be looking at a host-key or password prompt and
+    // should be able to just start typing, not have to click into the
+    // terminal first.
+    term.focus();
 
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
