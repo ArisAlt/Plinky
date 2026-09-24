@@ -46,6 +46,7 @@ describe('SessionExplorer Component', () => {
         onOpenSftp={vi.fn()}
         onCreateSession={vi.fn()}
         onEditSession={vi.fn()}
+        onMoveToFolder={vi.fn()}
       />
     );
 
@@ -64,6 +65,7 @@ describe('SessionExplorer Component', () => {
         onOpenSftp={vi.fn()}
         onCreateSession={vi.fn()}
         onEditSession={vi.fn()}
+        onMoveToFolder={vi.fn()}
       />
     );
 
@@ -86,6 +88,7 @@ describe('SessionExplorer Component', () => {
         onOpenSftp={vi.fn()}
         onCreateSession={vi.fn()}
         onEditSession={vi.fn()}
+        onMoveToFolder={vi.fn()}
       />
     );
 

@@ -122,9 +122,11 @@ export const App: React.FC = () => {
       }));
       setTabs(restoredTabs);
       setActiveTabId(savedLayout.activeTabId || restoredTabs[0]?.id || null);
-    } else if (list.length > 0 && tabs.length === 0) {
-      handleConnectSession(list[0]);
     }
+    // No saved layout -> start with an empty workspace. Previously this
+    // auto-connected to the first saved session, which meant the app
+    // silently picked a session for you on every fresh start instead of
+    // waiting for you to choose one.
   };
 
   const handleCwdChange = (cwd: string) => {
@@ -216,6 +218,12 @@ export const App: React.FC = () => {
     setIsNewSessionOpen(true);
   };
 
+  const handleMoveSessionToFolder = async (session: PuttySession, folder: string) => {
+    if ((session.folder || 'Uncategorized') === folder) return;
+    await writePuttySession({ ...session, folder });
+    await loadSessions();
+  };
+
   const handleSplitPane = (direction: 'vertical' | 'horizontal') => {
     if (direction === 'vertical') {
       setLayoutMode('split-vertical');
@@ -282,6 +290,7 @@ export const App: React.FC = () => {
             onOpenSftp={handleOpenSftp}
             onCreateSession={() => setIsNewSessionOpen(true)}
             onEditSession={handleEditSession}
+            onMoveToFolder={handleMoveSessionToFolder}
           />
         </div>
 
