@@ -365,7 +365,10 @@ export async function startTerminalSession(
   isLocal: boolean,
   cols: number,
   rows: number,
-  onData: (chunk: Uint8Array) => void
+  onData: (chunk: Uint8Array) => void,
+  hostname?: string,
+  port?: number,
+  username?: string
 ): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
@@ -381,6 +384,9 @@ export async function startTerminalSession(
         cols,
         rows,
         onData: channel,
+        hostname,
+        port,
+        username,
       });
       return true;
     } catch (e) {

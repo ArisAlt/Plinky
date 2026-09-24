@@ -85,8 +85,9 @@ impl PreAuthStateMachine {
             // D9 Marker: PuTTY plink outputs "Access granted" right upon auth success
             access_granted_regex: Regex::new(r"Access granted").unwrap(),
             // Verbatim PuTTY 0.85 hostkey prompt indicators per DEEP_DESIGN.md §2 & §3
+            // Matched on the final action prompt line so earlier lines (host, port, fingerprint) are already in the buffer
             hostkey_prompt_regex: Regex::new(
-                r"(The host key is not cached for this server:|Store key in cache\?|Update cached key\?)"
+                r"(Store key in cache\?|Update cached key\?)"
             ).unwrap(),
         }
     }

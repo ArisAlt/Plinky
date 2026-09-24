@@ -65,6 +65,9 @@ fn start_terminal_session(
     cols: u16,
     rows: u16,
     on_data: Channel<Vec<u8>>,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
 ) -> Result<(), String> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
@@ -81,8 +84,19 @@ fn start_terminal_session(
             .create_local_session(&session_id, &session_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create local session: {e}"))
     } else {
+        // Quick Connect and split-pane clones invent a display name that was
+        // never saved as a real PuTTY session -- pass the actual host/port/
+        // username through so plink has somewhere to connect even when
+        // there's no ~/.putty/sessions file to -load.
+        let explicit_target = hostname
+            .filter(|h| !h.is_empty())
+            .map(|h| plinky_core::transport::plink::ExplicitTarget {
+                hostname: h,
+                port: port.unwrap_or(22),
+                username,
+            });
         registry
-            .create_plink_session(&session_id, &session_name, cols, rows, tx)
+            .create_plink_session(&session_id, &session_name, explicit_target, cols, rows, tx)
             .map_err(|e| format!("Failed to create plink session: {e}"))
     }
 }

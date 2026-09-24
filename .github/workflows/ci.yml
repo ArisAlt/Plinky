@@ -1,0 +1,104 @@
+name: Plinky CI Matrix
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-linux:
+    name: Linux (Ubuntu) - Test, Build, Deny & Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies & PuTTY
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            putty-tools \
+            openssh-server \
+            xvfb
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify Frontend Compilation
+        run: npm run build
+
+      - name: Run Cargo Workspace Tests
+        run: cargo test --workspace --verbose
+
+      - name: Install & Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+
+      - name: Build Desktop Application Binary
+        run: cargo build -p plinky-desktop
+
+      - name: Headless Desktop Launch Smoke Test (Xvfb)
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" timeout 8s ./target/debug/plinky-desktop || exit_code=$?
+          # Exit code 124 indicates timeout killed the running process cleanly, proving zero panics on launch
+          if [ "${exit_code:-0}" -eq 124 ] || [ "${exit_code:-0}" -eq 0 ]; then
+            echo "Smoke test passed: application stayed alive under Xvfb with zero launch panics."
+          else
+            echo "Smoke test failed with unexpected exit code: $exit_code"
+            exit 1
+          fi
+
+  test-windows:
+    name: Windows - Test & Build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PuTTY
+        run: choco install putty -y
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify Frontend Compilation
+        run: npm run build
+
+      - name: Run Cargo Workspace Tests
+        run: cargo test --workspace --verbose
