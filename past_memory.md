@@ -281,6 +281,26 @@
   - Restores active sessions and pane layout on application reload.
 * Verification: 33/33 tests pass in `cargo test --workspace` (4 new shell integration unit tests), frontend builds cleanly with 0 TS errors in 1.89s.
 
+### 24. M5 APPROVAL & POST-DEPLOY AUDIT HARDENING (CLAUDE MSG #12-#15 RESOLUTIONS)
+* Milestone M5 Approved: `T-006` marked `done` by Claude.
+* Tokio Process Runtime Initialization (`7a2f2fe`):
+  - Fixed runtime panic on launch: `src-tauri/src/main.rs` decorated with `#[tokio::main] async fn main()`. Provides an ambient Tokio 1.x reactor required by `plinky-core` async operations (`portable-pty`, `tokio::process`) without hardcoupling `plinky-core` to Tauri.
+* Pre-Auth Write Path Separation (`2ad9d21`):
+  - Addressed real SSH authentication issue where shell injection or broadcast input into a password prompt exhausted `MaxAuthTries`.
+  - Split `write_input` into:
+    1. `write_input`: Permissive user keystroke path, allowing interactive password typing during display-only `PreAuth`.
+    2. `write_input_live_only`: Strict path requiring `is_live()`. Used by `inject_shell_integration` and `SyncInputRouter::broadcast()` to reject any `PreAuth` session.
+  - Added 4 regression tests in `crates/plinky-core/tests/core_tests.rs`.
+* Plink Banner Auto-Advance (`ca6f42f`):
+  - When plink outputs `"Press Return to begin session."` upon transitioning to live, `manager.rs` automatically responds with `\r` to avoid requiring double Enter.
+* Session Explorer Discoverability (`f0a720b`):
+  - Added "New" text label to header button and clear empty-state CTA ("Create your first connection") when zero sessions exist.
+* AppImage Packaging & CI Requirements:
+  - Discovered `linuxdeploy` vendored strip fails on `.relr.dyn` ELF sections emitted by modern toolchains. Setting `NO_STRIP=true` works around this locally.
+  - Pinned requirement for CI (M1 / `T-002`): Build AppImages inside an older LTS container (Ubuntu 20.04/22.04) for glibc compatibility and include a headless Xvfb launch smoke test to catch launch-time panics.
+* Verification: 38/38 tests pass across workspace (`cargo test --workspace`). `npm run build` succeeds with 0 errors.
+
+
 
 
 
