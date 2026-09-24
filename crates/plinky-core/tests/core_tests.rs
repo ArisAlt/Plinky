@@ -117,7 +117,7 @@ async fn test_session_registry_local_pty_lifecycle_and_reattach() {
     let (tx, mut rx) = mpsc::unbounded_channel();
 
     registry
-        .create_local_session("test-tab-1", "Local Bash", 80, 24, tx)
+        .create_local_session("test-tab-1", "Local Bash", None, 80, 24, tx)
         .expect("Failed to spawn local session");
 
     // Write a simple command to PTY
@@ -172,7 +172,7 @@ async fn test_session_registry_local_pty_lifecycle_and_reattach() {
 async fn test_write_input_blocked_during_hostkey_pending() {
     let registry = SessionRegistry::new();
     let (tx, _rx) = mpsc::unbounded_channel();
-    registry.create_local_session("test-prompt-sess", "Test", 80, 24, tx).unwrap();
+    registry.create_local_session("test-prompt-sess", "Test", None, 80, 24, tx).unwrap();
     registry.reset_session_preauth("test-prompt-sess").unwrap();
 
     // Simulate arriving hostkey prompt
@@ -201,8 +201,8 @@ async fn test_sync_input_router_d6_safety() {
     let (tx2, _rx2) = mpsc::unbounded_channel();
 
     // Spawn 2 sessions
-    registry.create_local_session("sess-1", "S1", 80, 24, tx1).unwrap();
-    registry.create_local_session("sess-2", "S2", 80, 24, tx2).unwrap();
+    registry.create_local_session("sess-1", "S1", None, 80, 24, tx1).unwrap();
+    registry.create_local_session("sess-2", "S2", None, 80, 24, tx2).unwrap();
 
     // Assign both to Channel A
     registry.set_sync_channel("sess-1", Some(SyncChannelId::A));
@@ -261,7 +261,7 @@ async fn test_sync_input_router_d6_safety() {
 async fn test_write_input_live_only_blocked_during_plain_preauth() {
     let registry = SessionRegistry::new();
     let (tx, _rx) = mpsc::unbounded_channel();
-    registry.create_local_session("test-live-only-preauth", "Test", 80, 24, tx).unwrap();
+    registry.create_local_session("test-live-only-preauth", "Test", None, 80, 24, tx).unwrap();
     registry.reset_session_preauth("test-live-only-preauth").unwrap();
 
     // Session is in plain PreAuth (e.g. sitting at a remote password prompt),
@@ -277,7 +277,7 @@ async fn test_write_input_live_only_blocked_during_plain_preauth() {
 async fn test_write_input_live_only_blocked_during_hostkey_pending() {
     let registry = SessionRegistry::new();
     let (tx, _rx) = mpsc::unbounded_channel();
-    registry.create_local_session("test-live-only-hostkey", "Test", 80, 24, tx).unwrap();
+    registry.create_local_session("test-live-only-hostkey", "Test", None, 80, 24, tx).unwrap();
     registry.reset_session_preauth("test-live-only-hostkey").unwrap();
 
     let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
@@ -298,7 +298,7 @@ async fn test_write_input_still_allowed_during_plain_preauth_for_password_typing
     // during plain PreAuth -- only write_input_live_only tightens to Live.
     let registry = SessionRegistry::new();
     let (tx, _rx) = mpsc::unbounded_channel();
-    registry.create_local_session("test-password-typing", "Test", 80, 24, tx).unwrap();
+    registry.create_local_session("test-password-typing", "Test", None, 80, 24, tx).unwrap();
     registry.reset_session_preauth("test-password-typing").unwrap();
 
     let write_res = registry.write_input("test-password-typing", b"my-actual-password\n");
@@ -315,8 +315,8 @@ async fn test_sync_input_router_skips_plain_preauth_not_just_hostkey_pending() {
     let (tx1, mut rx1) = mpsc::unbounded_channel();
     let (tx2, _rx2) = mpsc::unbounded_channel();
 
-    registry.create_local_session("sess-a", "A", 80, 24, tx1).unwrap();
-    registry.create_local_session("sess-b", "B", 80, 24, tx2).unwrap();
+    registry.create_local_session("sess-a", "A", None, 80, 24, tx1).unwrap();
+    registry.create_local_session("sess-b", "B", None, 80, 24, tx2).unwrap();
 
     registry.set_sync_channel("sess-a", Some(SyncChannelId::A));
     registry.set_sync_channel("sess-b", Some(SyncChannelId::A));

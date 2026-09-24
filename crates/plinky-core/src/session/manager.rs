@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Write as _;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, broadcast};
 use crate::errors::{PlinkyError, Result};
@@ -7,6 +8,18 @@ use crate::transport::local::LocalTransport;
 use crate::transport::plink::PlinkTransport;
 use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo};
 use crate::session::ring_buffer::ScrollbackRingBuffer;
+
+/// Opens (or creates) a session log file in append mode, matching PuTTY's
+/// simplest "All session output" logging mode -- raw bytes, unfiltered.
+/// A failure to open just disables logging for this session rather than
+/// blocking the connection; the caller sees no error either way.
+fn open_log_file(path: &str) -> Option<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .ok()
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AttachInfo {
@@ -36,6 +49,7 @@ pub struct ActiveSession {
     pub state_machine: PreAuthStateMachine,
     pub scrollback: ScrollbackRingBuffer,
     pub subscriber: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
+    pub log_file: Option<std::fs::File>,
 }
 
 #[derive(Clone)]
@@ -65,12 +79,17 @@ impl SessionRegistry {
         &self,
         id: &str,
         name: &str,
+        log_file_name: Option<String>,
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let transport = LocalTransport::spawn(cols, rows, raw_tx)?;
+        let log_file = log_file_name
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .and_then(open_log_file);
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));
@@ -84,6 +103,13 @@ impl SessionRegistry {
                     let mut lock = registry_clone.sessions.lock().unwrap();
                     if let Some(session) = lock.get_mut(&id_for_task) {
                         session.scrollback.push(&chunk);
+                        // PuTTY-style "all session output" logging: every raw
+                        // byte the PTY produces, regardless of PreAuth/Live
+                        // state -- a failed write just leaves the session
+                        // running, it never blocks the connection.
+                        if let Some(f) = session.log_file.as_mut() {
+                            let _ = f.write_all(&chunk);
+                        }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
                         break;
@@ -126,6 +152,7 @@ impl SessionRegistry {
             state_machine: sm,
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024), // 2 MiB
             subscriber,
+            log_file,
         };
 
         self.sessions.lock().unwrap().insert(id_owned, active);
@@ -138,12 +165,17 @@ impl SessionRegistry {
         id: &str,
         session_name: &str,
         explicit_target: Option<crate::transport::plink::ExplicitTarget>,
+        log_file_name: Option<String>,
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), cols, rows, raw_tx)?;
+        let log_file = log_file_name
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .and_then(open_log_file);
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));
@@ -157,6 +189,9 @@ impl SessionRegistry {
                     let mut lock = registry_clone.sessions.lock().unwrap();
                     if let Some(session) = lock.get_mut(&id_for_task) {
                         session.scrollback.push(&chunk);
+                        if let Some(f) = session.log_file.as_mut() {
+                            let _ = f.write_all(&chunk);
+                        }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
                         break;
@@ -213,6 +248,7 @@ impl SessionRegistry {
             state_machine: PreAuthStateMachine::new(),
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024),
             subscriber,
+            log_file,
         };
 
         self.sessions.lock().unwrap().insert(id_owned, active);

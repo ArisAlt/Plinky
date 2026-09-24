@@ -26,6 +26,11 @@ pub struct PuttySession {
     pub protocol: String,
     #[serde(alias = "publicKeyFile", default)]
     pub public_key_file: String,
+    /// Path to log raw session output to, PuTTY's own "LogFileName" key.
+    /// Empty means logging is disabled -- there's no separate LogType field
+    /// yet, this only implements PuTTY's simplest "All session output" mode.
+    #[serde(alias = "logFileName", default)]
+    pub log_file_name: String,
     #[serde(default)]
     pub extra: BTreeMap<String, String>,
 }
@@ -39,6 +44,7 @@ impl Default for PuttySession {
             user_name: String::new(),
             protocol: "ssh".to_string(),
             public_key_file: String::new(),
+            log_file_name: String::new(),
             extra: BTreeMap::new(),
         }
     }
@@ -195,6 +201,7 @@ pub fn parse_session_file(path: &Path, session_name: &str) -> Result<PuttySessio
                 "UserName" => session.user_name = val,
                 "Protocol" => session.protocol = val,
                 "PublicKeyFile" => session.public_key_file = val,
+                "LogFileName" => session.log_file_name = val,
                 _ => {
                     session.extra.insert(key, val);
                 }
@@ -250,6 +257,12 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
         source: e,
     })?;
     writeln!(writer, "PublicKeyFile={}", session.public_key_file).map_err(|e| {
+        PuttyCompatError::Io {
+            path: target_path.clone(),
+            source: e,
+        }
+    })?;
+    writeln!(writer, "LogFileName={}", session.log_file_name).map_err(|e| {
         PuttyCompatError::Io {
             path: target_path.clone(),
             source: e,

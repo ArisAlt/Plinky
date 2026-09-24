@@ -156,6 +156,7 @@ impl SshdFixture {
             user_name: current_user,
             protocol: "ssh".to_string(),
             public_key_file: client_ppk_path.to_str().unwrap().to_string(),
+            log_file_name: String::new(),
             extra: std::collections::BTreeMap::new(),
         };
 
@@ -203,7 +204,7 @@ async fn test_sshd_fixture_plink_preauth_to_live_and_reattach() {
 
     // 1. Spawn real plink session
     registry
-        .create_plink_session(session_id, "sshd_test_session", None, 80, 24, out_tx)
+        .create_plink_session(session_id, "sshd_test_session", None, None, 80, 24, out_tx)
         .expect("Failed to spawn plink session");
 
     // 2. Await HostKeyPrompt event
