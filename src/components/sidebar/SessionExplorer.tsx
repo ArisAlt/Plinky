@@ -70,9 +70,10 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <button
             onClick={onCreateSession}
             title="Create New PuTTY Session"
-            className="p-1 rounded hover:bg-plinky-800 text-slate-400 hover:text-sky-400 transition"
+            className="flex items-center space-x-1 px-2 py-1 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-medium">New</span>
           </button>
         </div>
       </div>
@@ -168,7 +169,21 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           );
         })}
 
-        {filteredSessions.length === 0 && (
+        {sessions.length === 0 && (
+          <div className="flex flex-col items-center text-center py-10 px-4 space-y-3">
+            <Terminal className="w-8 h-8 text-slate-600" />
+            <div className="text-xs text-slate-400">No sessions yet</div>
+            <button
+              onClick={onCreateSession}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Create your first connection</span>
+            </button>
+          </div>
+        )}
+
+        {sessions.length > 0 && filteredSessions.length === 0 && (
           <div className="text-center py-8 text-slate-500 text-xs">
             No PuTTY sessions matched "{searchQuery}"
           </div>
