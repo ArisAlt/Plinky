@@ -105,7 +105,7 @@ flowchart TD
   * **S2**: `plink` under `portable-pty`: terminal resize propagation (Linux vs Windows ConPTY), pre-auth to live boundary detection, and exact prompt text matching.
   * **S3**: `plink -share` lifecycle: **CONFIRMED** (Claude MSG #152) — owner survives sharer churn, sharer fails closed on owner death, `/tmp/putty-connshare.<user>/<hash>/socket` verified.
   * **S4**: `psftp` batch parsing: **PARTIALLY RESOLVED / SUSPECTED BLOCKER** (Claude MSG #158) — `ls -l` space-in-filename parser confirmed; `psftp -share` hangs silently; fallback paths designed.
-* **M1: CI & Threat Model**: Linux & Windows CI matrix, localhost `sshd` integration target, `cargo-deny`, remote escape threat model.
+* **M1: CI, Cargo-Deny, Threat Model & SSHD Fixture**: ✅ **IMPLEMENTED & AUDITED** (39/39 tests pass) — Linux + Windows multi-platform CI matrix (`.github/workflows/ci.yml`) with automated `cargo-deny`, frontend verification, workspace tests, and headless Xvfb launch smoke test (`timeout 8s ./target/debug/plinky-desktop`). Complete `deny.toml` passing with 0 errors. Living security architecture specification (`docs/THREAT_MODEL.md`) detailing trust boundaries and mitigations for remote escape sequences, pre-auth state machine bypass, sync input leakage, and vault crypto hygiene. Localhost unprivileged `sshd` test fixture (`crates/plinky-core/tests/sshd_fixture_tests.rs`) exercising real `plink` session with ed25519 host key / PPK auth, hostkey prompt answering, D9 Live transition, and scrollback reattach.
 * **M2: Walking Skeleton**: ✅ **IMPLEMENTED & AUDIT-HARDENED** (7/7 tests pass) — `crates/plinky-core` Transport trait, `LocalTransport` and `PlinkTransport` under `portable-pty`, D3/D9 PreAuth state machine with verbatim prompt matching, structured `HostKeyPromptInfo`, 8 KiB bounded default-deny, `ScrollbackRingBuffer` with sequence tracking and O(1) replay, `SessionRegistry` with `attach_session`, `answer_prompt`, dedicated `session:prompt` events, keystroke blocking during prompts, and Tauri v2 binary streaming channel (`tauri::ipc::Channel<Vec<u8>>`).
 * **M3: `putty-compat` v1**: ✅ **IMPLEMENTED & VERIFIED** (7/7 tests pass) — Standalone session parser (`PUTTYDIR`, `~/.putty`, WinReg), atomic `.bak` writes, `.ppk` v2/v3 header parser & SHA256 fingerprinting matching `puttygen -l`, OpenSSH rejection, and real system `sshhostkeys` parsing. *(D1 Option A accepted by owner: hand-written Argon2id decryption deferred to v2)*.
 * **M4: Pre-Auth State Machine & Vault**: ✅ **IMPLEMENTED & AUDIT-HARDENED** (6 vault tests pass, 29/29 workspace tests pass) — OWASP-grade Argon2id KDF (64 MiB, 3 iterations) + AES-256-GCM container authenticated with AAD header binding (`PLKV_AAD_v1`), in-memory zeroization (`ZeroizeOnDrop`), debug redaction (`[REDACTED]`), atomic disk synchronization (`vault.bin.tmp` -> `vault.bin` with 0600 permissions), Tauri IPC (`vault_create`, `vault_unlock`, `vault_lock`, `vault_get`, `vault_set`, `vault_get_entry`, `vault_set_entry`, `vault_delete`, `vault_list_keys`), and interactive UI workbench (`VaultManager.tsx`).
@@ -125,8 +125,11 @@ flowchart TD
 
 ### Verification & Testing
 ```bash
-# Run workspace Rust tests (38 tests)
+# Run workspace Rust tests (39 tests including localhost sshd fixture)
 cargo test --workspace
+
+# Run dependency license, advisory, and ban validation
+cargo deny check
 
 # Check frontend TypeScript compilation & bundle
 npm run build
