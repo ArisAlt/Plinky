@@ -673,10 +673,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const paths = files.map(f => {
       const fullPath = (f as any).path || f.name;
-      if (fullPath.includes(' ') || fullPath.includes('$') || fullPath.includes('&') || fullPath.includes('(')) {
-        return `'${fullPath.replace(/'/g, "'\\''")}'`;
-      }
-      return fullPath;
+      // Always single-quote, unconditionally -- the previous version only
+      // quoted when the path contained space/$/&/(, which misses every
+      // other shell metacharacter (;, |, `, ", *, newlines, ...). A file
+      // or directory with a crafted name could paste as what looks like a
+      // harmless path but actually injects a second shell command once the
+      // user hits Enter. Single-quoting is the standard, complete fix: wrap
+      // in '...' and escape embedded quotes as '\''.
+      return `'${fullPath.replace(/'/g, "'\\''")}'`;
     }).join(' ');
 
     if (isLivePtyRef.current) {
