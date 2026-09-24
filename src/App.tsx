@@ -21,7 +21,10 @@ import {
   Columns, 
   Rows, 
   Square,
-  LayoutGrid
+  LayoutGrid,
+  Loader2,
+  Key,
+  FolderGit2
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -68,7 +71,7 @@ export const App: React.FC = () => {
       title: `${targetTab.sessionName} (Copy)`,
       sessionName: targetTab.sessionName,
       syncChannel: targetTab.syncChannel,
-      status: 'live',
+      status: 'connecting',
       freeTypeMode: targetTab.freeTypeMode,
       activeHighlighting: targetTab.activeHighlighting,
       hostname: targetTab.hostname,
@@ -154,7 +157,7 @@ export const App: React.FC = () => {
       title,
       sessionName: session.name,
       syncChannel: 'none',
-      status: 'live',
+      status: 'connecting',
       freeTypeMode: false,
       activeHighlighting: true,
       hostname: session.hostname || session.host_name || '',
@@ -174,7 +177,7 @@ export const App: React.FC = () => {
       title: sessionName,
       sessionName,
       syncChannel: 'none',
-      status: 'live',
+      status: 'connecting',
       freeTypeMode: false,
       activeHighlighting: true,
       hostname: host,
@@ -259,6 +262,35 @@ export const App: React.FC = () => {
     }
   };
 
+  const renderTabStatusIcon = (tab: TerminalTab, isActive: boolean) => {
+    switch (tab.status) {
+      case 'connecting':
+        return (
+          <span title="Connecting to SSH host..." className="inline-flex items-center">
+            <Loader2 className="w-3.5 h-3.5 flex-shrink-0 text-sky-400 animate-spin" />
+          </span>
+        );
+      case 'preauth':
+        return (
+          <span title="Authentication / host key pending" className="inline-flex items-center">
+            <Key className="w-3.5 h-3.5 flex-shrink-0 text-amber-400 animate-pulse" />
+          </span>
+        );
+      case 'disconnected':
+        return (
+          <span
+            className="w-2 h-2 rounded-full bg-rose-500/80 shrink-0 mx-0.5"
+            title="Session disconnected"
+          />
+        );
+      case 'live':
+      default:
+        return (
+          <Terminal className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
+        );
+    }
+  };
+
   // Determine tabs displayed in split views
   const splitTabs = tabs.length >= 2
     ? [activeTab, ...tabs.filter(t => t.id !== activeTab?.id)]
@@ -276,6 +308,7 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsOpen(true)}
         activeView={activeView}
         setActiveView={setActiveView}
+        sessions={sessions}
       />
 
       {/* Main Workspace (Sidebar + Workbench Viewport) */}
@@ -313,7 +346,7 @@ export const App: React.FC = () => {
                             : 'bg-plinky-900/60 border-transparent text-slate-400 hover:text-slate-200 hover:bg-plinky-850'
                         }`}
                       >
-                        <Terminal className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
+                        {renderTabStatusIcon(tab, isActive)}
                         <span className="truncate flex-1">{tab.title}</span>
 
                         {/* Channel Badge Indicator */}
@@ -387,10 +420,17 @@ export const App: React.FC = () => {
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
                   </button>
+                  <button
+                    onClick={() => setLayoutMode(layoutMode === 'terminal-sftp' ? 'single' : 'terminal-sftp')}
+                    title="Terminal + SFTP Side-by-Side Split"
+                    className={`p-1.5 rounded transition ${layoutMode === 'terminal-sftp' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
+                  >
+                    <FolderGit2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 
-              {/* Terminal Viewport (Single, Split, or Grid) */}
+              {/* Terminal Viewport (Single, Split, Grid, or Terminal+SFTP) */}
               <div className="flex-1 relative overflow-hidden bg-plinky-950 flex flex-col">
                 {tabs.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
@@ -421,6 +461,32 @@ export const App: React.FC = () => {
                       copyOnSelect={copyOnSelect}
                       rightClickAction={rightClickAction}
                     />
+                  </div>
+                ) : layoutMode === 'terminal-sftp' ? (
+                  <div className="flex-1 flex w-full h-full overflow-hidden divide-x divide-plinky-800">
+                    <div className="w-[58%] h-full relative">
+                      <TerminalView
+                        key={activeTab.id}
+                        tab={activeTab}
+                        onUpdateTab={handleUpdateTab}
+                        onSplitPane={handleSplitPane}
+                        onCwdChange={handleCwdChange}
+                        onDuplicateTab={handleDuplicateTab}
+                        onOpenSettings={() => setIsSettingsOpen(true)}
+                        fontFamily={terminalFontFamily}
+                        fontSize={terminalFontSize}
+                        cursorStyle={terminalCursorStyle}
+                        copyOnSelect={copyOnSelect}
+                        rightClickAction={rightClickAction}
+                      />
+                    </div>
+                    <div className="w-[42%] h-full relative overflow-hidden bg-plinky-950">
+                      <SftpDualPane
+                        sessionName={activeTab.sessionName}
+                        hostname={activeTab.hostname || 'localhost'}
+                        initialRemotePath={sftpSession.remotePath || '/var/www'}
+                      />
+                    </div>
                   </div>
                 ) : layoutMode === 'split-vertical' ? (
                   <div className="flex-1 flex w-full h-full overflow-hidden divide-x divide-plinky-800">

@@ -8,7 +8,9 @@ import {
   Plus,
   HardDrive,
   Tag,
-  Pencil
+  Pencil,
+  List,
+  LayoutList
 } from 'lucide-react';
 
 interface SessionExplorerProps {
@@ -39,6 +41,15 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [newFolderInput, setNewFolderInput] = useState('');
   const [draggingSession, setDraggingSession] = useState<PuttySession | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [density, setDensity] = useState<'compact' | 'comfortable'>(() => {
+    return (localStorage.getItem('plinky_session_tree_density') as 'compact' | 'comfortable') || 'comfortable';
+  });
+
+  const toggleDensity = () => {
+    const next = density === 'comfortable' ? 'compact' : 'comfortable';
+    setDensity(next);
+    localStorage.setItem('plinky_session_tree_density', next);
+  };
 
   React.useEffect(() => {
     const handleOutsideClick = () => {
@@ -104,6 +115,14 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         </div>
         <div className="flex items-center space-x-1">
           <button
+            onClick={toggleDensity}
+            title={density === 'compact' ? 'Switch to Comfortable View (Cards)' : 'Switch to Compact View (List)'}
+            aria-label="Toggle view density"
+            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
+          >
+            {density === 'compact' ? <LayoutList className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
+          </button>
+          <button
             onClick={onCreateSession}
             title="Create New PuTTY Session"
             className="flex items-center space-x-1 px-2 py-1 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
@@ -165,11 +184,83 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
 
               {/* Folder Items */}
               {!isCollapsed && (
-                <div className="ml-3 pl-2 border-l border-plinky-800/80 space-y-1.5">
+                <div className={`ml-3 pl-2 border-l border-plinky-800/80 ${density === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}`}>
                   {folderSessions.map((session) => {
                     const openTab = tabs.find(t => t.sessionName === session.name);
                     const isActiveTab = !!openTab && openTab.id === activeTabId;
-                    return (
+                    return density === 'compact' ? (
+                      <div
+                        key={session.name}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggingSession(session);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => {
+                          setDraggingSession(null);
+                          setDragOverFolder(null);
+                        }}
+                        onDoubleClick={() => onConnectSession(session, true)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({ x: e.clientX, y: e.clientY, session });
+                        }}
+                        title={openTab ? 'Double-click, or right-click -> Connect, to open another tab. Drag to move between folders.' : 'Double-click, or right-click -> Connect. Drag to move between folders.'}
+                        className={`group flex items-center justify-between px-2 py-1 rounded border cursor-pointer transition select-none text-xs ${
+                          isActiveTab
+                            ? 'bg-sky-500/10 border-sky-500/60'
+                            : openTab
+                            ? 'bg-plinky-800/50 border-plinky-700 hover:border-sky-500/50'
+                            : 'bg-plinky-950/40 hover:bg-plinky-800/80 border-plinky-800/50 hover:border-sky-500/40'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                          {openTab ? (
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500/60'}`}
+                              title={isActiveTab ? 'Connected -- this is the active tab' : 'Connected -- open in another tab'}
+                            />
+                          ) : (
+                            <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          )}
+                          <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition">
+                            {session.name}
+                          </span>
+                          <span className="truncate max-w-[100px] font-mono text-[10px] text-slate-500">
+                            {session.hostname ? `${session.hostname}:${session.port}` : 'Local'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-1 shrink-0 ml-1">
+                          {session.protocol === 'SSH' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenSftp(session);
+                              }}
+                              title="Open Dual-Pane SFTP"
+                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-emerald-400 hover:bg-emerald-500/20 transition"
+                            >
+                              <HardDrive className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditSession(session);
+                            }}
+                            title="Edit Session Settings"
+                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-700 transition"
+                          >
+                            <Pencil className="w-2.5 h-2.5" />
+                          </button>
+                          {getProtocolBadge(session.protocol)}
+                        </div>
+                      </div>
+                    ) : (
                     <div
                       key={session.name}
                       draggable

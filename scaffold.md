@@ -109,17 +109,18 @@ This document tracks the directory architecture, file structure, component relat
     │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
     │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests
     │   ├── SettingsModal.test.tsx        # Preference modal rendering and change callbacks
-    │   └── SessionExplorer.test.tsx      # Tree rendering, double-click connect, context menu tests
+    │   ├── SessionExplorer.test.tsx      # Tree rendering, double-click connect, density toggle tests
+    │   └── TitleBar.test.tsx             # Quick Connect history and auto-complete dropdown tests
     └── components/
         ├── layout/
-        │   ├── TitleBar.tsx              # Quick connect, view switchers, new session action
+        │   ├── TitleBar.tsx              # Quick connect with history and autocomplete, view switchers, new session action
         │   └── StatusBar.tsx             # Active tabs, plink transport status, sync channel metrics, R3 safety
         ├── sidebar/
-        │   └── SessionExplorer.tsx       # Native PuTTY session tree, fuzzy search, tags/folders, double-click connect
+        │   └── SessionExplorer.tsx       # Native PuTTY session tree, compact/comfortable density toggle, fuzzy search, tags/folders
         ├── terminal/
-        │   └── TerminalView.tsx          # xterm.js canvas, PuTTY Event Log modal, Session Logging, live regex highlighting
+        │   └── TerminalView.tsx          # xterm.js canvas, status state reporting, drag-drop path pasting, event logs
         ├── sftp/
-        │   └── SftpDualPane.tsx          # Dual-pane local/remote filesystem explorer, transfer queue, ADR-003 Option B
+        │   └── SftpDualPane.tsx          # Dual-pane local/remote filesystem explorer, drag-drop remote upload, transfer queue
         ├── tunnels/
         │   └── TunnelManager.tsx         # Visual SSH tunnels (Local -L, Remote -R, Dynamic -D SOCKS5)
         ├── keys/

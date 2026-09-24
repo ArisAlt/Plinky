@@ -51,10 +51,61 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
 
   const [selectedLocal, setSelectedLocal] = useState<string | null>(null);
   const [selectedRemote, setSelectedRemote] = useState<string | null>(null);
+  const [isRemoteDragOver, setIsRemoteDragOver] = useState(false);
   const [transfers, setTransfers] = useState<SftpTransferItem[]>([
     { id: '1', filename: 'nginx.conf', direction: 'download', size: 3412, transferred: 3412, status: 'completed' },
     { id: '2', filename: 'bundle.js', direction: 'upload', size: 342000, transferred: 215000, status: 'transferring' },
   ]);
+
+  const handleRemoteDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isRemoteDragOver) setIsRemoteDragOver(true);
+  };
+
+  const handleRemoteDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRemoteDragOver(false);
+  };
+
+  const handleRemoteDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRemoteDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    files.forEach(f => {
+      const newItem: SftpTransferItem = {
+        id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        filename: f.name,
+        direction: 'upload',
+        size: f.size,
+        transferred: f.size,
+        status: 'completed',
+      };
+      setTransfers(prev => [newItem, ...prev]);
+
+      setRemoteFiles(prev => {
+        if (prev.some(entry => entry.name === f.name)) return prev;
+        return [
+          ...prev,
+          {
+            name: f.name,
+            isDir: false,
+            isSymlink: false,
+            size: f.size,
+            permissions: '-rw-r--r--',
+            owner: 'user',
+            group: 'user',
+            modified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          },
+        ];
+      });
+    });
+  };
 
   useEffect(() => {
     loadRemoteFiles();
@@ -368,7 +419,18 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div 
+            onDragOver={handleRemoteDragOver}
+            onDragLeave={handleRemoteDragLeave}
+            onDrop={handleRemoteDrop}
+            className="flex-1 relative overflow-y-auto"
+          >
+            {isRemoteDragOver && (
+              <div className="absolute inset-0 z-30 pointer-events-none border-2 border-dashed border-emerald-400 bg-emerald-950/70 backdrop-blur-xs flex items-center justify-center text-emerald-300 font-mono text-xs space-x-2 animate-in fade-in duration-100">
+                <Upload className="w-5 h-5 text-emerald-400 animate-bounce" />
+                <span>Drop files to upload to {remotePath}</span>
+              </div>
+            )}
             <table className="w-full text-left border-collapse">
               <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
                 <tr>

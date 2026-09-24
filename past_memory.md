@@ -349,6 +349,35 @@
   - `cargo test --workspace`: 44/44 tests pass.
   - `cargo deny check`: 0 advisories, bans, licenses, or source errors.
 
+### 27. TOP 5 HIGH-IMPACT REFINEMENTS IMPLEMENTATION PLAN
+* Scope & Operationalization: Formulated comprehensive implementation plan addressing key UX & ergonomic bottlenecks:
+  1. Tree Density & Compact Mode Toggle in `SessionExplorer.tsx`: Single-line compact view for 30+ PuTTY sessions vs comfortable cards, persisted in localStorage.
+  2. Split-Pane Terminal + SFTP Side-by-Side Mode in `App.tsx` & `SftpDualPane.tsx`: Real-time split layout linked to active tab with OSC 7 CWD synchronization.
+  3. Quick Connect History & Auto-Complete Dropdown in `TitleBar.tsx`: LRU history (15 entries) and fuzzy session completion with full keyboard navigation.
+  4. Connecting / Handshake Spinner in Tab Header: Dynamic visual feedback ('connecting' spinner, 'preauth' amber pulse, 'live' green indicator, 'disconnected' red indicator).
+  5. HTML5 Drag-and-Drop File Handling: Shell-quoted path pasting in terminal; remote upload drop target in SFTP pane.
+* Dual-Agent Status: Dispatched plan to Claude via MCP bridge (msg #28); user approved ("procced").
+
+### 28. EXECUTION OF TOP 5 HIGH-IMPACT REFINEMENTS (M1-M7 UX HARDENING)
+* 1. Session Tree Density Toggle (`SessionExplorer.tsx`):
+  - Compact (single-line row `h-7`, inline host:port, preserved double-click/context menu/drag-and-drop) vs Comfortable (cards).
+  - Persisted in localStorage (`plinky_session_tree_density`). Unit tested in `SessionExplorer.test.tsx`.
+* 2. Split-Pane Terminal + SFTP Side-by-Side Mode (`App.tsx`, `SftpDualPane.tsx`):
+  - Added `terminal-sftp` layout mode alongside single, split-v, split-h, and grid-4.
+  - Left pane: active TerminalView (58% width). Right pane: SftpDualPane (42% width) tied to active tab's session and synchronized via `onCwdChange` (OSC 7 directory tracking).
+* 3. Quick Connect History & Auto-Complete Dropdown (`TitleBar.tsx`):
+  - LRU history (15 entries) persisted in localStorage (`plinky_quick_connect_history`).
+  - Fuzzy auto-completion popover matching both recent history and saved PuTTY sessions. Keyboard navigation (`ArrowUp`/`ArrowDown`/`Enter`/`Esc`) and single-click removal. New test suite `TitleBar.test.tsx` (4 tests).
+* 4. Connecting / Handshake Spinner in Tab Header (`App.tsx`, `session.ts`, `TerminalView.tsx`):
+  - Tabs initialize with `status: 'connecting'`.
+  - TerminalView emits status transitions on chunks/prompts (`connecting` -> `preauth` on password/hostkey prompts -> `live` on access granted/prompt -> `disconnected` on close/error).
+  - Tab header displays animated `Loader2` spinner during handshake, amber `Key` pulse for preauth, green `Terminal` icon for live, and red dot for disconnected.
+* 5. HTML5 Native Drag-and-Drop File Handling:
+  - `TerminalView.tsx`: Dragging files into terminal pastes shell-quoted absolute path(s) directly into stdin with visual drop zone overlay.
+  - `SftpDualPane.tsx`: Dragging files onto remote files pane triggers upload task queue to current remote directory with visual drop zone indicator.
+* Verification: 18/18 Vitest tests pass across 5 test suites; `npm run build` compiles 0 TS errors in 2.13s; 44/44 workspace tests pass; `cargo deny check` clean.
+
+
 
 
 
