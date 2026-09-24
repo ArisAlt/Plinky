@@ -123,4 +123,46 @@ describe('SessionExplorer Component', () => {
       expect(onConnect).toHaveBeenCalledWith(mockSessions[0], true);
     }
   });
+
+  it('toggles between comfortable cards and compact list density, persisting to localStorage', () => {
+    localStorage.clear();
+    const onConnect = vi.fn();
+
+    render(
+      <SessionExplorer
+        sessions={mockSessions}
+        tabs={[]}
+        activeTabId={null}
+        onConnectSession={onConnect}
+        onOpenSftp={vi.fn()}
+        onCreateSession={vi.fn()}
+        onEditSession={vi.fn()}
+        onMoveToFolder={vi.fn()}
+      />
+    );
+
+    // Initial state: comfortable cards
+    expect(screen.getByText('Default Settings').closest('div[class*="group flex flex-col"]')).not.toBeNull();
+
+    // Click density toggle button
+    const toggleBtn = screen.getByLabelText('Toggle view density');
+    fireEvent.click(toggleBtn);
+
+    // Switched to compact mode: should have single-line item (flex items-center)
+    expect(localStorage.getItem('plinky_session_tree_density')).toBe('compact');
+    const compactItem = screen.getByText('Default Settings').closest('div[class*="group flex items-center"]');
+    expect(compactItem).not.toBeNull();
+
+    // Double-click works in compact mode too
+    if (compactItem) {
+      fireEvent.doubleClick(compactItem);
+      expect(onConnect).toHaveBeenCalledWith(mockSessions[0], true);
+    }
+
+    // Click toggle button again: switches back to comfortable
+    fireEvent.click(toggleBtn);
+    expect(localStorage.getItem('plinky_session_tree_density')).toBe('comfortable');
+    expect(screen.getByText('Default Settings').closest('div[class*="group flex flex-col"]')).not.toBeNull();
+  });
 });
+

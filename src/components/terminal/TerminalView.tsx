@@ -37,7 +37,8 @@ import {
   RotateCcw,
   Download,
   CopyCheck,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Upload
 } from 'lucide-react';
 
 interface PuTTYEventLog {
@@ -96,6 +97,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [isFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<HostKeyPromptInfo | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Search State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -303,6 +305,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     listenHostKeyPrompts((event) => {
       if (event.session_id === tab.id) {
         setPendingPrompt(event.prompt);
+        onUpdateTab(tab.id, { status: 'preauth' });
       }
     }).then((unlisten) => {
       unlistenPrompts = unlisten;
@@ -311,8 +314,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handleIncomingChunk = (chunk: Uint8Array) => {
       isLivePtyRef.current = true;
       term.write(chunk);
+      const text = new TextDecoder().decode(chunk);
+
+      // Status transitions
+      if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
+        onUpdateTab(tab.id, { status: 'disconnected' });
+      } else if (
+        text.includes('password:') || 
+        text.includes('Password:') || 
+        text.includes('login as:') || 
+        text.includes('Using username')
+      ) {
+        onUpdateTab(tab.id, { status: 'preauth' });
+      } else if (
+        text.includes('Access granted') || 
+        text.includes('Last login:') || 
+        text.includes('$') || 
+        text.includes('#')
+      ) {
+        onUpdateTab(tab.id, { status: 'live' });
+      } else if (tab.status === 'connecting') {
+        onUpdateTab(tab.id, { status: 'live' });
+      }
+
       if (isLoggingRef.current) {
-        const text = new TextDecoder().decode(chunk);
         if (loggingModeRef.current === 'printable') {
           const printable = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
           loggedBufferRef.current.push(printable);
@@ -339,6 +364,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (attachInfo && attachInfo.replay_data.length > 0) {
         handleIncomingChunk(new Uint8Array(attachInfo.replay_data));
         addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
+        onUpdateTab(tab.id, { status: 'live' });
       } else {
         // Fresh start
         addEventLog(`Spawning session "${tab.sessionName}" (${tab.hostname || 'local'}:${tab.port || 22})`, 'info');
@@ -355,6 +381,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           (tab as any).logFileName
         ).then((started) => {
           if (!started) {
+            onUpdateTab(tab.id, { status: 'disconnected' });
             if (isTauriEnvironment()) {
               term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}". Verify that PuTTY (plink) is installed and target host is reachable.]\x1b[0m\r\n`);
               addEventLog(`Failed to start PTY session "${tab.sessionName}"`, 'error');
@@ -362,6 +389,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               // Browser development preview fallback banner (non-Tauri mode)
               term.writeln(`\x1b[33m[Plinky: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
               addEventLog("Running in browser development preview mode", 'info');
+              onUpdateTab(tab.id, { status: 'live' });
             }
           } else {
             addEventLog(`PTY session live. Terminal ready.`, 'success');
@@ -621,6 +649,43 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     }
     setContextMenu(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    const paths = files.map(f => {
+      const fullPath = (f as any).path || f.name;
+      if (fullPath.includes(' ') || fullPath.includes('$') || fullPath.includes('&') || fullPath.includes('(')) {
+        return `'${fullPath.replace(/'/g, "'\\''")}'`;
+      }
+      return fullPath;
+    }).join(' ');
+
+    if (isLivePtyRef.current) {
+      writeTerminalInput(tab.id, new TextEncoder().encode(paths));
+    } else {
+      terminalRef.current?.write(paths);
+    }
+    terminalRef.current?.focus();
+    addEventLog(`Pasted dropped file path(s) into terminal: ${paths}`, 'info');
   };
 
   const handleSelectAll = () => {
@@ -898,8 +963,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`flex-1 relative w-full h-full overflow-hidden ${isFreeType ? 'free-type-active' : ''}`}
       >
+        {/* Drag and Drop File Path Overlay */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-30 pointer-events-none border-2 border-dashed border-sky-400 bg-sky-950/70 backdrop-blur-xs flex items-center justify-center text-sky-300 font-mono text-xs space-x-2 animate-in fade-in duration-100">
+            <Upload className="w-5 h-5 text-sky-400 animate-bounce" />
+            <span>Drop file to paste path into terminal</span>
+          </div>
+        )}
         {/* Free Type Visual Click Indicator */}
         {clickIndicator && (
           <div

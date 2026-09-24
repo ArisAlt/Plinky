@@ -83,7 +83,7 @@ export interface PpkInfo {
   fingerprintSha256: string;
 }
 
-export type SplitLayoutMode = 'single' | 'split-vertical' | 'split-horizontal' | 'grid-4';
+export type SplitLayoutMode = 'single' | 'split-vertical' | 'split-horizontal' | 'grid-4' | 'terminal-sftp';
 
 export interface SnippetItem {
   id: string;
