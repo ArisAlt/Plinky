@@ -64,6 +64,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const promptLinesRef = useRef<number[]>([]);
 
   const [hooksInjected, setHooksInjected] = useState(false);
+  const [hooksError, setHooksError] = useState<string | null>(null);
+  const [freeTypeHint, setFreeTypeHint] = useState<string | null>(null);
+  // Same condition used to pick isLocal when starting the PTY -- if this is
+  // true the backend actually spawned a local shell, not an SSH session, so
+  // the header shouldn't show a fabricated "(localhost:22)" network target.
+  const isLocalSession = tab.hostname === 'localhost' || !tab.hostname;
   const [isFreeType, setIsFreeType] = useState(tab.freeTypeMode);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<HostKeyPromptInfo | null>(null);
@@ -548,16 +554,41 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     if (terminalRef.current) {
       terminalRef.current.options.cursorStyle = nextState ? 'bar' : 'block';
     }
+    // The toggle's own effect (cursor style bar vs block) is subtle enough
+    // to look like it did nothing -- name what it actually does the first
+    // time it's turned on.
+    if (nextState) {
+      setHooksError(null);
+      setFreeTypeHint('Free Type on -- click anywhere in the terminal to move the cursor there');
+      setTimeout(() => setFreeTypeHint(null), 4000);
+    } else {
+      setFreeTypeHint(null);
+    }
   };
 
   const handleInjectHooks = async () => {
+    setHooksError(null);
+    if (!isLivePtyRef.current) {
+      // injectShellIntegration silently returns false on backend rejection
+      // (e.g. write_input_live_only refusing a session that's still at a
+      // host-key or password prompt) -- that failure needs to be visible,
+      // not just a console.warn, or the button looks like it does nothing.
+      setHooksError('Session is not connected yet -- log in first, then inject hooks.');
+      setTimeout(() => setHooksError(null), 4000);
+      return;
+    }
     try {
       const ok = await injectShellIntegration(tab.id, 'bash');
       if (ok) {
         setHooksInjected(true);
+      } else {
+        setHooksError('Failed to inject shell hooks.');
+        setTimeout(() => setHooksError(null), 4000);
       }
     } catch (e) {
       console.warn('Failed to inject hooks:', e);
+      setHooksError('Failed to inject shell hooks.');
+      setTimeout(() => setHooksError(null), 4000);
     }
   };
 
@@ -577,12 +608,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       onContextMenu={handleContextMenu}
     >
       {/* Tab Control Overlay Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
+      <div className="relative flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
         <div className="flex items-center space-x-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span className="font-semibold text-slate-200">{tab.sessionName}</span>
-          <span className="text-slate-500 font-mono">({tab.hostname}:{tab.port})</span>
+          <span className="text-slate-500 font-mono">
+            {isLocalSession ? '(local shell)' : `(${tab.hostname}:${tab.port})`}
+          </span>
         </div>
+
+        {hooksError && (
+          <div className="absolute top-full right-3 mt-1 z-40 px-2 py-1 rounded bg-rose-950/95 border border-rose-500/50 text-rose-300 text-[11px] shadow-lg animate-in fade-in slide-in-from-top-1 duration-150">
+            {hooksError}
+          </div>
+        )}
+        {freeTypeHint && (
+          <div className="absolute top-full right-3 mt-1 z-40 px-2 py-1 rounded bg-sky-950/95 border border-sky-500/50 text-sky-300 text-[11px] shadow-lg animate-in fade-in slide-in-from-top-1 duration-150">
+            {freeTypeHint}
+          </div>
+        )}
 
         <div className="flex items-center space-x-2">
           {/* Shell Integration Hook Injector Button */}
