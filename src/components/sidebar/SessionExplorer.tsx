@@ -136,32 +136,34 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       className="flex flex-col h-full bg-plinky-900 border-r border-plinky-800 select-none text-slate-200 relative"
     >
       {/* Sidebar Header */}
-      <div className="p-3 border-b border-plinky-800 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Terminal className="w-4 h-4 text-sky-400" />
-          <span className="font-semibold text-xs tracking-wider uppercase text-slate-300">PuTTY Sessions</span>
+      <div className="px-3 py-2.5 border-b border-plinky-800 flex items-center justify-between gap-1">
+        <div className="flex items-center space-x-1.5 min-w-0">
+          <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          <span className="font-semibold text-xs tracking-wider uppercase text-slate-300 truncate whitespace-nowrap">
+            PuTTY Sessions
+          </span>
         </div>
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 shrink-0">
           <button
             onClick={toggleDensity}
             title={density === 'compact' ? 'Switch to Comfortable View (Cards)' : 'Switch to Compact View (List)'}
             aria-label="Toggle view density"
-            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
+            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition shrink-0"
           >
             {density === 'compact' ? <LayoutList className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={() => setIsAddingFolder(v => !v)}
             title="Create New Folder"
-            className="flex items-center space-x-1 px-2 py-1 rounded bg-plinky-800 border border-plinky-700 text-slate-300 hover:text-white hover:bg-plinky-750 transition"
+            aria-label="Create New Folder"
+            className="p-1 rounded text-slate-400 hover:text-amber-300 hover:bg-plinky-800 transition shrink-0"
           >
             <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[11px] font-medium">Folder</span>
           </button>
           <button
             onClick={onCreateSession}
             title="Create New PuTTY Session"
-            className="flex items-center space-x-1 px-2 py-1 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
+            className="flex items-center space-x-1 px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition shrink-0 whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="text-[11px] font-medium">New</span>
