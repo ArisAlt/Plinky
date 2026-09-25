@@ -54,7 +54,7 @@ PublicKeyFile=/home/user/.ssh/key.ppk
 ### 1.2. Host Key Verification & Pre-Auth Prompt State Machine (D2, D3)
 PuTTY stores verified host keys in:
 - **Linux**: `~/.putty/sshhostkeys` (or `$PUTTYDIR/sshhostkeys`)
-- **Windows**: Windows Registry under `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\SshHostKeys` **[?]**
+- **Windows**: Windows Registry under `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\SshHostKeys` (verified against PuTTY 0.85 `windows/storage.c`): one REG_SZ value per key, named `<key-type>@<port>:<hostname>` with the hostname registry-escaped (§1.3)
 
 Each entry follows the PuTTY format:
 ```
@@ -93,6 +93,12 @@ On Windows, PuTTY persists sessions in the Windows Registry under:
 ```
 HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\[Session%20Name]
 ```
+Verified against PuTTY 0.85 (`windows/storage.c`, `windows/utils/registry.c`, `windows/utils/escape_registry_key.c`):
+
+* **Key name escaping differs from the Unix file names.** PuTTY for Windows `%XX`-escapes only space, `\`, `*`, `?`, `%`, control and non-ASCII bytes, and a leading `.`. `/`, `:`, `@`, `+` stay literal (`"myserver/prod:22"` is the key `myserver/prod:22`, but the Unix file `myserver%2Fprod%3A22`). Non-ASCII names are escaped as bytes of the ANSI code page (PuTTY is not a Unicode build). An empty name means `Default Settings`.
+* **Value types are strict.** `write_setting_i`/`write_setting_b` store REG_DWORD, everything else (strings, filenames, colours) REG_SZ. PuTTY only reads a value that has the type it expects, so `PortNumber` stored as the string `"22"` is ignored. The REG_DWORD set is every INT/BOOL option in `conf.h`, the font sizes (`FontHeight`, `FontIsBold`, `FontCharSet`, ...), and the hand-saved `Present`, `PingInterval`, `PingIntervalSecs`, `GssapiRekey`, `BellOverloadT`/`S`, ... (`crates/putty-compat/src/registry.rs` has the full list).
+* **No `PUTTYDIR` on Windows.** PuTTY for Windows never reads it, so Plinky ignores it there too: a `PUTTYDIR` session store on Windows would hold sessions `plink -load` can't open.
+* Plinky's registry writes replace a session's REG_SZ/REG_DWORD values (a setting removed in Plinky is removed from the key, as the file store rewrites the whole file) and leave values of other types alone. The registry has no `.bak` equivalent.
 
 ### 1.4. Key Registry / Session Attributes to Parse & Replicate
 
@@ -109,13 +115,15 @@ HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\[Session%20Name]
 | `AgentFwd` | `Integer` | `0` or `1` | Enable/disable Pageant SSH agent forwarding |
 | `Compression` | `Integer` | `0` or `1` | Enable zlib compression |
 | `Colour0` – `Colour21` | `String` | RGB CSV | Custom RGB color palette entries (e.g. `"187,187,187"`) |
-| `FontName` / `FontSize` | `String` / `Int` | `"Courier New"` / `10` | Session font configuration |
+| `Font` / `FontHeight` | `String` / `Integer` | `"Courier New"` / `10` | Session font configuration (plus `FontIsBold`, `FontCharSet`) |
+
+`Integer` fields are REG_DWORD in the Windows registry and decimal text in Unix session files; `String` fields are REG_SZ / text.
 
 ### 1.5. Unified Cross-Platform Storage Adapter (`crates/putty-compat`)
 Plinky provides a standalone Rust crate (`crates/putty-compat`) with zero Tauri dependencies:
 * Detects runtime platform (`cfg!(target_os = "linux")` vs `cfg!(target_os = "windows")`).
 * On Linux: Checks `PUTTYDIR` first, then `XDG_CONFIG_HOME`, then `$HOME/.putty/sessions/` using `std::fs`.
-* On Windows: Queries and writes to the Windows Registry using the `winreg` crate.
+* On Windows: Queries and writes to the Windows Registry using the `winreg` crate (`putty_compat::registry`); `PUTTYDIR` is ignored, as PuTTY for Windows ignores it.
 * Also supports reading `.reg` exports and portable INI session files (e.g., KiTTY / PuTTY Portable).
 * Fully fuzzable and testable headless in CI across operating systems.
 

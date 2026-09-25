@@ -13,6 +13,8 @@ pub struct HostKeyEntry {
     pub raw_key: String,
 }
 
+/// PuTTY for Unix's host key file. PuTTY for Windows keeps host keys in the
+/// registry instead, which is where [`list_host_keys`] reads them there.
 pub fn hostkeys_path() -> PathBuf {
     if let Ok(val) = std::env::var("PUTTYDIR") {
         let p = PathBuf::from(val);
@@ -37,7 +39,10 @@ pub fn hostkeys_path() -> PathBuf {
 }
 
 pub fn list_host_keys() -> Result<Vec<HostKeyEntry>> {
-    list_host_keys_from(&hostkeys_path())
+    #[cfg(windows)]
+    return crate::registry::list_host_keys_in(crate::registry::HOST_KEYS_KEY);
+    #[cfg(not(windows))]
+    return list_host_keys_from(&hostkeys_path());
 }
 
 pub fn list_host_keys_from(path: &Path) -> Result<Vec<HostKeyEntry>> {
@@ -64,21 +69,25 @@ pub fn list_host_keys_from(path: &Path) -> Result<Vec<HostKeyEntry>> {
         }
 
         if let Some((target, raw_key)) = trimmed.split_once(char::is_whitespace) {
-            let raw_key = raw_key.trim().to_string();
-            // Format: <key_type>@<port>:<hostname>
-            if let Some((key_type, rest)) = target.split_once('@') {
-                if let Some((port_str, host)) = rest.split_once(':') {
-                    let port = port_str.parse::<u16>().unwrap_or(22);
-                    entries.push(HostKeyEntry {
-                        key_type: key_type.to_string(),
-                        host: host.to_string(),
-                        port,
-                        raw_key,
-                    });
-                }
+            if let Some((key_type, port, host)) = parse_host_key_target(target) {
+                entries.push(HostKeyEntry {
+                    key_type,
+                    host: host.to_string(),
+                    port,
+                    raw_key: raw_key.trim().to_string(),
+                });
             }
         }
     }
 
     Ok(entries)
+}
+
+/// Splits PuTTY's `<key_type>@<port>:<hostname>`, the start of a file line
+/// and the whole of a registry value name (where the host is escaped).
+pub(crate) fn parse_host_key_target(target: &str) -> Option<(String, u16, &str)> {
+    let (key_type, rest) = target.split_once('@')?;
+    let (port_str, host) = rest.split_once(':')?;
+    let port = port_str.parse::<u16>().unwrap_or(22);
+    Some((key_type.to_string(), port, host))
 }
