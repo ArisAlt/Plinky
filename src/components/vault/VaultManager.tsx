@@ -11,7 +11,8 @@ import {
   Copy, 
   Check, 
   RefreshCw, 
-  AlertCircle 
+  AlertCircle,
+  X
 } from 'lucide-react';
 import {
   VaultEntry,
@@ -33,7 +34,11 @@ import {
 // read it from.
 const CLIPBOARD_CLEAR_MS = 25_000;
 
-export const VaultManager: React.FC = () => {
+interface VaultManagerProps {
+  onClose?: () => void;
+}
+
+export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   const [isInitialized, setIsInitialized] = useState<boolean>(true);
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [masterPassword, setMasterPassword] = useState('');
@@ -61,6 +66,16 @@ export const VaultManager: React.FC = () => {
   useEffect(() => {
     checkStatus();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const checkStatus = async () => {
     setLoading(true);
@@ -286,6 +301,16 @@ export const VaultManager: React.FC = () => {
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>Lock Vault</span>
+              </button>
+            )}
+            {onClose && (
+              <button
+                onClick={onClose}
+                title="Close Vault and return to Terminal (Esc)"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-plinky-900 border border-plinky-800 hover:border-plinky-700 hover:bg-plinky-850 text-slate-300 hover:text-white text-xs transition ml-2"
+              >
+                <X className="w-4 h-4" />
+                <span>Close</span>
               </button>
             )}
           </div>

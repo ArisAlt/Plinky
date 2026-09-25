@@ -16,16 +16,18 @@ import {
   Search,
   ChevronRight,
   FolderPlus,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 
 interface SftpDualPaneProps {
   sessionName: string;
   hostname: string;
   initialRemotePath?: string;
+  onClose?: () => void;
 }
 
-export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostname, initialRemotePath }) => {
+export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostname, initialRemotePath, onClose }) => {
   const [remotePath, setRemotePath] = useState(initialRemotePath || '/var/www');
   const [localPath, setLocalPath] = useState('/home/user/workspace');
   const [viewMode, setViewMode] = useState<'dual' | 'remote' | 'local'>('dual');
@@ -35,6 +37,16 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
       setRemotePath(initialRemotePath);
     }
   }, [initialRemotePath]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const [localFilter, setLocalFilter] = useState('');
   const [remoteFilter, setRemoteFilter] = useState('');
@@ -303,6 +315,15 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({ sessionName, hostnam
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close SFTP View (Esc)"
+              className="p-1 rounded hover:bg-plinky-800 text-slate-400 hover:text-white transition ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

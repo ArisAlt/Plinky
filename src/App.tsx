@@ -227,7 +227,11 @@ export const App: React.FC = () => {
 
   const handleMoveSessionToFolder = async (session: PuttySession, folder: string) => {
     if ((session.folder || 'Uncategorized') === folder) return;
-    await writePuttySession({ ...session, folder });
+    await writePuttySession({ 
+      ...session, 
+      folder,
+      extra: { ...(session.extra || {}), PlinkyFolder: folder } 
+    });
     await loadSessions();
   };
 
@@ -641,19 +645,23 @@ export const App: React.FC = () => {
               sessionName={sftpSession.name}
               hostname={sftpSession.host}
               initialRemotePath={sftpSession.remotePath}
+              onClose={() => setActiveView('sessions')}
             />
           )}
 
           {activeView === 'tunnels' && (
-            <TunnelManager sessionName={activeTab?.sessionName || 'Default'} />
+            <TunnelManager 
+              sessionName={activeTab?.sessionName || 'Default'} 
+              onClose={() => setActiveView('sessions')}
+            />
           )}
 
           {activeView === 'keys' && (
-            <HostKeyManager />
+            <HostKeyManager onClose={() => setActiveView('sessions')} />
           )}
 
           {activeView === 'vault' && (
-            <VaultManager />
+            <VaultManager onClose={() => setActiveView('sessions')} />
           )}
         </div>
       </div>

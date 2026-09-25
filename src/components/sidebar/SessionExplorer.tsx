@@ -3,6 +3,7 @@ import { PuttySession, TerminalTab } from '../../types/session';
 import {
   Folder,
   FolderInput,
+  FolderPlus,
   Terminal,
   Search,
   Plus,
@@ -10,8 +11,15 @@ import {
   Tag,
   Pencil,
   List,
-  LayoutList
+  LayoutList,
+  Trash2,
+  X
 } from 'lucide-react';
+import {
+  getUserFolders,
+  addUserFolder,
+  deleteUserFolder,
+} from '../../services/sessionMetadata';
 
 interface SessionExplorerProps {
   sessions: PuttySession[];
@@ -41,6 +49,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [newFolderInput, setNewFolderInput] = useState('');
   const [draggingSession, setDraggingSession] = useState<PuttySession | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [isAddingFolder, setIsAddingFolder] = useState(false);
+  const [createFolderName, setCreateFolderName] = useState('');
+  const [folderVersion, setFolderVersion] = useState(0);
   const [density, setDensity] = useState<'compact' | 'comfortable'>(() => {
     return (localStorage.getItem('plinky_session_tree_density') as 'compact' | 'comfortable') || 'comfortable';
   });
@@ -65,10 +76,14 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     setCollapsedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
   };
 
-  // All folder names that exist across saved sessions (not just the
-  // currently filtered ones), so the "Move to Folder" list stays complete
-  // while searching.
-  const allFolders = Array.from(new Set(sessions.map(s => s.folder || 'Uncategorized'))).sort();
+  // Combine user-created custom folders and all folders referenced by sessions
+  // so empty folders remain visible and selectable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allFolders = React.useMemo(() => {
+    const user = getUserFolders();
+    const fromSessions = sessions.map(s => s.folder || 'Saved Sessions');
+    return Array.from(new Set([...user, ...fromSessions])).sort();
+  }, [sessions, folderVersion]);
 
   const filteredSessions = sessions.filter(s => {
     const q = searchQuery.toLowerCase();
@@ -83,13 +98,26 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     );
   });
 
-  // Group by folder
-  const groupedSessions = filteredSessions.reduce<Record<string, PuttySession[]>>((acc, s) => {
-    const folder = s.folder || 'Uncategorized';
-    if (!acc[folder]) acc[folder] = [];
-    acc[folder].push(s);
+  // Group by folder, preserving custom folders even if currently empty
+  const groupedSessions = React.useMemo(() => {
+    const acc: Record<string, PuttySession[]> = {};
+    const q = searchQuery.toLowerCase().trim();
+
+    // When not searching, display all folders so users can drop into empty ones.
+    // When searching, display folders matching the query or containing matching sessions.
+    for (const folder of allFolders) {
+      if (!q || folder.toLowerCase().includes(q)) {
+        acc[folder] = [];
+      }
+    }
+
+    for (const s of filteredSessions) {
+      const folder = s.folder || 'Saved Sessions';
+      if (!acc[folder]) acc[folder] = [];
+      acc[folder].push(s);
+    }
     return acc;
-  }, {});
+  }, [allFolders, filteredSessions, searchQuery]);
 
   const getProtocolBadge = (protocol: string) => {
     switch (protocol) {
@@ -123,6 +151,14 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             {density === 'compact' ? <LayoutList className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
           </button>
           <button
+            onClick={() => setIsAddingFolder(v => !v)}
+            title="Create New Folder"
+            className="flex items-center space-x-1 px-2 py-1 rounded bg-plinky-800 border border-plinky-700 text-slate-300 hover:text-white hover:bg-plinky-750 transition"
+          >
+            <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[11px] font-medium">Folder</span>
+          </button>
+          <button
             onClick={onCreateSession}
             title="Create New PuTTY Session"
             className="flex items-center space-x-1 px-2 py-1 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
@@ -132,6 +168,54 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Inline Create Folder Form */}
+      {isAddingFolder && (
+        <div className="p-2 bg-plinky-950/90 border-b border-plinky-800 flex items-center space-x-1.5">
+          <FolderPlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <input
+            type="text"
+            autoFocus
+            placeholder="Folder name, Enter to create..."
+            value={createFolderName}
+            onChange={(e) => setCreateFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && createFolderName.trim()) {
+                addUserFolder(createFolderName.trim());
+                setCreateFolderName('');
+                setIsAddingFolder(false);
+                setFolderVersion(v => v + 1);
+              } else if (e.key === 'Escape') {
+                setIsAddingFolder(false);
+                setCreateFolderName('');
+              }
+            }}
+            className="flex-1 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+          />
+          <button
+            onClick={() => {
+              if (createFolderName.trim()) {
+                addUserFolder(createFolderName.trim());
+                setCreateFolderName('');
+                setIsAddingFolder(false);
+                setFolderVersion(v => v + 1);
+              }
+            }}
+            className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-medium"
+          >
+            Add
+          </button>
+          <button
+            onClick={() => {
+              setIsAddingFolder(false);
+              setCreateFolderName('');
+            }}
+            className="p-0.5 rounded text-slate-400 hover:text-slate-200"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="p-2 border-b border-plinky-800/60">
@@ -180,12 +264,50 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                 <Folder className={`w-3.5 h-3.5 transition-transform ${isCollapsed ? '-rotate-90 text-slate-500' : 'text-sky-400'}`} />
                 <span className="flex-1 truncate">{folder}</span>
                 <span className="text-[10px] text-slate-500 font-mono">({folderSessions.length})</span>
+                {folderSessions.length === 0 && folder !== 'Saved Sessions' && folder !== 'Default' && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteUserFolder(folder);
+                      setFolderVersion(v => v + 1);
+                    }}
+                    title="Delete empty folder"
+                    className="p-0.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </span>
+                )}
               </button>
 
               {/* Folder Items */}
               {!isCollapsed && (
                 <div className={`ml-3 pl-2 border-l border-plinky-800/80 ${density === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}`}>
-                  {folderSessions.map((session) => {
+                  {folderSessions.length === 0 ? (
+                    <div
+                      onDragOver={(e) => {
+                        if (!draggingSession) return;
+                        e.preventDefault();
+                        setDragOverFolder(folder);
+                      }}
+                      onDragLeave={() => setDragOverFolder(prev => (prev === folder ? null : prev))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverFolder(null);
+                        if (draggingSession) {
+                          onMoveToFolder(draggingSession, folder);
+                          setDraggingSession(null);
+                        }
+                      }}
+                      className={`py-2 px-2 my-1 text-center rounded border border-dashed transition text-[10px] ${
+                        dragOverFolder === folder
+                          ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                          : 'border-plinky-800/80 text-slate-500 hover:border-slate-700'
+                      }`}
+                    >
+                      Empty folder — drag sessions here
+                    </div>
+                  ) : (
+                    folderSessions.map((session) => {
                     const openTab = tabs.find(t => t.sessionName === session.name);
                     const isActiveTab = !!openTab && openTab.id === activeTabId;
                     return density === 'compact' ? (
@@ -349,7 +471,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                       )}
                     </div>
                     );
-                  })}
+                  }))}
                 </div>
               )}
             </div>
@@ -470,10 +592,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newFolderInput.trim()) {
-                      onMoveToFolder(contextMenu.session, newFolderInput.trim());
+                      const target = newFolderInput.trim();
+                      addUserFolder(target);
+                      onMoveToFolder(contextMenu.session, target);
                       setContextMenu(null);
                       setMoveSubmenuOpen(false);
                       setNewFolderInput('');
+                      setFolderVersion(v => v + 1);
                     }
                   }}
                   placeholder="New folder name, Enter to create"

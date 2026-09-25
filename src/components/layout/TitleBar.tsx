@@ -210,7 +210,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveView('sftp')}
+            onClick={() => setActiveView(activeView === 'sftp' ? 'sessions' : 'sftp')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'sftp'
                 ? 'bg-plinky-800 text-emerald-300 font-medium'
@@ -222,7 +222,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveView('tunnels')}
+            onClick={() => setActiveView(activeView === 'tunnels' ? 'sessions' : 'tunnels')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'tunnels'
                 ? 'bg-plinky-800 text-purple-300 font-medium'
@@ -234,7 +234,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveView('keys')}
+            onClick={() => setActiveView(activeView === 'keys' ? 'sessions' : 'keys')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'keys'
                 ? 'bg-plinky-800 text-amber-300 font-medium'
@@ -246,7 +246,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveView('vault')}
+            onClick={() => setActiveView(activeView === 'vault' ? 'sessions' : 'vault')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'vault'
                 ? 'bg-plinky-800 text-sky-400 font-medium'
