@@ -88,6 +88,8 @@ pub struct VaultEntry {
     pub id: String,
     pub username: Option<String>,
     pub secret: SecretString,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enable_secret: Option<SecretString>,
     pub notes: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
@@ -103,6 +105,7 @@ pub struct VaultEntry {
 pub struct VaultEntryMeta {
     pub id: String,
     pub username: Option<String>,
+    pub has_enable_secret: bool,
     pub notes: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
@@ -113,6 +116,7 @@ impl From<&VaultEntry> for VaultEntryMeta {
         Self {
             id: e.id.clone(),
             username: e.username.clone(),
+            has_enable_secret: e.enable_secret.as_ref().map(|s| !s.is_empty()).unwrap_or(false),
             notes: e.notes.clone(),
             created_at: e.created_at,
             updated_at: e.updated_at,
@@ -130,6 +134,7 @@ impl VaultEntry {
             id: id.into(),
             username: None,
             secret: SecretString::new(secret),
+            enable_secret: None,
             notes: None,
             created_at: now,
             updated_at: now,
@@ -138,6 +143,11 @@ impl VaultEntry {
 
     pub fn with_username(mut self, username: impl Into<String>) -> Self {
         self.username = Some(username.into());
+        self
+    }
+
+    pub fn with_enable_secret(mut self, enable_secret: impl Into<String>) -> Self {
+        self.enable_secret = Some(SecretString::new(enable_secret));
         self
     }
 
@@ -287,6 +297,7 @@ impl Vault {
                 id: id_str.clone(),
                 username: None,
                 secret: SecretString::new(secret),
+                enable_secret: None,
                 notes: None,
                 created_at: now,
                 updated_at: now,
@@ -464,7 +475,7 @@ mod tests {
         // never contains the plaintext either, in case that ever changes.
         let json = serde_json::to_string(&meta[0]).unwrap();
         assert!(!json.contains("top-secret-password"));
-        assert!(!json.contains("secret"));
+        assert!(!json.contains("\"secret\""));
     }
 
     #[test]
@@ -484,5 +495,83 @@ mod tests {
 
         // Saving a locked vault must fail
         assert!(vault.save().is_err());
+    }
+
+    #[test]
+    fn test_vault_entry_enable_secret_roundtrip() {
+        let dir = tempdir().unwrap();
+        let vault_file = dir.path().join("vault.bin");
+        let master_pwd = "network-admin-vault-pwd";
+
+        let mut vault = Vault::create_fast(&vault_file, master_pwd).unwrap();
+        let entry = VaultEntry::new("session:cisco-core-01", "cisco-login-pass")
+            .with_username("admin")
+            .with_enable_secret("cisco-enable-secret-15")
+            .with_notes("Cisco Catalyst 9300 Core Switch");
+        vault.set_entry(entry);
+        vault.save().unwrap();
+
+        let loaded = Vault::load(&vault_file, master_pwd).unwrap();
+        let loaded_entry = loaded.get_entry("session:cisco-core-01").unwrap();
+        assert_eq!(loaded_entry.username.as_deref(), Some("admin"));
+        assert_eq!(loaded_entry.secret.expose_secret(), "cisco-login-pass");
+        assert!(loaded_entry.enable_secret.is_some());
+        let enable_sec = loaded_entry.enable_secret.as_ref().unwrap();
+        assert_eq!(enable_sec.expose_secret(), "cisco-enable-secret-15");
+        assert_eq!(format!("{:?}", enable_sec), "[REDACTED]");
+        assert_eq!(format!("{}", enable_sec), "[REDACTED]");
+    }
+
+    #[test]
+    fn test_vault_entry_meta_has_enable_secret() {
+        let dir = tempdir().unwrap();
+        let vault_file = dir.path().join("vault.bin");
+
+        let mut vault = Vault::create_fast(&vault_file, "meta_enable_test").unwrap();
+        // Entry 1: Standard server (no enable password)
+        vault.set_entry(
+            VaultEntry::new("session:linux-server", "user-password")
+                .with_username("ubuntu"),
+        );
+        // Entry 2: Network switch (with enable password)
+        vault.set_entry(
+            VaultEntry::new("session:switch-01", "switch-login")
+                .with_username("netops")
+                .with_enable_secret("privileged-enable-secret"),
+        );
+
+        let metas = vault.list_entries_meta();
+        assert_eq!(metas.len(), 2);
+
+        let linux_meta = metas.iter().find(|m| m.id == "session:linux-server").unwrap();
+        assert!(!linux_meta.has_enable_secret);
+
+        let switch_meta = metas.iter().find(|m| m.id == "session:switch-01").unwrap();
+        assert!(switch_meta.has_enable_secret);
+
+        let json = serde_json::to_string(&switch_meta).unwrap();
+        assert!(!json.contains("privileged-enable-secret"));
+        assert!(!json.contains("switch-login"));
+    }
+
+    #[test]
+    fn test_vault_backward_compatibility_without_enable_secret() {
+        // Legacy JSON without enable_secret field
+        let legacy_json = r#"{
+            "id": "session:old-entry",
+            "username": "admin",
+            "secret": "legacy-pass",
+            "notes": "created before enable_secret existed",
+            "created_at": 1700000000,
+            "updated_at": 1700000000
+        }"#;
+
+        let entry: VaultEntry = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(entry.id, "session:old-entry");
+        assert_eq!(entry.secret.expose_secret(), "legacy-pass");
+        assert!(entry.enable_secret.is_none());
+
+        let meta = VaultEntryMeta::from(&entry);
+        assert!(!meta.has_enable_secret);
     }
 }

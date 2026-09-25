@@ -168,6 +168,7 @@ export const App: React.FC = () => {
       port: session.port || session.port_number || 22,
       username: session.username || session.user_name || undefined,
       protocol: session.protocol,
+      vaultKey: session.extra?.PlinkyVaultKey,
     };
 
     setTabs(prev => [...prev, newTab]);

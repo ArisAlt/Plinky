@@ -16,7 +16,11 @@ import {
   HostKeyPromptInfo,
   injectShellIntegration,
   isTauriEnvironment,
-  isSessionClosed
+  isSessionClosed,
+  readPuttySession,
+  vaultIsUnlocked,
+  vaultGetEntry,
+  VaultEntry
 } from '../../services/tauriBridge';
 import {
   Radio,
@@ -39,7 +43,10 @@ import {
   Download,
   CopyCheck,
   Settings as SettingsIcon,
-  Upload
+  Upload,
+  Key,
+  Shield,
+  Check
 } from 'lucide-react';
 
 type HookShell = 'bash' | 'zsh' | 'fish';
@@ -160,6 +167,116 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const copyOnSelectRef = useRef(copyOnSelect);
   copyOnSelectRef.current = copyOnSelect;
+
+  // Encrypted Vault credentials state
+  const [vaultKey, setVaultKey] = useState<string | null>(tab.vaultKey || null);
+  const [vaultEntry, setVaultEntry] = useState<VaultEntry | null>(null);
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
+  const [isVaultMenuOpen, setIsVaultMenuOpen] = useState(false);
+  const [detectedPasswordPrompt, setDetectedPasswordPrompt] = useState<'login' | 'enable' | null>(null);
+  const [copiedVaultKey, setCopiedVaultKey] = useState<'login' | 'enable' | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const resolveVault = async () => {
+      let key = tab.vaultKey;
+      if (!key) {
+        const sess = await readPuttySession(tab.sessionName);
+        if (sess?.extra?.PlinkyVaultKey) {
+          key = sess.extra.PlinkyVaultKey;
+        }
+      }
+      if (!active) return;
+      if (key) {
+        setVaultKey(key);
+        const unlocked = await vaultIsUnlocked();
+        if (!active) return;
+        setIsVaultUnlocked(unlocked);
+        if (unlocked) {
+          const entry = await vaultGetEntry(key);
+          if (active && entry) {
+            setVaultEntry(entry);
+          }
+        }
+      }
+    };
+    resolveVault();
+    return () => { active = false; };
+  }, [tab.vaultKey, tab.sessionName]);
+
+  const handleSendVaultPassword = async () => {
+    if (!vaultKey) return;
+    let entry = vaultEntry;
+    if (!entry) {
+      entry = await vaultGetEntry(vaultKey);
+      if (entry) setVaultEntry(entry);
+    }
+    if (entry && entry.secret) {
+      writeTerminalInput(tab.id, new TextEncoder().encode(entry.secret + '\r'));
+      addEventLog("Injected login password from Encrypted Vault", 'info');
+      setDetectedPasswordPrompt(null);
+    }
+  };
+
+  const handleSendVaultEnablePassword = async () => {
+    if (!vaultKey) return;
+    let entry = vaultEntry;
+    if (!entry) {
+      entry = await vaultGetEntry(vaultKey);
+      if (entry) setVaultEntry(entry);
+    }
+    if (entry && entry.enable_secret) {
+      writeTerminalInput(tab.id, new TextEncoder().encode(entry.enable_secret + '\r'));
+      addEventLog("Injected enable password from Encrypted Vault", 'info');
+      setDetectedPasswordPrompt(null);
+    }
+  };
+
+  const handleCopyVaultPassword = async () => {
+    if (!vaultKey) return;
+    let entry = vaultEntry;
+    if (!entry) {
+      entry = await vaultGetEntry(vaultKey);
+      if (entry) setVaultEntry(entry);
+    }
+    if (entry && entry.secret) {
+      navigator.clipboard.writeText(entry.secret);
+      setCopiedVaultKey('login');
+      setTimeout(() => setCopiedVaultKey(null), 2000);
+      addEventLog("Copied login password to clipboard (auto-clears in 25s)", 'info');
+      setTimeout(async () => {
+        try {
+          const current = await navigator.clipboard.readText();
+          if (current === entry.secret) {
+            await navigator.clipboard.writeText('');
+          }
+        } catch {}
+      }, 25000);
+    }
+  };
+
+  const handleCopyVaultEnablePassword = async () => {
+    if (!vaultKey) return;
+    let entry = vaultEntry;
+    if (!entry) {
+      entry = await vaultGetEntry(vaultKey);
+      if (entry) setVaultEntry(entry);
+    }
+    if (entry && entry.enable_secret) {
+      navigator.clipboard.writeText(entry.enable_secret);
+      setCopiedVaultKey('enable');
+      setTimeout(() => setCopiedVaultKey(null), 2000);
+      addEventLog("Copied enable password to clipboard (auto-clears in 25s)", 'info');
+      setTimeout(async () => {
+        try {
+          const current = await navigator.clipboard.readText();
+          if (current === entry.enable_secret) {
+            await navigator.clipboard.writeText('');
+          }
+        } catch {}
+      }, 25000);
+    }
+  };
 
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
@@ -377,12 +494,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         /(?:[\$#%❯]\s*)$/m.test(text.trim())
       );
 
+      // Password & Enable Prompt Detection (PreAuth or In-Session Privileged Exec)
+      const trimmedText = text.trim();
+      const isEnablePrompt = /enable\s*password:\s*$/i.test(trimmedText);
+      const isPasswordPrompt = isEnablePrompt || /[pP]assword:\s*$/.test(trimmedText);
+
       if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
+        setDetectedPasswordPrompt(null);
       } else if (isPreauthPattern) {
         onUpdateTab(tab.id, { status: 'preauth' });
+        if (isEnablePrompt) {
+          setDetectedPasswordPrompt('enable');
+        } else if (isPasswordPrompt) {
+          setDetectedPasswordPrompt('login');
+        }
       } else if (isLivePattern) {
         onUpdateTab(tab.id, { status: 'live' });
+        setDetectedPasswordPrompt(null);
+      } else if (isEnablePrompt) {
+        setDetectedPasswordPrompt('enable');
+      } else if (isPasswordPrompt) {
+        setDetectedPasswordPrompt('login');
       }
 
       if (isLoggingRef.current) {
@@ -899,6 +1032,97 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </div>
         )}
         <div className="flex items-center space-x-2">
+          {/* Encrypted Vault Credentials Quick Action */}
+          {vaultKey && (
+            <div className="relative">
+              <button
+                onClick={() => setIsVaultMenuOpen(prev => !prev)}
+                title={`Encrypted Vault: ${vaultKey}`}
+                className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-medium transition-all ${
+                  isVaultMenuOpen
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                    : 'bg-slate-800/80 text-amber-400 border-amber-500/30 hover:bg-slate-700 hover:text-amber-300'
+                }`}
+              >
+                <Key className="w-3 h-3 text-amber-400" />
+                <span>Vault</span>
+              </button>
+
+              {isVaultMenuOpen && (
+                <div 
+                  className="absolute right-0 top-full mt-1.5 z-50 w-56 bg-plinky-900 border border-amber-500/40 rounded-lg shadow-2xl py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in duration-100"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="px-3 py-1 border-b border-plinky-800 flex items-center justify-between">
+                    <span className="font-semibold text-slate-200 text-[11px]">Vault Credentials</span>
+                    <span className="text-[10px] text-amber-400 font-mono truncate max-w-[100px]" title={vaultKey}>
+                      {vaultKey}
+                    </span>
+                  </div>
+
+                  {!isVaultUnlocked ? (
+                    <div className="p-2.5 text-center space-y-1.5">
+                      <p className="text-[11px] text-slate-400">Vault is currently locked.</p>
+                      <p className="text-[10px] text-slate-500">Unlock via the Shield tab in the top bar to paste credentials.</p>
+                    </div>
+                  ) : (
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          handleSendVaultPassword();
+                          setIsVaultMenuOpen(false);
+                        }}
+                        className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Send Login Password</span>
+                      </button>
+
+                      {vaultEntry?.enable_secret && (
+                        <button
+                          onClick={() => {
+                            handleSendVaultEnablePassword();
+                            setIsVaultMenuOpen(false);
+                          }}
+                          className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-amber-600/30 hover:text-amber-200 text-left transition"
+                        >
+                          <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Send Enable Password</span>
+                        </button>
+                      )}
+
+                      <div className="border-t border-plinky-800 my-1" />
+
+                      <button
+                        onClick={handleCopyVaultPassword}
+                        className="w-full flex items-center justify-between px-3 py-1 hover:bg-slate-800 text-slate-300 text-left text-[11px] transition"
+                      >
+                        <span className="flex items-center space-x-1.5">
+                          <Copy className="w-3 h-3 text-slate-400" />
+                          <span>Copy Password</span>
+                        </span>
+                        {copiedVaultKey === 'login' && <Check className="w-3 h-3 text-emerald-400" />}
+                      </button>
+
+                      {vaultEntry?.enable_secret && (
+                        <button
+                          onClick={handleCopyVaultEnablePassword}
+                          className="w-full flex items-center justify-between px-3 py-1 hover:bg-slate-800 text-slate-300 text-left text-[11px] transition"
+                        >
+                          <span className="flex items-center space-x-1.5">
+                            <Copy className="w-3 h-3 text-amber-400" />
+                            <span>Copy Enable Password</span>
+                          </span>
+                          {copiedVaultKey === 'enable' && <Check className="w-3 h-3 text-emerald-400" />}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Find In Terminal Button */}
           <button
             onClick={() => {
@@ -1064,6 +1288,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             <span>Drop file to paste path into terminal</span>
           </div>
         )}
+
+        {/* Floating 1-Click Vault Autofill Notification */}
+        {detectedPasswordPrompt && vaultKey && isVaultUnlocked && (
+          <div className="absolute top-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded-lg shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+            <Key className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span className="font-medium">
+              {detectedPasswordPrompt === 'enable' ? 'Enable Password Prompt Detected' : 'Password Prompt Detected'}
+            </span>
+            <button
+              onClick={detectedPasswordPrompt === 'enable' ? handleSendVaultEnablePassword : handleSendVaultPassword}
+              className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow-xs flex items-center space-x-1"
+            >
+              <span>{detectedPasswordPrompt === 'enable' ? '⚡ Autofill Enable' : '🔑 Autofill Password'}</span>
+            </button>
+            <button
+              onClick={() => setDetectedPasswordPrompt(null)}
+              className="p-0.5 text-slate-400 hover:text-white rounded"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Free Type Visual Click Indicator */}
         {clickIndicator && (
           <div
@@ -1113,6 +1361,43 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
               <span>Select All</span>
             </button>
+            {vaultKey && (
+              <>
+                <div className="border-t border-plinky-800 my-1" />
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400/80 flex items-center space-x-1">
+                  <Shield className="w-3 h-3 text-amber-400" />
+                  <span>Vault ({vaultKey})</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handleSendVaultPassword();
+                  }}
+                  disabled={!isVaultUnlocked}
+                  className={`w-full flex items-center space-x-2 px-3 py-1.5 text-left transition ${
+                    isVaultUnlocked ? 'hover:bg-amber-600/30 text-amber-200' : 'text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Send Login Password</span>
+                </button>
+                {vaultEntry?.enable_secret && (
+                  <button
+                    onClick={() => {
+                      setContextMenu(null);
+                      handleSendVaultEnablePassword();
+                    }}
+                    disabled={!isVaultUnlocked}
+                    className={`w-full flex items-center space-x-2 px-3 py-1.5 text-left transition ${
+                      isVaultUnlocked ? 'hover:bg-emerald-600/30 text-emerald-200' : 'text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Send Enable Password</span>
+                  </button>
+                )}
+              </>
+            )}
             <div className="border-t border-plinky-800 my-1" />
             <button
               onClick={handleClearScrollback}

@@ -53,6 +53,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
   const [revealLoading, setRevealLoading] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copiedEnableKey, setCopiedEnableKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -61,6 +62,8 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   const [newId, setNewId] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newSecret, setNewSecret] = useState('');
+  const [isNetworkDevice, setIsNetworkDevice] = useState(false);
+  const [newEnableSecret, setNewEnableSecret] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   useEffect(() => {
@@ -184,6 +187,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
       id: newId.trim(),
       username: newUsername.trim() || undefined,
       secret: newSecret,
+      enable_secret: isNetworkDevice && newEnableSecret.trim() ? newEnableSecret.trim() : undefined,
       notes: newNotes.trim() || undefined,
       created_at: now,
       updated_at: now,
@@ -195,6 +199,8 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
       setNewId('');
       setNewUsername('');
       setNewSecret('');
+      setIsNetworkDevice(false);
+      setNewEnableSecret('');
       setNewNotes('');
       await loadEntries();
     } catch (e: any) {
@@ -234,6 +240,20 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
     }
   };
 
+  const fetchEnableSecret = async (key: string): Promise<string | null> => {
+    try {
+      const entry: VaultEntry | null = await vaultGetEntry(key);
+      if (!entry || !entry.enable_secret) {
+        setError(`No enable password found for '${key}'`);
+        return null;
+      }
+      return entry.enable_secret;
+    } catch (e: any) {
+      setError(e.toString());
+      return null;
+    }
+  };
+
   const toggleReveal = async (key: string) => {
     if (revealedSecrets[key] !== undefined) {
       // Hide: actually drop the plaintext from state, don't just flip a flag.
@@ -265,6 +285,23 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
         // Clipboard read permission can be denied by the browser/webview;
         // failing silently here is fine -- this is defense in depth, not
         // the primary protection.
+      }
+    }, CLIPBOARD_CLEAR_MS);
+  };
+
+  const copyEnableToClipboard = async (key: string) => {
+    const enableSecret = await fetchEnableSecret(key);
+    if (!enableSecret) return;
+    navigator.clipboard.writeText(enableSecret);
+    setCopiedEnableKey(key);
+    setTimeout(() => setCopiedEnableKey(null), 2000);
+    setTimeout(async () => {
+      try {
+        const current = await navigator.clipboard.readText();
+        if (current === enableSecret) {
+          await navigator.clipboard.writeText('');
+        }
+      } catch {
       }
     }, CLIPBOARD_CLEAR_MS);
   };
@@ -508,6 +545,38 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                   />
                 </div>
 
+                <div className="pt-1">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isNetworkDevice}
+                      onChange={e => setIsNetworkDevice(e.target.checked)}
+                      className="rounded border-plinky-700 text-amber-500 focus:ring-0 bg-plinky-950"
+                    />
+                    <span className="text-slate-300 text-xs font-medium">
+                      Network Device (Enable Password / Privileged Exec)
+                    </span>
+                  </label>
+                </div>
+
+                {isNetworkDevice && (
+                  <div className="p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-md space-y-1 animate-in fade-in duration-100">
+                    <label className="block text-[11px] text-amber-300 font-medium">
+                      Enable Password (Privileged Secret)
+                    </label>
+                    <input
+                      type="password"
+                      value={newEnableSecret}
+                      onChange={e => setNewEnableSecret(e.target.value)}
+                      placeholder="e.g. Cisco enable secret..."
+                      className="w-full px-2.5 py-1.5 bg-plinky-950 border border-amber-500/40 rounded text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Used for privileged exec elevation (e.g. Cisco `enable` command) on network switches and routers.
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-[11px] text-slate-400 mb-1">Notes (Optional)</label>
                   <input
@@ -548,6 +617,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                   const isRevealed = revealedSecrets[entry.id] !== undefined;
                   const isRevealPending = revealLoading === entry.id;
                   const isCopied = copiedKey === entry.id;
+                  const isEnableCopied = copiedEnableKey === entry.id;
 
                   return (
                     <div key={entry.id} className="p-3 flex items-center justify-between hover:bg-plinky-850 transition">
@@ -558,6 +628,14 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           {entry.username && (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-plinky-800 text-slate-400 font-mono">
                               {entry.username}
+                            </span>
+                          )}
+                          {entry.has_enable_secret && (
+                            <span 
+                              className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-medium"
+                              title="Contains enable password for privileged exec"
+                            >
+                              + Enable Pwd
                             </span>
                           )}
                         </div>
@@ -576,6 +654,17 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                       </div>
 
                       <div className="flex items-center space-x-1.5">
+                        {entry.has_enable_secret && (
+                          <button
+                            onClick={() => copyEnableToClipboard(entry.id)}
+                            title="Copy Enable Password (clears clipboard after 25s)"
+                            className="flex items-center space-x-1 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 text-[10px] font-mono transition"
+                          >
+                            {isEnableCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Shield className="w-3 h-3 text-amber-400" />}
+                            <span>Enable</span>
+                          </button>
+                        )}
+
                         <button
                           onClick={() => toggleReveal(entry.id)}
                           title={isRevealed ? "Hide Secret" : "Reveal Secret"}

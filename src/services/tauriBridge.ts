@@ -706,6 +706,7 @@ export interface VaultEntry {
   id: string;
   username?: string;
   secret: string;
+  enable_secret?: string;
   notes?: string;
   created_at: number;
   updated_at: number;
@@ -715,6 +716,7 @@ export interface VaultEntry {
 export interface VaultEntryMeta {
   id: string;
   username?: string;
+  has_enable_secret?: boolean;
   notes?: string;
   created_at: number;
   updated_at: number;
