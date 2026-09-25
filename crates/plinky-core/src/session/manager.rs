@@ -258,8 +258,25 @@ impl SessionRegistry {
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
+        self.create_plink_session_with_login(id, session_name, explicit_target, None, log_file_name, cols, rows, out_tx)
+    }
+
+    /// Like `create_plink_session`, with plink logging in by itself from a
+    /// vault password (SSH).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_plink_session_with_login(
+        &self,
+        id: &str,
+        session_name: &str,
+        explicit_target: Option<crate::transport::plink::ExplicitTarget>,
+        login: Option<crate::transport::plink::PlinkLogin>,
+        log_file_name: Option<String>,
+        cols: u16,
+        rows: u16,
+        out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), cols, rows, raw_tx)?;
+        let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx)?;
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())

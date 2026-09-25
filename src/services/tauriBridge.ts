@@ -451,10 +451,15 @@ export interface VaultLookup {
   locked: boolean;
   key: string | null;
   hasEnableSecret: boolean;
+  /** The entry's username (not a secret), for Telnet/serial Username: prompts. */
+  username?: string | null;
+  /** Session opt-ins (PlinkyAutoLogin / PlinkyAutoEnable in the session file). */
+  autoLogin?: boolean;
+  autoEnable?: boolean;
 }
 
 export async function vaultLookup(sessionName: string, hostname?: string, username?: string): Promise<VaultLookup> {
-  if (!isTauriEnvironment()) return { locked: true, key: null, hasEnableSecret: false };
+  if (!isTauriEnvironment()) return { locked: true, key: null, hasEnableSecret: false, autoLogin: false, autoEnable: false };
   const { invoke } = await import('@tauri-apps/api/core');
   return invoke<VaultLookup>('vault_lookup', {
     sessionName,

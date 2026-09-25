@@ -57,8 +57,10 @@ fn inspect_ppk(path: String) -> Result<PpkHeader, String> {
 }
 
 #[tauri::command]
-fn start_terminal_session(
-    registry: State<Arc<SessionRegistry>>,
+#[allow(clippy::too_many_arguments)]
+async fn start_terminal_session(
+    registry: State<'_, Arc<SessionRegistry>>,
+    vault_state: State<'_, VaultState>,
     session_id: String,
     session_name: String,
     is_local: bool,
@@ -104,6 +106,31 @@ fn start_terminal_session(
         // never saved as a real PuTTY session -- pass the actual host/port/
         // username through so plink has somewhere to connect even when
         // there's no ~/.putty/sessions file to -load.
+        // SSH logs in by itself when the vault (unlocked) has this
+        // session's password: plink reads it from a file, so it goes only to
+        // this host, after its key is checked, and is never typed. Telnet
+        // and other plink protocols have no -pwfile.
+        let saved = putty_compat::sessions::read_session(&session_name).ok();
+        let is_ssh = saved
+            .as_ref()
+            .map(|s| s.protocol.is_empty() || s.protocol.eq_ignore_ascii_case("ssh"))
+            .unwrap_or(true);
+        let has_username = match &saved {
+            Some(s) => !s.user_name.is_empty(),
+            None => username.as_deref().is_some_and(|u| !u.is_empty()),
+        };
+        let login = if is_ssh {
+            let guard = vault_state.inner.lock().await;
+            guard
+                .as_ref()
+                .and_then(|v| find_session_entry(v, &session_name, hostname.as_deref(), username.as_deref()))
+                .map(|e| plinky_core::transport::plink::PlinkLogin {
+                    password: e.secret.clone(),
+                    username: if has_username { None } else { e.username.clone() },
+                })
+        } else {
+            None
+        };
         let explicit_target = hostname
             .filter(|h| !h.is_empty())
             .map(|h| plinky_core::transport::plink::ExplicitTarget {
@@ -112,7 +139,7 @@ fn start_terminal_session(
                 username,
             });
         registry
-            .create_plink_session(&session_id, &session_name, explicit_target, log_file_name, cols, rows, tx)
+            .create_plink_session_with_login(&session_id, &session_name, explicit_target, login, log_file_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create plink session: {e}"))
     }
 }
@@ -310,6 +337,11 @@ struct VaultLookup {
     locked: bool,
     key: Option<String>,
     has_enable_secret: bool,
+    /// The entry's username (not a secret), for Telnet/serial login prompts.
+    username: Option<String>,
+    /// Session opt-ins, from the session file.
+    auto_login: bool,
+    auto_enable: bool,
 }
 
 #[tauri::command]
@@ -319,9 +351,17 @@ async fn vault_lookup(
     hostname: Option<String>,
     username: Option<String>,
 ) -> Result<VaultLookup, String> {
+    let flag = |k: &str| {
+        putty_compat::sessions::read_session(&session_name)
+            .map(|s| s.extra.get(k).is_some_and(|v| v == "1"))
+            .unwrap_or(false)
+    };
+    let (auto_login, auto_enable) = (flag("PlinkyAutoLogin"), flag("PlinkyAutoEnable"));
     let guard = vault_state.inner.lock().await;
     let Some(vault) = guard.as_ref() else {
-        return Ok(VaultLookup { locked: true, key: None, has_enable_secret: false });
+        return Ok(VaultLookup {
+            locked: true, key: None, has_enable_secret: false, username: None, auto_login, auto_enable,
+        });
     };
     let entry = find_session_entry(vault, &session_name, hostname.as_deref(), username.as_deref());
     Ok(VaultLookup {
@@ -330,6 +370,9 @@ async fn vault_lookup(
         has_enable_secret: entry
             .and_then(|e| e.enable_secret.as_ref())
             .is_some_and(|s| !s.expose_secret().is_empty()),
+        username: entry.and_then(|e| e.username.clone()),
+        auto_login,
+        auto_enable,
     })
 }
 

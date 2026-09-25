@@ -13,6 +13,10 @@ use plinky_core::{
 };
 use putty_compat::sessions::{write_session, PuttySession};
 
+/// PUTTYDIR is process-wide and each fixture points it at its own
+/// directory, so the tests here take turns.
+static FIXTURE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn find_sshd_path() -> Option<PathBuf> {
     for p in ["/usr/sbin/sshd", "/usr/bin/sshd", "/sbin/sshd", "/bin/sshd"] {
         let pb = PathBuf::from(p);
@@ -184,6 +188,7 @@ impl Drop for SshdFixture {
 
 #[tokio::test]
 async fn test_sshd_fixture_plink_preauth_to_live_and_reattach() {
+    let _turn = FIXTURE_LOCK.lock().await;
     let fixture = match SshdFixture::new() {
         Some(f) => f,
         None => return, // Graceful skip on environments lacking sshd/plink
@@ -291,4 +296,68 @@ async fn test_sshd_fixture_plink_preauth_to_live_and_reattach() {
 
     // 7. Clean up session
     let _ = registry.close_session(session_id);
+}
+
+fn login_files() -> Vec<PathBuf> {
+    std::fs::read_dir(std::env::temp_dir())
+        .map(|d| d.flatten().map(|e| e.path()).filter(|p| {
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(".plinky_login_"))
+        }).collect())
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn test_vault_login_file_leaves_key_auth_working_and_is_deleted() {
+    // SSH auto-login hands plink the vault password with -pwfile. On a
+    // server that takes the session's key, that must change nothing: the
+    // session still reaches Live. And the password file must not outlive
+    // the start (plink reads it while parsing its arguments).
+    let _turn = FIXTURE_LOCK.lock().await;
+    let fixture = match SshdFixture::new() {
+        Some(f) => f,
+        None => return,
+    };
+    std::env::set_var("PUTTYDIR", &fixture.dir_path);
+    let before = login_files();
+
+    let registry = Arc::new(SessionRegistry::new());
+    let mut prompt_rx = registry.subscribe_prompts();
+    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    tokio::spawn(async move { while out_rx.recv().await.is_some() {} });
+
+    let login = plinky_core::transport::plink::PlinkLogin {
+        password: plinky_core::SecretString::new("not-needed-for-key-auth"),
+        username: None,
+    };
+    registry
+        .create_plink_session_with_login("pwfile-1", "sshd_test_session", None, Some(login), None, 80, 24, out_tx)
+        .expect("spawn with a login file");
+    let during = login_files();
+    assert_eq!(during.len(), before.len() + 1, "the login file exists while plink starts");
+
+    // Accept the host key as the user would, then wait for Live.
+    let mut answered = false;
+    for _ in 0..60 {
+        if let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_millis(200), prompt_rx.recv()).await {
+            if ev.session_id == "pwfile-1" {
+                registry.answer_prompt("pwfile-1", PromptAnswer::AcceptAndStore).unwrap();
+                answered = true;
+                break;
+            }
+        }
+    }
+    assert!(answered, "host key prompt never came");
+    let mut live = false;
+    for _ in 0..60 {
+        if registry.is_session_live("pwfile-1") {
+            live = true;
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    assert!(live, "a login file must not stop key auth reaching Live");
+
+    sleep(Duration::from_secs(6)).await;
+    assert_eq!(login_files().len(), before.len(), "the login file must be deleted after start");
+    registry.close_session("pwfile-1").unwrap();
 }
