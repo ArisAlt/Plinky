@@ -594,6 +594,38 @@ export async function listenHostKeyPrompts(
   return null;
 }
 
+export interface PasteProgress {
+  sessionId: string;
+  sent: number;
+  total: number;
+}
+
+/**
+ * Pastes text one line at a time with `lineDelayMs` between lines, for
+ * console ports / network gear that drop characters on a fast paste. Refused
+ * by the backend until the session is Live (never types into a password
+ * prompt). Resolves with the number of lines sent; rejects on error.
+ */
+export async function pastePaced(sessionId: string, text: string, lineDelayMs: number): Promise<number> {
+  if (!isTauriEnvironment()) return 0;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<number>('paste_paced', { sessionId, text, lineDelayMs });
+}
+
+export async function cancelPaste(sessionId: string): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('cancel_paste', { sessionId });
+}
+
+export async function listenPasteProgress(
+  callback: (progress: PasteProgress) => void
+): Promise<(() => void) | null> {
+  if (!isTauriEnvironment()) return null;
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<PasteProgress>('paste:progress', (event) => callback(event.payload));
+}
+
 export async function setSyncChannel(
   sessionId: string,
   channel: string | null
