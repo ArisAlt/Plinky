@@ -103,11 +103,14 @@ This document tracks the directory architecture, file structure, component relat
     ├── services/
     │   ├── tauriBridge.ts                # Dual-mode IPC bridge (Tauri native + browser preview fallbacks)
     │   ├── terminalManager.ts            # Terminal registry, broadcast sync router
-    │   └── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
-    ├── test/                             # Frontend Vitest Test Suites
+    │   ├── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
+    │   └── sessionMetadata.ts            # D4 compliant session folder and tags sidecar persistence service
+    ├── test/                             # Frontend Vitest Test Suites (23 tests across 7 suites)
     │   ├── setup.ts                      # jsdom and canvas test polyfills
     │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
     │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests
+    │   ├── sessionMetadata.test.ts       # Session folder and user custom folders persistence tests
+    │   ├── VaultManager.test.tsx         # Vault Close X button and Escape key dismiss tests
     │   ├── SettingsModal.test.tsx        # Preference modal rendering and change callbacks
     │   ├── SessionExplorer.test.tsx      # Tree rendering, double-click connect, density toggle tests
     │   └── TitleBar.test.tsx             # Quick Connect history and auto-complete dropdown tests

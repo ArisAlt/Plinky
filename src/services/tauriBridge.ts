@@ -127,7 +127,26 @@ export async function detectPutty(): Promise<PuttyDetectInfo> {
   };
 }
 
+import { getSessionMetadata, saveSessionFolder, saveSessionTags } from './sessionMetadata';
+
 function normalizeSession(raw: any): PuttySession {
+  const meta = getSessionMetadata(raw.name);
+  const folder = raw.folder 
+    || raw.extra?.PlinkyFolder 
+    || meta?.folder 
+    || 'Saved Sessions';
+
+  let tags = raw.tags;
+  if (!tags || tags.length === 0) {
+    if (raw.extra?.PlinkyTags) {
+      tags = raw.extra.PlinkyTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+    } else if (meta?.tags && meta.tags.length > 0) {
+      tags = meta.tags;
+    } else {
+      tags = [];
+    }
+  }
+
   return {
     ...raw,
     hostname: raw.hostname || raw.host_name || '',
@@ -140,8 +159,8 @@ function normalizeSession(raw: any): PuttySession {
     public_key_file: raw.public_key_file || raw.publicKeyFile || '',
     protocol: (raw.protocol || 'SSH').toUpperCase() as any,
     extra: raw.extra || {},
-    tags: raw.tags || [],
-    folder: raw.folder || 'Saved Sessions',
+    tags,
+    folder,
     lastConnected: raw.lastConnected,
   };
 }
@@ -238,6 +257,16 @@ export async function readPuttySession(name: string): Promise<PuttySession | nul
 }
 
 export async function writePuttySession(session: PuttySession): Promise<boolean> {
+  const extra = { ...(session.extra || {}) };
+  if (session.folder) {
+    extra.PlinkyFolder = session.folder;
+    saveSessionFolder(session.name, session.folder);
+  }
+  if (session.tags && session.tags.length > 0) {
+    extra.PlinkyTags = session.tags.join(',');
+    saveSessionTags(session.name, session.tags);
+  }
+
   const payload = {
     name: session.name,
     host_name: session.hostname || session.host_name || '',
@@ -245,7 +274,7 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
     user_name: session.username || session.user_name || '',
     protocol: (session.protocol || 'ssh').toLowerCase(),
     public_key_file: session.publicKeyFile || session.public_key_file || '',
-    extra: session.extra || {},
+    extra,
   };
   if (isTauriEnvironment()) {
     try {
@@ -259,9 +288,9 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
   }
   const idx = DEMO_SESSIONS.findIndex(s => s.name === session.name);
   if (idx >= 0) {
-    DEMO_SESSIONS[idx] = normalizeSession({ ...session, ...payload });
+    DEMO_SESSIONS[idx] = normalizeSession({ ...session, ...payload, folder: session.folder, tags: session.tags });
   } else {
-    DEMO_SESSIONS.push(normalizeSession({ ...session, ...payload }));
+    DEMO_SESSIONS.push(normalizeSession({ ...session, ...payload, folder: session.folder, tags: session.tags }));
   }
   return true;
 }

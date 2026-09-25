@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { HostKeyEntry, PpkInfo } from '../../types/session';
 import { listPuttyHostKeys, inspectPpk } from '../../services/tauriBridge';
-import { Key, FileKey, Copy, Check, Upload } from 'lucide-react';
+import { Key, FileKey, Copy, Check, Upload, X } from 'lucide-react';
 
-export const HostKeyManager: React.FC = () => {
+interface HostKeyManagerProps {
+  onClose?: () => void;
+}
+
+export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
   const [hostKeys, setHostKeys] = useState<HostKeyEntry[]>([]);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [inspectedPpk, setInspectedPpk] = useState<PpkInfo | null>(null);
@@ -11,6 +15,16 @@ export const HostKeyManager: React.FC = () => {
   useEffect(() => {
     loadKeys();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const loadKeys = async () => {
     const keys = await listPuttyHostKeys();
@@ -36,13 +50,24 @@ export const HostKeyManager: React.FC = () => {
           <Key className="w-4 h-4 text-amber-400" />
           <h2 className="font-semibold text-sm text-slate-100">PuTTY Trusted Host Keys & PPK Manager</h2>
         </div>
-        <button
-          onClick={handleSimulateInspectKey}
-          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium transition"
-        >
-          <Upload className="w-3.5 h-3.5" />
-          <span>Inspect .ppk Key</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleSimulateInspectKey}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium transition"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Inspect .ppk Key</span>
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close and return to Terminal (Esc)"
+              className="p-1 rounded bg-plinky-900 border border-plinky-800 hover:border-plinky-700 hover:bg-plinky-850 text-slate-400 hover:text-white transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Inspected PPK Banner if any */}

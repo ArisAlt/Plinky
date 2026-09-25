@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { TunnelEntry, PuttySession } from '../../types/session';
 import { readPuttySession, writePuttySession, parsePortForwardings, serializePortForwardings } from '../../services/tauriBridge';
-import { Network, Plus, ArrowRight, ShieldCheck, Power, Trash2, CheckCircle2 } from 'lucide-react';
+import { Network, Plus, ArrowRight, ShieldCheck, Power, Trash2, CheckCircle2, X } from 'lucide-react';
 
 interface TunnelManagerProps {
   sessionName: string;
+  onClose?: () => void;
 }
 
-export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => {
+export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClose }) => {
   const [session, setSession] = useState<PuttySession | null>(null);
   const [tunnels, setTunnels] = useState<TunnelEntry[]>([]);
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
@@ -21,6 +22,20 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
   useEffect(() => {
     loadSessionTunnels();
   }, [sessionName]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showAddModal) {
+          setShowAddModal(false);
+        } else if (onClose) {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAddModal, onClose]);
 
   const loadSessionTunnels = async () => {
     const sess = await readPuttySession(sessionName);
@@ -113,6 +128,15 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
             <Plus className="w-3.5 h-3.5" />
             <span>New Forward</span>
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close and return to Terminal (Esc)"
+              className="p-1 rounded bg-plinky-800 border border-plinky-700 hover:bg-plinky-700 text-slate-300 hover:text-white transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -216,9 +240,22 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName }) => 
 
       {/* Add Forward Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddModal(false);
+          }}
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+        >
           <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-96 shadow-xl p-4 space-y-3">
-            <h3 className="font-semibold text-slate-100 text-sm">Add SSH Port Forward</h3>
+            <div className="flex items-center justify-between pb-1 border-b border-plinky-800">
+              <h3 className="font-semibold text-slate-100 text-sm">Add SSH Port Forward</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             
             <div className="space-y-1">
               <label className="text-slate-400 text-xs">Forward Type</label>

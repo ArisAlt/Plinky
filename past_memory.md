@@ -413,3 +413,17 @@
   - Fix: Replaced hardcoded `-load <session_name>` with `build_psftp_args` matching `PlinkTransport::build_args`: uses `[user@]host -P port` when session is unsaved. Added unit tests for arg generation in `client.rs`.
 * Verification: 19/19 Vitest tests passing; 49/49 Cargo tests passing (+5 new tests); `cargo deny check` clean; `npm run build` 0 TS errors.
 
+### 31. VIEW NAVIGATION ESCAPE/CLOSE RESOLUTION & SESSION FOLDER PERSISTENCE HARDENING
+* 1. Full-Screen View Close (X) Buttons & Escape Key Listeners:
+  - `VaultManager.tsx`: Added `onClose` prop, header `X` close button with "Close" label, and `Escape` key listener. User is no longer trapped in the Vault view. Added unit tests in `VaultManager.test.tsx`.
+  - `HostKeyManager.tsx`: Added `onClose` prop, header `X` button, and `Escape` key listener.
+  - `TunnelManager.tsx`: Added `onClose` prop, header `X` button, `Escape` key listener, and inner "Add Forward" modal backdrop click dismiss + header `X` button.
+  - `SftpDualPane.tsx`: Added `onClose` prop, header `X` button, and `Escape` key listener when rendered in full view.
+  - `TitleBar.tsx`: View buttons (`SFTP`, `Tunnels`, `Host Keys`, `Vault`) now toggle back to `sessions` when clicked while already active.
+  - `NewSessionModal.tsx` & `SettingsModal.tsx`: Added `Escape` key listener and backdrop click dismiss.
+* 2. Comprehensive Session Folder Organization & Persistence:
+  - Root Cause Fixed: `normalizeSession` in `tauriBridge.ts` previously evaluated `raw.folder || 'Saved Sessions'`. Since PuTTY session structs in Rust lack a native `folder` field, `raw.folder` was undefined and all sessions were unconditionally reset to `'Saved Sessions'` on reload. Furthermore, `writePuttySession` dropped `folder` and `tags`.
+  - Implemented `sessionMetadata.ts`: Manages session metadata (`folder`, `tags`) in sidecar storage (`plinky_session_metadata_v1`) and tracks custom user folders (`plinky_user_folders_v1`). Added unit tests in `sessionMetadata.test.ts`.
+  - `tauriBridge.ts`: `normalizeSession` reads folder from `raw.folder || raw.extra?.PlinkyFolder || getSessionMetadata(raw.name)?.folder || 'Saved Sessions'`, and tags from `extra.PlinkyTags` / metadata. `writePuttySession` serializes `extra.PlinkyFolder` and `extra.PlinkyTags` to preserve them inside PuTTY session files and sidecar storage.
+  - `SessionExplorer.tsx`: Added `+ Folder` header button with inline input creation, empty folder preservation, dashed drop zone ("Empty folder — drag sessions here"), empty folder deletion via trash icon, and `addUserFolder` invocation in context menu "Move to Folder".
+* Verification: 23/23 Vitest tests passing across 7 suites; 49/49 Cargo workspace tests passing; `npm run build` compiles with 0 TS errors; AppImage bundled.
