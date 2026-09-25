@@ -20,7 +20,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [port, setPort] = useState('22');
   const [protocol, setProtocol] = useState<Protocol>('SSH');
   const [username, setUsername] = useState('');
-  const [folder, setFolder] = useState('Default');
+  const [folder, setFolder] = useState('Saved Sessions');
   const [tags, setTags] = useState('');
   const [publicKeyFile, setPublicKeyFile] = useState('');
 
@@ -34,7 +34,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setPort(String(editingSession.port || 22));
       setProtocol(editingSession.protocol);
       setUsername(editingSession.username || '');
-      setFolder(editingSession.folder || 'Default');
+      setFolder(editingSession.folder || 'Saved Sessions');
       setTags((editingSession.tags || []).join(', '));
       setPublicKeyFile(editingSession.publicKeyFile || '');
     } else {
@@ -43,7 +43,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setPort('22');
       setProtocol('SSH');
       setUsername('');
-      setFolder('Default');
+      setFolder('Saved Sessions');
       setTags('');
       setPublicKeyFile('');
     }
@@ -75,10 +75,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       port: parsedPort,
       protocol,
       username: username.trim() || undefined,
-      folder: folder.trim() || 'Default',
+      folder: folder.trim() || 'Saved Sessions',
       tags: tagArray.length > 0 ? tagArray : undefined,
       publicKeyFile: publicKeyFile.trim() || undefined,
       extra: editingSession?.extra ? { ...editingSession.extra } : {},
+      log_file_name: editingSession?.log_file_name,
       lastConnected: editingSession?.lastConnected,
     };
 
@@ -163,6 +164,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 <option value="SSH">SSH</option>
                 <option value="Serial">Serial (COM)</option>
                 <option value="Telnet">Telnet</option>
+                <option value="Rlogin">Rlogin</option>
                 <option value="RAW">RAW</option>
               </select>
             </div>
