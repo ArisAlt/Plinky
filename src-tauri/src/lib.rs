@@ -80,10 +80,23 @@ fn start_terminal_session(
         }
     });
 
+    // Saved serial sessions open on the native serial transport (ADR-005):
+    // plink can't send a Break. Line settings come from the PuTTY file.
+    let saved_serial = (!is_local)
+        .then(|| putty_compat::sessions::read_session(&session_name).ok())
+        .flatten()
+        .filter(|s| s.protocol.eq_ignore_ascii_case("serial"));
+
     if is_local {
         registry
             .create_local_session(&session_id, &session_name, log_file_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create local session: {e}"))
+    } else if let Some(sess) = saved_serial {
+        let config = plinky_core::transport::serial::SerialConfig::from_putty_keys(&sess.extra)
+            .map_err(|e| e.to_string())?;
+        registry
+            .create_serial_session(&session_id, &session_name, &config, log_file_name, tx)
+            .map_err(|e| e.to_string())
     } else {
         // Quick Connect and split-pane clones invent a display name that was
         // never saved as a real PuTTY session -- pass the actual host/port/
@@ -339,6 +352,16 @@ fn cancel_paste(jobs: State<'_, PasteJobs>, session_id: String) {
     }
 }
 
+/// Sends a serial Break (ADR-005). 400 ms is what PuTTY holds on Windows and
+/// is long enough for Cisco ROMMON and similar. Errors on non-serial sessions.
+#[tauri::command]
+async fn send_break(registry: State<'_, Arc<SessionRegistry>>, session_id: String) -> Result<(), String> {
+    registry
+        .send_break(&session_id, std::time::Duration::from_millis(400))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub struct VaultState {
     pub inner: Mutex<Option<Vault>>,
     pub custom_path: Mutex<Option<PathBuf>>,
@@ -543,6 +566,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             paste_paced,
             cancel_paste,
+            send_break,
             putty_detect,
             list_putty_sessions,
             read_putty_session,

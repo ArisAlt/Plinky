@@ -96,8 +96,51 @@ impl SessionRegistry {
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
-        let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (raw_tx, raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let transport = LocalTransport::spawn(cols, rows, raw_tx)?;
+        self.register_live_session(id, name, Box::new(transport), raw_rx, log_file_name, out_tx)
+    }
+
+    /// Opens a serial console session with the native transport (ADR-005).
+    pub fn create_serial_session(
+        &self,
+        id: &str,
+        name: &str,
+        config: &crate::transport::serial::SerialConfig,
+        log_file_name: Option<String>,
+        out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) -> Result<()> {
+        let (raw_tx, raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let transport = crate::transport::serial::SerialTransport::open(config, raw_tx)?;
+        self.register_live_session(id, name, Box::new(transport), raw_rx, log_file_name, out_tx)
+    }
+
+    /// Holds a line break for `duration` (serial sessions only). The map lock
+    /// is released while the break is held so other sessions' output isn't
+    /// stalled for the whole break.
+    pub async fn send_break(&self, id: &str, duration: std::time::Duration) -> Result<()> {
+        {
+            let mut lock = self.sessions.lock().unwrap();
+            let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+            session.transport.set_break(true)?;
+        }
+        tokio::time::sleep(duration).await;
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        session.transport.set_break(false)
+    }
+
+    /// Registers a session with no pre-auth phase (local shell, serial line):
+    /// every byte is terminal output from the start, so it begins Live.
+    fn register_live_session(
+        &self,
+        id: &str,
+        name: &str,
+        transport: Box<dyn Transport>,
+        mut raw_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        log_file_name: Option<String>,
+        out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) -> Result<()> {
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
@@ -186,12 +229,12 @@ impl SessionRegistry {
         };
 
         let mut sm = PreAuthStateMachine::new();
-        sm.force_live(); // Local shells are always Live immediately
+        sm.force_live(); // No pre-auth phase: Live immediately
 
         let active = ActiveSession {
             id: id_owned.clone(),
             name: name.to_string(),
-            transport: Box::new(transport),
+            transport,
             state_machine: sm,
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024), // 2 MiB
             subscriber,
