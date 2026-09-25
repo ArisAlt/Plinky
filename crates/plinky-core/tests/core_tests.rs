@@ -517,10 +517,46 @@ async fn test_process_exit_is_reported_to_subscriber() {
     let registry = SessionRegistry::new();
     let (tx, mut rx) = mpsc::unbounded_channel();
     registry.create_local_session("exit-sess", "Test", None, 80, 24, tx).unwrap();
-    registry.write_input("exit-sess", b"exit\n").unwrap();
+    // "\r" is what the terminal sends for Enter. A bare "\n" never submits
+    // the line to cmd.exe through ConPTY, so on Windows the shell never
+    // exited at all.
+    registry.write_input("exit-sess", b"exit\r").unwrap();
+    let buf = collect_until_closed(&mut rx, 3000).await;
+    assert!(
+        String::from_utf8_lossy(&buf).contains("[Plinky: Session closed"),
+        "process exit must be surfaced; got: {:?}",
+        String::from_utf8_lossy(&buf)
+    );
+}
 
+#[cfg(unix)]
+#[tokio::test]
+async fn test_exit_is_reported_even_when_the_terminal_never_hits_eof() {
+    // On Windows, ConPTY keeps the output pipe open after the child exits,
+    // so the reader never saw EOF and a dead shell -- or an SSH session
+    // whose plink had quit -- stayed "live" (Windows CI failed on this for
+    // every push). The same happens on Unix when something the shell
+    // started still holds the terminal: here a disowned sleep. The session
+    // must end when its own process does, not when the last descendant
+    // lets go.
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    registry.create_local_session("held-sess", "Test", None, 80, 24, tx).unwrap();
+    registry.write_input("held-sess", b"sleep 8 & disown; exit\r").unwrap();
+
+    let started = std::time::Instant::now();
+    let buf = collect_until_closed(&mut rx, 5000).await;
+    assert!(
+        String::from_utf8_lossy(&buf).contains("[Plinky: Session closed"),
+        "exit hidden while a background job held the terminal; got: {:?}",
+        String::from_utf8_lossy(&buf)
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "waited for the background job");
+}
+
+async fn collect_until_closed(rx: &mut mpsc::UnboundedReceiver<Vec<u8>>, ms: u64) -> Vec<u8> {
     let mut buf = Vec::new();
-    let timeout = tokio::time::sleep(std::time::Duration::from_millis(3000));
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(ms));
     tokio::pin!(timeout);
     loop {
         tokio::select! {
@@ -534,11 +570,7 @@ async fn test_process_exit_is_reported_to_subscriber() {
             _ = &mut timeout => break,
         }
     }
-    assert!(
-        String::from_utf8_lossy(&buf).contains("[Plinky: Session closed"),
-        "process exit must be surfaced; got: {:?}",
-        String::from_utf8_lossy(&buf)
-    );
+    buf
 }
 
 #[tokio::test]

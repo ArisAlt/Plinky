@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use tokio::sync::mpsc;
 use crate::errors::{PlinkyError, Result};
@@ -7,7 +7,7 @@ use crate::transport::Transport;
 pub struct LocalTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    child: Box<dyn portable_pty::Child + Send>,
+    child: super::PtyChild,
 }
 
 impl LocalTransport {
@@ -42,7 +42,7 @@ impl LocalTransport {
 
         drop(pair.slave);
 
-        let mut reader = pair
+        let reader = pair
             .master
             .try_clone_reader()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
@@ -52,21 +52,7 @@ impl LocalTransport {
             .take_writer()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
-        // Background reader thread pumping bytes into out_tx
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        if out_tx.send(buf[..n].to_vec()).is_err() {
-                            break; // Consumer dropped
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
+        let child = super::pump_pty_child(reader, child, out_tx);
 
         Ok(Self {
             master: pair.master,
@@ -99,15 +85,13 @@ impl Transport for LocalTransport {
 
     fn kill(&mut self) -> Result<()> {
         self.child
+            .killer
             .kill()
             .map_err(|e| PlinkyError::ProcessError(e.to_string()))?;
         Ok(())
     }
 
     fn is_alive(&mut self) -> bool {
-        match self.child.try_wait() {
-            Ok(None) => true,
-            _ => false,
-        }
+        self.child.alive.load(std::sync::atomic::Ordering::Relaxed)
     }
 }

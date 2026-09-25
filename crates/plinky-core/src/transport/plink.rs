@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use tokio::sync::mpsc;
@@ -25,7 +25,7 @@ pub struct ExplicitTarget {
 pub struct PlinkTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    child: Box<dyn portable_pty::Child + Send>,
+    child: super::PtyChild,
 }
 
 impl PlinkTransport {
@@ -222,7 +222,7 @@ impl PlinkTransport {
 
         drop(pair.slave);
 
-        let mut reader = pair
+        let reader = pair
             .master
             .try_clone_reader()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
@@ -232,21 +232,7 @@ impl PlinkTransport {
             .take_writer()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
-        // Background reader thread piping stdout
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if out_tx.send(buf[..n].to_vec()).is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
+        let child = super::pump_pty_child(reader, child, out_tx);
 
         Ok(Self {
             master: pair.master,
@@ -279,13 +265,14 @@ impl Transport for PlinkTransport {
 
     fn kill(&mut self) -> Result<()> {
         self.child
+            .killer
             .kill()
             .map_err(|e| PlinkyError::ProcessError(e.to_string()))?;
         Ok(())
     }
 
     fn is_alive(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+        self.child.alive.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
