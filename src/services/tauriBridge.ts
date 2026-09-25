@@ -450,7 +450,7 @@ export async function startTerminalSession(
   port?: number,
   username?: string,
   logFileName?: string
-): Promise<boolean> {
+): Promise<{ started: boolean; error?: string }> {
   if (isTauriEnvironment()) {
     try {
       const { invoke, Channel } = await import('@tauri-apps/api/core');
@@ -470,13 +470,15 @@ export async function startTerminalSession(
         username,
         logFileName: logFileName || null,
       });
-      return true;
+      return { started: true };
     } catch (e) {
       console.warn("Failed to invoke start_terminal_session via Tauri:", e);
-      return false;
+      // The backend's reason ("Failed to open serial line /dev/ttyUSB0: No
+      // such file or directory") is the only useful thing to show the user.
+      return { started: false, error: String(e) };
     }
   }
-  return false;
+  return { started: false };
 }
 
 export async function attachTerminalSession(

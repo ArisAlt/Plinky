@@ -439,7 +439,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           tab.port,
           tab.username,
           (tab as any).logFileName
-        ).then((started) => {
+        ).then(({ started, error }) => {
           if (disposed) {
             // Tab closed while the spawn was in flight: its close ran as a
             // no-op before this session existed, so close the straggler now.
@@ -454,8 +454,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           if (!started) {
             onUpdateTab(tab.id, { status: 'disconnected' });
             if (isTauriEnvironment()) {
-              term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}". Verify that PuTTY (plink) is installed and target host is reachable.]\x1b[0m\r\n`);
-              addEventLog(`Failed to start PTY session "${tab.sessionName}"`, 'error');
+              const reason = error || 'Verify that PuTTY (plink) is installed and target host is reachable.';
+              term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}": ${reason}]\x1b[0m\r\n`);
+              addEventLog(`Failed to start session "${tab.sessionName}": ${reason}`, 'error');
             } else {
               // Browser development preview fallback banner (non-Tauri mode)
               term.writeln(`\x1b[33m[Plinky: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
