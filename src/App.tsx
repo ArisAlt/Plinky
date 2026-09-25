@@ -690,6 +690,7 @@ export const App: React.FC = () => {
       <NewSessionModal
         isOpen={isNewSessionOpen}
         editingSession={editingSession}
+        savedSessions={sessions}
         onClose={() => {
           setIsNewSessionOpen(false);
           setEditingSession(null);

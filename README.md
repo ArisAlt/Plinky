@@ -112,6 +112,7 @@ flowchart TD
 * **M5: Docking Layout, Sync Router & Shell Integration**: ✅ **DONE & AUDIT-HARDENED** (38/38 workspace tests pass) — `SyncInputRouter` in `crates/plinky-core::sync` (D6 Live-only state filtering, protected session skip, global arm toggle, in-memory fan-out, Tauri IPC). Multi-pane split engine in UI (Single, 2-Pane Column, 2-Pane Row, 4-Pane Grid). Shell integration bootstrap in `crates/plinky-core::session::shell_integration` (`OSC 133` prompt markers A/B/C/D and `OSC 7` working directory reporting for Bash, Zsh, and Fish). Real-time SFTP directory following via OSC 7. `Ctrl+Up` / `Ctrl+Down` prompt jumping via OSC 133. R1–R3 layout persistence with fail-closed quarantine (`layoutPersistence.ts`). Hardened write path with `write_input_live_only` to prevent pre-auth password leakage.
 * **M6: WindTerm Productivity**: ✅ **IMPLEMENTED & AUDIT-HARDENED** — Free Type Mode with coordinate delta calculation, alternate buffer suppression, DECCKM application cursor keys mode check (`\x1bOC`/`\x1bOD` vs `\x1b[C`/`\x1b[D`), and OSC 133 semantic prompt region gating (`B..C`). Real-time regex token decorator (`registerLinkProvider` for IPv4 & URLs), in-terminal search bar (`@xterm/addon-search`), quick snippet macro bar, and custom terminal context menu.
 * **M7: SFTP & Port Forwarding**: ✅ **SFTP BACKEND & UI COMPLETE** — ADR-003 plain `psftp` engine in `crates/plinky-core::sftp` (`parser.rs` with space/symlink support, `client.rs` with non-blocking async I/O). Tauri IPC commands (`sftp_list`, `sftp_mkdir`, `sftp_rm`). Interactive dual-pane file manager (`SftpDualPane.tsx`) with directory drill-down, `mkdir`, `rm`, breadcrumbs, and transfer queue. Visual SSH tunnel manager (`TunnelManager.tsx`).
+* **Hardware Serial & Jump Host Bastion (PuTTY Ecosystem Parity)**: ✅ **COMPLETE & TESTED** — Zero-dependency `/sys/class/tty` & Windows registry serial port auto-discovery (`detect_serial_ports()`), dedicated Serial GUI with active USB indicator dots (`●`), baud presets, advanced parity/flow control, and MobaXterm-style SSH Gateway / Jump Host route topology diagram with saved session preset picker, serialized directly into native PuTTY configuration keys (`SerialLine`, `SerialSpeed`, `ProxyMethod: '5'`).
 
 ---
 
@@ -125,13 +126,13 @@ flowchart TD
 
 ### Verification & Testing
 ```bash
-# Run frontend unit tests (23 tests across 7 suites via Vitest)
+# Run frontend unit tests (30 tests across 9 suites via Vitest)
 npm test
 
 # Check frontend TypeScript compilation & bundle
 npm run build
 
-# Run workspace Rust tests (49 tests including localhost sshd fixture)
+# Run workspace Rust tests (70 tests including localhost sshd fixture)
 cargo test --workspace
 
 # Run dependency license, advisory, and ban validation

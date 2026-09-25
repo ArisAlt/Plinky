@@ -544,6 +544,11 @@ fn inject_shell_integration(
     Ok(())
 }
 
+#[tauri::command]
+fn list_serial_ports() -> Result<Vec<plinky_core::transport::serial::DetectedSerialPort>, String> {
+    Ok(plinky_core::transport::serial::detect_serial_ports())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -606,7 +611,8 @@ pub fn run() {
             vault_list_keys,
             vault_list_entries_meta,
             get_shell_integration_script,
-            inject_shell_integration
+            inject_shell_integration,
+            list_serial_ports
         ])
         .run(tauri::generate_context!())
         .expect("error while running plinky desktop application");
