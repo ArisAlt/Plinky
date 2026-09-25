@@ -175,4 +175,52 @@ describe('NewSessionModal Component', () => {
       })
     );
   });
+  // An existing serial session as the owner has it: saved by PuTTY, line in
+  // extra, the adapter possibly unplugged.
+  const savedSerial = (line: string) => ({
+    name: 'COM USB0',
+    hostname: '',
+    port: 0,
+    protocol: 'Serial' as const,
+    extra: {
+      SerialLine: line,
+      SerialSpeed: '9600',
+      SerialDataBits: '8',
+      SerialStopHalfbits: '2',
+      SerialParity: '0',
+      SerialFlowControl: '1',
+    },
+  });
+
+  it('keeps the saved port when the scan finishes after the session loads', async () => {
+    // /dev/ttyACM0 is detected but not first; the scan used to overwrite the
+    // saved line with the first USB port it found.
+    const onSave = vi.fn();
+    render(
+      <NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} editingSession={savedSerial('/dev/ttyACM0')} />
+    );
+    await waitFor(() => expect(screen.getByText(/● \/dev\/ttyUSB0/)).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ extra: expect.objectContaining({ SerialLine: '/dev/ttyACM0' }) })
+    );
+  });
+
+  it('shows a saved port that is unplugged as not connected, and keeps it', async () => {
+    const onSave = vi.fn();
+    render(
+      <NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} editingSession={savedSerial('/dev/ttyUSB7')} />
+    );
+    await waitFor(() => expect(screen.getByText(/● \/dev\/ttyUSB0/)).toBeDefined());
+
+    // The select displays the saved port, marked as absent -- not whichever
+    // detected port happened to be listed first.
+    expect(screen.getByDisplayValue('○ /dev/ttyUSB7 (not connected)')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ extra: expect.objectContaining({ SerialLine: '/dev/ttyUSB7' }) })
+    );
+  });
 });

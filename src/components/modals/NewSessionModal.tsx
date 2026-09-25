@@ -53,9 +53,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     try {
       const ports = await listSerialPorts();
       setSerialPorts(ports);
-      if (ports.length > 0 && !serialLine) {
+      if (ports.length > 0) {
         const firstUsb = ports.find(p => p.is_usb);
-        setSerialLine(firstUsb ? firstUsb.port_name : ports[0].port_name);
+        // Functional update: by the time the scan returns, the session being
+        // edited has loaded its saved line, but this closure still sees the
+        // value from before -- testing that replaced the saved port with the
+        // first one detected, and Save wrote it.
+        setSerialLine(cur => cur || (firstUsb ?? ports[0]).port_name);
       }
     } finally {
       setIsRefreshingPorts(false);
@@ -316,12 +320,19 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       }}
                       className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
                     >
+                      {/* Every detected port is plugged in right now (●). A
+                          saved port that isn't gets its own entry (○): with
+                          no matching option the select showed some other
+                          port while still saving this one. */}
+                      {serialLine && !serialPorts.some(p => p.port_name === serialLine) && (
+                        <option value={serialLine}>{`○ ${serialLine} (not connected)`}</option>
+                      )}
                       {serialPorts.length === 0 ? (
-                        <option value="">No serial devices detected</option>
+                        <option value="" disabled>No serial devices detected</option>
                       ) : (
                         serialPorts.map(p => (
                           <option key={p.port_name} value={p.port_name}>
-                            {p.is_usb ? `● ${p.display_name}` : p.display_name}
+                            {`● ${p.display_name}`}
                           </option>
                         ))
                       )}
