@@ -618,6 +618,16 @@ export async function cancelPaste(sessionId: string): Promise<void> {
   await invoke('cancel_paste', { sessionId });
 }
 
+/**
+ * Sends a serial Break (held ~400 ms). Rejects with a message for sessions
+ * that aren't serial -- plink has no way to send one (ADR-005).
+ */
+export async function sendBreak(sessionId: string): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('send_break', { sessionId });
+}
+
 export async function listenPasteProgress(
   callback: (progress: PasteProgress) => void
 ): Promise<(() => void) | null> {
