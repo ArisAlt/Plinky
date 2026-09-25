@@ -1,4 +1,4 @@
-import { PuttySession, HostKeyEntry, PpkInfo, SftpFileEntry, TunnelEntry } from '../types/session';
+import { PuttySession, HostKeyEntry, PpkInfo, SftpFileEntry, TunnelEntry, Protocol } from '../types/session';
 
 // Check if running inside Tauri runtime
 export const isTauriEnvironment = (): boolean => {
@@ -130,6 +130,20 @@ export async function detectPutty(): Promise<PuttyDetectInfo> {
 
 import { getSessionMetadata, saveSessionFolder, saveSessionTags } from './sessionMetadata';
 
+// PuTTY stores protocols lowercase ("ssh", "serial", ...). Uppercasing them
+// produced "SERIAL"/"TELNET", which matched neither the Protocol type nor
+// the edit modal's options -- a serial session showed a generic badge and
+// opened in the editor displaying "SSH".
+function canonicalProtocol(raw: unknown): Protocol {
+  switch (String(raw || 'ssh').toLowerCase()) {
+    case 'serial': return 'Serial';
+    case 'telnet': return 'Telnet';
+    case 'rlogin': return 'Rlogin';
+    case 'raw': return 'RAW';
+    default: return 'SSH';
+  }
+}
+
 function normalizeSession(raw: any): PuttySession {
   const meta = getSessionMetadata(raw.name);
   const folder = raw.folder 
@@ -158,7 +172,7 @@ function normalizeSession(raw: any): PuttySession {
     user_name: raw.user_name || raw.username || '',
     publicKeyFile: raw.publicKeyFile || raw.public_key_file || '',
     public_key_file: raw.public_key_file || raw.publicKeyFile || '',
-    protocol: (raw.protocol || 'SSH').toUpperCase() as any,
+    protocol: canonicalProtocol(raw.protocol),
     extra: raw.extra || {},
     tags,
     folder,
@@ -266,6 +280,11 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
   if (session.tags && session.tags.length > 0) {
     extra.PlinkyTags = session.tags.join(',');
     saveSessionTags(session.name, session.tags);
+  } else {
+    // extra is copied from the session being edited, so a stale PlinkyTags
+    // survived clearing every tag and the tags came straight back.
+    delete extra.PlinkyTags;
+    saveSessionTags(session.name, []);
   }
 
   const payload = {
@@ -275,6 +294,10 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
     user_name: session.username || session.user_name || '',
     protocol: (session.protocol || 'ssh').toLowerCase(),
     public_key_file: session.publicKeyFile || session.public_key_file || '',
+    // First-class field on the Rust side, not part of extra. Omitting it
+    // deserialized as "" and rewrote the session file with an empty
+    // LogFileName=, wiping a real PuTTY session's logging setting on any edit.
+    log_file_name: session.log_file_name || '',
     extra,
   };
   if (isTauriEnvironment()) {
