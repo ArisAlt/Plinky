@@ -573,6 +573,34 @@ async fn vault_get_entry(
     Ok(vault.get_entry(&key).cloned())
 }
 
+/// Types a vault entry's login (`field = "login"`) or enable password into a
+/// session, followed by Enter. The terminal's "Send password" used to fetch
+/// the whole entry into the webview and keep it in component state, so
+/// after the vault was locked an open tab still sent the password. Here the
+/// secret goes from the vault to the session inside the backend and a
+/// locked vault refuses.
+#[tauri::command]
+async fn vault_send_secret(
+    registry: State<'_, Arc<SessionRegistry>>,
+    vault_state: State<'_, VaultState>,
+    session_id: String,
+    key: String,
+    field: String,
+) -> Result<(), String> {
+    let guard = vault_state.inner.lock().await;
+    let vault = guard.as_ref().ok_or_else(|| "The vault is locked".to_string())?;
+    let entry = vault.get_entry(&key).ok_or_else(|| format!("No vault entry '{key}'"))?;
+    let secret = match field.as_str() {
+        "login" => &entry.secret,
+        "enable" => entry
+            .enable_secret
+            .as_ref()
+            .ok_or_else(|| format!("Vault entry '{key}' has no enable password"))?,
+        other => return Err(format!("Unknown vault field '{other}'")),
+    };
+    registry.type_secret(&session_id, secret).map_err(shown)
+}
+
 #[tauri::command]
 async fn vault_set_entry(
     state: State<'_, VaultState>,
@@ -777,6 +805,7 @@ pub fn run() {
             vault_get,
             vault_set,
             vault_get_entry,
+            vault_send_secret,
             vault_set_entry,
             vault_delete,
             vault_list_keys,

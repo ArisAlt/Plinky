@@ -516,6 +516,19 @@ impl SessionRegistry {
         session.transport.write(data)
     }
 
+    /// Types a vault secret and Enter into a session: the terminal's "Send
+    /// password". The user asked for it at a prompt they can see, so it
+    /// goes through `write_input` -- allowed at plink's own password prompt,
+    /// refused while a host key is unanswered. The bytes sit in a buffer
+    /// that is wiped when this returns.
+    pub fn type_secret(&self, id: &str, secret: &crate::vault::SecretString) -> Result<()> {
+        let plain = secret.expose_secret().as_bytes();
+        let mut bytes = zeroize::Zeroizing::new(Vec::with_capacity(plain.len() + 1));
+        bytes.extend_from_slice(plain);
+        bytes.push(b'\r');
+        self.write_input(id, &bytes)
+    }
+
     /// Writes raw input directly into session PTY master, for PROGRAMMATIC /
     /// AUTOMATED writes only -- shell-integration bootstrap injection,
     /// sync-broadcast fanout from another session, or any future feature
