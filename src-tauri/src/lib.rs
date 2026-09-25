@@ -92,11 +92,18 @@ fn start_terminal_session(
             .create_local_session(&session_id, &session_name, log_file_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create local session: {e}"))
     } else if let Some(sess) = saved_serial {
+        // These messages go straight to the terminal ("Failed to open serial
+        // line /dev/ttyUSB0: No such file or directory"); the error type's
+        // "Process error:" prefix only gets in the way there.
+        let shown = |e: plinky_core::errors::PlinkyError| match e {
+            plinky_core::errors::PlinkyError::ProcessError(msg) => msg,
+            other => other.to_string(),
+        };
         let config = plinky_core::transport::serial::SerialConfig::from_putty_keys(&sess.extra)
-            .map_err(|e| e.to_string())?;
+            .map_err(shown)?;
         registry
             .create_serial_session(&session_id, &session_name, &config, log_file_name, tx)
-            .map_err(|e| e.to_string())
+            .map_err(shown)
     } else {
         // Quick Connect and split-pane clones invent a display name that was
         // never saved as a real PuTTY session -- pass the actual host/port/
