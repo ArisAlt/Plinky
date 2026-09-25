@@ -913,4 +913,30 @@ export async function injectShellIntegration(
   return true;
 }
 
+export interface DetectedSerialPort {
+  port_name: string;
+  display_name: string;
+  is_usb: boolean;
+  manufacturer?: string | null;
+  product?: string | null;
+}
+
+export async function listSerialPorts(): Promise<DetectedSerialPort[]> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<DetectedSerialPort[]>('list_serial_ports');
+    } catch (e) {
+      console.warn("Failed to list serial ports via Tauri:", e);
+      return [];
+    }
+  }
+  return [
+    { port_name: '/dev/ttyUSB0', display_name: '/dev/ttyUSB0 (FTDI FT232R USB UART)', is_usb: true, manufacturer: 'FTDI', product: 'FT232R USB UART' },
+    { port_name: '/dev/ttyACM0', display_name: '/dev/ttyACM0 (Cisco USB Console)', is_usb: true, manufacturer: 'Cisco', product: 'USB Console' },
+    { port_name: 'COM3', display_name: 'COM3 (Silicon Labs CP210x)', is_usb: true, manufacturer: 'Silicon Labs', product: 'CP210x' },
+    { port_name: '/dev/ttyS0', display_name: '/dev/ttyS0 (Serial Port)', is_usb: false },
+  ];
+}
+
 

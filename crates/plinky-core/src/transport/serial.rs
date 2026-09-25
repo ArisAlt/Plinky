@@ -206,6 +206,171 @@ impl Drop for SerialTransport {
     }
 }
 
+/// Represents a detected hardware serial or USB-serial device.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct DetectedSerialPort {
+    pub port_name: String,
+    pub display_name: String,
+    pub is_usb: bool,
+    pub manufacturer: Option<String>,
+    pub product: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+pub fn detect_serial_ports() -> Vec<DetectedSerialPort> {
+    let mut usb_ports = Vec::new();
+    let mut other_ports = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir("/sys/class/tty") {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name = file_name.to_string_lossy();
+            let link_path = entry.path();
+
+            if let Ok(target) = std::fs::canonicalize(&link_path) {
+                let target_str = target.to_string_lossy();
+                // Skip virtual pseudo-terminals and virtual consoles
+                if target_str.contains("/virtual/") {
+                    continue;
+                }
+
+                let dev_path = format!("/dev/{name}");
+                let is_usb = target_str.contains("/usb") || name.starts_with("ttyUSB") || name.starts_with("ttyACM");
+                
+                let mut product = None;
+                let mut manufacturer = None;
+
+                if is_usb {
+                    let dev_dir = target.join("device");
+                    let candidates = [
+                        dev_dir.join("../product"),
+                        dev_dir.join("../../product"),
+                        dev_dir.join("product"),
+                    ];
+                    for p in &candidates {
+                        if let Ok(s) = std::fs::read_to_string(p) {
+                            let trimmed = s.trim().to_string();
+                            if !trimmed.is_empty() {
+                                product = Some(trimmed);
+                                break;
+                            }
+                        }
+                    }
+                    let mfg_candidates = [
+                        dev_dir.join("../manufacturer"),
+                        dev_dir.join("../../manufacturer"),
+                        dev_dir.join("manufacturer"),
+                    ];
+                    for m in &mfg_candidates {
+                        if let Ok(s) = std::fs::read_to_string(m) {
+                            let trimmed = s.trim().to_string();
+                            if !trimmed.is_empty() {
+                                manufacturer = Some(trimmed);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                let display_name = match (&product, &manufacturer) {
+                    (Some(prod), Some(mfg)) => format!("{dev_path} ({mfg} {prod})"),
+                    (Some(prod), None) => format!("{dev_path} ({prod})"),
+                    (None, Some(mfg)) => format!("{dev_path} ({mfg})"),
+                    (None, None) => {
+                        if is_usb {
+                            format!("{dev_path} (USB Serial)")
+                        } else {
+                            format!("{dev_path} (Serial Port)")
+                        }
+                    }
+                };
+
+                let port_item = DetectedSerialPort {
+                    port_name: dev_path,
+                    display_name,
+                    is_usb,
+                    manufacturer,
+                    product,
+                };
+
+                if is_usb {
+                    usb_ports.push(port_item);
+                } else if name.starts_with("ttyS") {
+                    let suffix = name.trim_start_matches("ttyS");
+                    if let Ok(idx) = suffix.parse::<u32>() {
+                        if idx <= 3 {
+                            other_ports.push(port_item);
+                        }
+                    }
+                } else {
+                    other_ports.push(port_item);
+                }
+            }
+        }
+    }
+
+    usb_ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+    other_ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+    usb_ports.extend(other_ports);
+    usb_ports
+}
+
+#[cfg(target_os = "windows")]
+pub fn detect_serial_ports() -> Vec<DetectedSerialPort> {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+
+    let mut ports = Vec::new();
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(key) = hklm.open_subkey("HARDWARE\\DEVICEMAP\\SERIALCOMM") {
+        for val in key.enum_values().flatten() {
+            let val_name = val.0;
+            if let winreg::RegValue { bytes, .. } = val.1 {
+                let s = String::from_utf8_lossy(&bytes).trim_matches('\0').trim().to_string();
+                if !s.is_empty() {
+                    let is_usb = val_name.to_lowercase().contains("usb") || val_name.to_lowercase().contains("vcp");
+                    let display_name = if is_usb {
+                        format!("{s} (USB Serial Port)")
+                    } else {
+                        format!("{s} (Serial Port)")
+                    };
+                    ports.push(DetectedSerialPort {
+                        port_name: s,
+                        display_name,
+                        is_usb,
+                        manufacturer: None,
+                        product: None,
+                    });
+                }
+            }
+        }
+    }
+    ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+    ports
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub fn detect_serial_ports() -> Vec<DetectedSerialPort> {
+    let mut ports = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/dev") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("cu.usb") || name.starts_with("tty.usb") {
+                let path = format!("/dev/{name}");
+                ports.push(DetectedSerialPort {
+                    port_name: path.clone(),
+                    display_name: format!("{path} (USB Serial)"),
+                    is_usb: true,
+                    manufacturer: None,
+                    product: None,
+                });
+            }
+        }
+    }
+    ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+    ports
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,5 +424,15 @@ mod tests {
     #[test]
     fn missing_line_is_refused() {
         assert!(SerialConfig::from_putty_keys(&BTreeMap::new()).is_err());
+    }
+
+    #[test]
+    fn test_detect_serial_ports_does_not_panic() {
+        let ports = detect_serial_ports();
+        // Regardless of whether hardware is plugged in, detect_serial_ports must complete cleanly
+        for p in &ports {
+            assert!(!p.port_name.is_empty());
+            assert!(!p.display_name.is_empty());
+        }
     }
 }

@@ -439,3 +439,29 @@
   - Replaced single `recv()` calls with timeout-backed accumulation loops until expected tokens are found.
 * Verification: 23/23 Vitest tests pass across 7 suites; 49/49 Cargo workspace tests pass; `npm run build` succeeds in 1.97s with 0 TS errors.
 
+### 33. ACTIVE USB / COM PORT AUTO-DETECTION & MOBAXTERM-STYLE JUMP HOST GUI
+* Zero-Dependency System Serial Port Discovery (`crates/plinky-core/src/transport/serial.rs`):
+  - Pure Rust `/sys/class/tty` scanner for Linux (filters out `/virtual/`, extracts manufacturer and product strings from sysfs `/device/../product` and `/device/../manufacturer`, flags USB vs standard COM).
+  - Windows registry scanner querying `HARDWARE\DEVICEMAP\SERIALCOMM` via `winreg`.
+  - macOS `/dev/cu.usb*` fallback glob.
+  - Zero dynamic C library linking (`libudev` not required), preserving static AppImage portability.
+  - Tauri IPC command `list_serial_ports` registered in `src-tauri/src/lib.rs` returning `Vec<DetectedSerialPort>`.
+* Dual-Mode Bridge Support (`src/services/tauriBridge.ts`):
+  - Added `DetectedSerialPort` interface and `listSerialPorts()` bridge function with browser preview fallback.
+* Dedicated Serial Session GUI (`NewSessionModal.tsx`):
+  - When `Protocol === 'serial'`, hides SSH Host/Port/Credentials and presents dedicated hardware serial controls.
+  - Port dropdown dynamically populated with detected active USB/serial devices with green activity dot (`● [USB] /dev/ttyUSB0 (FTDI - FT232R USB UART)`) and manual path override.
+  - Refresh (↻) scan button.
+  - Common Baud Rate preset pills (9600, 19200, 38400, 57600, 115200, 230400, 921600).
+  - Collapsible Advanced Serial Parameters: Data bits (5, 6, 7, 8, 9), Stop bits (1, 1.5, 2), Parity (None, Odd, Even, Mark, Space), Flow control (None, XON/XOFF, RTS/CTS, DSR/DTR).
+  - PuTTY compatibility: Serial settings serialize directly to PuTTY keys (`SerialLine`, `SerialSpeed`, `SerialDataBits`, `SerialStopHalfbits`, `SerialParity`, `SerialFlow`).
+* MobaXterm-Style SSH Gateway / Jump Host GUI (`NewSessionModal.tsx`):
+  - Added dedicated SSH Jump Host / Bastion section for SSH sessions.
+  - Visual route topology banner: `[You (Local)] ──SSH──> [Bastion: host:port (user)] ──SSH──> [Target: host:port]`.
+  - Preset picker dropdown populating bastion configuration directly from existing saved PuTTY sessions.
+  - PuTTY compatibility: Serializes gateway to PuTTY Proxy parameters (`ProxyMethod: '5'`, `ProxyHost`, `ProxyPort`, `ProxyUsername`, `ProxyTelnetCommand: plink -agent -P %proxyport %proxyuser@%proxyhost -nc %host:%port`).
+* Verification & Test Coverage:
+  - Added `src/test/NewSessionModal.test.tsx` (4 tests: open/close, standard SSH save, Serial USB detection & PuTTY key serialization, MobaXterm jump host route topology & Proxy key serialization).
+  - Added Rust unit test `test_detect_serial_ports_does_not_panic` in `crates/plinky-core/src/transport/serial.rs`.
+  - Test suites: 30/30 Vitest tests pass across 9 suites; 70/70 Cargo workspace tests pass; `npm run build` succeeds in 1.89s with 0 TS errors.
+

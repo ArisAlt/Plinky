@@ -50,14 +50,15 @@ This document tracks the directory architecture, file structure, component relat
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
-│       │                                 # ✅ IMPLEMENTED & VERIFIED (27/27 core unit tests, 49/49 workspace tests pass)
-│       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror
+│       │                                 # ✅ IMPLEMENTED & VERIFIED (36 core unit tests, 70/70 workspace tests pass)
+│       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror, serialport
 │       └── src/
 │           ├── lib.rs
 │           ├── errors.rs                 # PlinkyError, Result
 │           ├── transport/                # Unified Transport Abstraction
 │           │   ├── mod.rs                # Transport trait (write, resize, kill, is_alive) bound to Send
 │           │   ├── plink.rs              # Primary: plink under portable-pty, ADR-002 detect_putty probe
+│           │   ├── serial.rs             # Serial transport + zero-dependency USB/COM port auto-discovery
 │           │   └── local.rs              # Local shell PTY (sh, bash) under portable-pty
 │           ├── sync/                     # Multi-session command broadcast (M5 SyncInputRouter)
 │           │   ├── mod.rs
@@ -105,7 +106,7 @@ This document tracks the directory architecture, file structure, component relat
     │   ├── terminalManager.ts            # Terminal registry, broadcast sync router
     │   ├── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
     │   └── sessionMetadata.ts            # D4 compliant session folder and tags sidecar persistence service
-    ├── test/                             # Frontend Vitest Test Suites (23 tests across 7 suites)
+    ├── test/                             # Frontend Vitest Test Suites (30 tests across 9 suites)
     │   ├── setup.ts                      # jsdom and canvas test polyfills
     │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
     │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests
@@ -113,7 +114,9 @@ This document tracks the directory architecture, file structure, component relat
     │   ├── VaultManager.test.tsx         # Vault Close X button and Escape key dismiss tests
     │   ├── SettingsModal.test.tsx        # Preference modal rendering and change callbacks
     │   ├── SessionExplorer.test.tsx      # Tree rendering, double-click connect, density toggle tests
-    │   └── TitleBar.test.tsx             # Quick Connect history and auto-complete dropdown tests
+    │   ├── TitleBar.test.tsx             # Quick Connect history and auto-complete dropdown tests
+    │   ├── tauriBridge.sessions.test.ts  # PuTTY session normalization & metadata test suite
+    │   └── NewSessionModal.test.tsx      # Serial USB auto-detection & MobaXterm jump host GUI tests
     └── components/
         ├── layout/
         │   ├── TitleBar.tsx              # Quick connect with history and autocomplete, view switchers, new session action
