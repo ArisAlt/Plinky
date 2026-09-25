@@ -247,11 +247,98 @@ fn shown(e: plinky_core::errors::PlinkyError) -> String {
     }
 }
 
+/// The vault entry names that hold a session's password, best first. An
+/// explicit link from the session editor (PlinkyVaultKey) wins. After it
+/// come the names the Vault screen itself suggests for a key --
+/// "session:prod-web or server.internal". Nothing used to honour those:
+/// an entry saved as "session:Server 2" or "10.10.10.10" was ignored, so
+/// SFTP asked for a password and the terminal never offered the vault.
+fn vault_key_candidates(
+    session_name: &str,
+    explicit: Option<&str>,
+    host: Option<&str>,
+    user: Option<&str>,
+) -> Vec<String> {
+    let mut keys = Vec::new();
+    let mut push = |k: String| {
+        if !k.is_empty() && !keys.contains(&k) {
+            keys.push(k);
+        }
+    };
+    if let Some(k) = explicit {
+        push(k.to_string());
+    }
+    push(format!("session:{session_name}"));
+    push(session_name.to_string());
+    if let Some(h) = host.filter(|h| !h.is_empty()) {
+        if let Some(u) = user.filter(|u| !u.is_empty()) {
+            push(format!("{u}@{h}"));
+        }
+        push(h.to_string());
+    }
+    keys
+}
+
+/// The vault entry for a session, if the vault is unlocked and has one.
+/// A saved session's own host and user are used (it connects with -load
+/// to that host), otherwise the ones the caller passes (Quick Connect).
+fn find_session_entry<'v>(
+    vault: &'v Vault,
+    session_name: &str,
+    hostname: Option<&str>,
+    username: Option<&str>,
+) -> Option<&'v VaultEntry> {
+    let saved = putty_compat::sessions::read_session(session_name).ok();
+    let (explicit, host, user) = match &saved {
+        Some(s) => (
+            s.extra.get("PlinkyVaultKey").map(String::as_str),
+            Some(s.host_name.as_str()),
+            Some(s.user_name.as_str()),
+        ),
+        None => (None, hostname, username),
+    };
+    vault_key_candidates(session_name, explicit, host, user)
+        .iter()
+        .find_map(|k| vault.get_entry(k))
+}
+
+/// What the terminal needs to offer the vault: which entry (never its
+/// secret) and whether the vault is locked.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VaultLookup {
+    locked: bool,
+    key: Option<String>,
+    has_enable_secret: bool,
+}
+
+#[tauri::command]
+async fn vault_lookup(
+    vault_state: State<'_, VaultState>,
+    session_name: String,
+    hostname: Option<String>,
+    username: Option<String>,
+) -> Result<VaultLookup, String> {
+    let guard = vault_state.inner.lock().await;
+    let Some(vault) = guard.as_ref() else {
+        return Ok(VaultLookup { locked: true, key: None, has_enable_secret: false });
+    };
+    let entry = find_session_entry(vault, &session_name, hostname.as_deref(), username.as_deref());
+    Ok(VaultLookup {
+        locked: false,
+        key: entry.map(|e| e.id.clone()),
+        has_enable_secret: entry
+            .and_then(|e| e.enable_secret.as_ref())
+            .is_some_and(|s| !s.expose_secret().is_empty()),
+    })
+}
+
 /// Where an SFTP call goes and the password it uses. A password typed into
-/// the SFTP pane wins; otherwise a saved session's vault entry is read here,
-/// in the backend, so the secret never passes through the webview. A saved
-/// session always connects with -load (its own host), so a session name
-/// can't send its vault password anywhere else.
+/// the SFTP pane wins; otherwise the session's vault entry is read here, in
+/// the backend, so the secret never passes through the webview. A saved
+/// session always connects with -load (its own host), so its entry can't be
+/// sent anywhere else. The flag says the vault was locked, so a password
+/// prompt can say where a saved one would come from.
 async fn sftp_target(
     session_name: &str,
     hostname: Option<String>,
@@ -259,7 +346,18 @@ async fn sftp_target(
     username: Option<String>,
     password: Option<String>,
     vault_state: &VaultState,
-) -> (Option<plinky_core::transport::plink::ExplicitTarget>, Option<String>) {
+) -> (Option<plinky_core::transport::plink::ExplicitTarget>, Option<String>, bool) {
+    let guard = vault_state.inner.lock().await;
+    let locked = guard.is_none();
+    let vault_pwd = if password.as_deref().is_some_and(|p| !p.is_empty()) {
+        password
+    } else {
+        guard.as_ref().and_then(|v| {
+            find_session_entry(v, session_name, hostname.as_deref(), username.as_deref())
+                .map(|e| e.secret.expose_secret().to_string())
+        })
+    };
+    drop(guard);
     let target = hostname
         .filter(|h| !h.is_empty())
         .map(|h| plinky_core::transport::plink::ExplicitTarget {
@@ -267,23 +365,18 @@ async fn sftp_target(
             port: port.unwrap_or(22),
             username,
         });
-    if let Some(pwd) = password.filter(|p| !p.is_empty()) {
-        return (target, Some(pwd));
+    (target, vault_pwd, locked)
+}
+
+/// SFTP error as the pane shows it; a password request mentions the vault
+/// when it was locked.
+fn sftp_error(e: plinky_core::errors::PlinkyError, vault_locked: bool) -> String {
+    let msg = shown(e);
+    if vault_locked && msg.starts_with(plinky_core::sftp::client::ERR_PASSWORD) {
+        format!("{msg} If it's saved in the vault, unlock the vault and retry.")
+    } else {
+        msg
     }
-    let vault_pwd = match putty_compat::sessions::read_session(session_name) {
-        Ok(sess) => match sess.extra.get("PlinkyVaultKey").filter(|k| !k.is_empty()) {
-            Some(key) => vault_state
-                .inner
-                .lock()
-                .await
-                .as_ref()
-                .and_then(|v| v.get_entry(key))
-                .map(|e| e.secret.expose_secret().to_string()),
-            None => None,
-        },
-        Err(_) => None,
-    };
-    (target, vault_pwd)
 }
 
 #[tauri::command]
@@ -295,8 +388,8 @@ async fn sftp_home_dir(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<String, String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
-    PsftpClient::home_dir(&session_name, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::home_dir(&session_name, target.as_ref(), pwd.as_deref()).await.map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -309,8 +402,8 @@ async fn sftp_list(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<Vec<SftpFileEntry>, String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
-    PsftpClient::list_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::list_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -323,8 +416,8 @@ async fn sftp_mkdir(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
-    PsftpClient::create_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::create_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -337,8 +430,8 @@ async fn sftp_rm(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
-    PsftpClient::remove_file(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::remove_file(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -351,8 +444,8 @@ async fn sftp_rmdir(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
-    PsftpClient::remove_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::remove_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -367,10 +460,10 @@ async fn sftp_upload(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
     PsftpClient::upload_file(&session_name, &local_path, &remote_path, target.as_ref(), pwd.as_deref())
         .await
-        .map_err(shown)
+        .map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -385,10 +478,10 @@ async fn sftp_download(
     password: Option<String>,
     vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    let (target, pwd, locked) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
     PsftpClient::download_file(&session_name, &remote_path, &local_path, target.as_ref(), pwd.as_deref())
         .await
-        .map_err(shown)
+        .map_err(|e| sftp_error(e, locked))
 }
 
 #[tauri::command]
@@ -806,6 +899,7 @@ pub fn run() {
             vault_set,
             vault_get_entry,
             vault_send_secret,
+            vault_lookup,
             vault_set_entry,
             vault_delete,
             vault_list_keys,
@@ -821,6 +915,47 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::migrate_identifier_dir;
+    use super::{find_session_entry, vault_key_candidates};
+    use plinky_core::{Vault, VaultEntry};
+
+    #[test]
+    fn vault_keys_follow_the_names_the_vault_screen_suggests() {
+        let keys = vault_key_candidates("Server 2", None, Some("10.10.10.10"), Some("citizenzero"));
+        assert_eq!(keys, ["session:Server 2", "Server 2", "citizenzero@10.10.10.10", "10.10.10.10"]);
+        // An explicit link from the session editor is tried first.
+        let keys = vault_key_candidates("Server 2", Some("shared-admin"), Some("10.10.10.10"), None);
+        assert_eq!(keys[0], "shared-admin");
+    }
+
+    #[test]
+    fn a_session_finds_its_vault_entry_without_an_explicit_link() {
+        // The owner's case: a password saved from the Vault screen, no
+        // PlinkyVaultKey in the session file -- it used to be ignored.
+        let dir = std::env::temp_dir().join(format!("plinky-vault-lookup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sessions")).unwrap();
+        std::env::set_var("PUTTYDIR", &dir);
+        std::fs::write(
+            dir.join("sessions").join("Server%202"),
+            "HostName=10.10.10.10\nUserName=citizenzero\nProtocol=ssh\n",
+        )
+        .unwrap();
+        let mut vault = Vault::create_fast(dir.join("vault.bin"), "pw").unwrap();
+
+        vault.set_entry(VaultEntry::new("10.10.10.10", "by-host"));
+        let e = find_session_entry(&vault, "Server 2", None, None).unwrap();
+        assert_eq!(e.id, "10.10.10.10", "the saved session's own host is used");
+
+        vault.set_entry(VaultEntry::new("session:Server 2", "by-session"));
+        assert_eq!(find_session_entry(&vault, "Server 2", None, None).unwrap().id, "session:Server 2");
+
+        // Quick Connect: no saved session, so the host the tab connects to.
+        vault.set_entry(VaultEntry::new("192.0.2.7", "quick"));
+        assert_eq!(find_session_entry(&vault, "192.0.2.7:22", Some("192.0.2.7"), None).unwrap().id, "192.0.2.7");
+        assert!(find_session_entry(&vault, "elsewhere", Some("198.51.100.1"), None).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("plinky-mig-{tag}-{}", std::process::id()));

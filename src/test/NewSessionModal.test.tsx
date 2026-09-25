@@ -9,6 +9,7 @@ const mockVaultListEntriesMeta = vi.fn().mockResolvedValue([
 const mockVaultSetEntry = vi.fn().mockResolvedValue(true);
 
 vi.mock('../services/tauriBridge', () => ({
+  VAULT_CHANGED_EVENT: 'plinky:vault-changed',
   listSerialPorts: vi.fn().mockResolvedValue([
     {
       port_name: '/dev/ttyUSB0',
@@ -286,8 +287,9 @@ describe('NewSessionModal Component', () => {
       })
     );
 
-    // Verify onSave session has PlinkyVaultKey and NO plaintext password
-    expect(onSave).toHaveBeenCalledWith(
+    // Verify onSave session has PlinkyVaultKey and NO plaintext password.
+    // The session is saved only after the vault accepted the entry.
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Cisco-Core-Router',
         hostname: '192.168.1.1',
@@ -295,7 +297,52 @@ describe('NewSessionModal Component', () => {
           PlinkyVaultKey: 'cisco-core-vault-key',
         }),
       })
-    );
+    ));
+  });
+
+  // Fills in a new session with "Save credentials in Encrypted Vault" ticked.
+  const fillVaultSession = (password: string, enable?: string) => {
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Core-SW' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.168.1.2' } });
+    fireEvent.click(screen.getByLabelText(/Save credentials in Encrypted Vault/i));
+    if (password) {
+      fireEvent.change(screen.getByPlaceholderText(/Session login password\.\.\./i), { target: { value: password } });
+    }
+    if (enable !== undefined) {
+      fireEvent.click(screen.getByLabelText(/Network Device \(requires Enable Password \/ Privileged Exec\)/i));
+      fireEvent.change(screen.getByPlaceholderText(/e\.g\. Cisco enable secret\.\.\./i), { target: { value: enable } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+  };
+
+  it('keeps the dialog open and says so when the vault refuses the password', async () => {
+    // With the vault locked this used to fail silently: the dialog closed,
+    // the session was linked to an entry that didn't exist, the password was gone.
+    mockVaultSetEntry.mockRejectedValueOnce('Vault is locked');
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={onClose} onSave={onSave} />);
+    fillVaultSession('pw');
+    expect(await screen.findByText(/The password wasn't saved: Vault is locked/)).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('does not link a session to a vault entry that was never created', async () => {
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fillVaultSession('');
+    expect(await screen.findByText(/Enter the password to save in the vault/)).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('stores an enable password exactly as typed', async () => {
+    mockVaultSetEntry.mockClear();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fillVaultSession('pw', ' en able ');
+    await waitFor(() => expect(mockVaultSetEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ enable_secret: ' en able ' })
+    ));
   });
 
   it('links session to existing encrypted vault entry', async () => {

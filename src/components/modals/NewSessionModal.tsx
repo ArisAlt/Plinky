@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { 
   listSerialPorts, DetectedSerialPort, 
-  vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry 
+  vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry,
+  VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 
 interface NewSessionModalProps {
@@ -42,6 +43,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [vaultPassword, setVaultPassword] = useState('');
   const [isNetworkDevice, setIsNetworkDevice] = useState(false);
   const [vaultEnablePassword, setVaultEnablePassword] = useState('');
+  const [vaultSaveError, setVaultSaveError] = useState<string | null>(null);
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -82,6 +84,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     refreshPorts();
+    setVaultSaveError(null);
     vaultListEntriesMeta().then(setVaultEntries).catch(() => {});
     if (editingSession) {
       setName(editingSession.name);
@@ -156,6 +159,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     }
   }, [isOpen, editingSession]);
 
+  // Unlocking the vault with this dialog open fills "Link to existing".
+  useEffect(() => {
+    if (!isOpen) return;
+    const reload = () => { vaultListEntriesMeta().then(setVaultEntries).catch(() => setVaultEntries([])); };
+    window.addEventListener(VAULT_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(VAULT_CHANGED_EVENT, reload);
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -169,9 +180,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    setVaultSaveError(null);
 
     const isSerial = protocol === 'Serial';
     const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
@@ -228,16 +240,30 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             id: finalKeyId,
             username: isSerial ? undefined : (username.trim() || undefined),
             secret: vaultPassword,
-            enable_secret: isNetworkDevice && vaultEnablePassword.trim() ? vaultEnablePassword.trim() : undefined,
+            // Never trimmed: a password with a leading or trailing space is
+            // a different password.
+            enable_secret: isNetworkDevice && vaultEnablePassword ? vaultEnablePassword : undefined,
             notes: `Saved credentials for session "${name.trim()}"`,
             created_at: now,
             updated_at: now,
           };
-          vaultSetEntry(entry).catch(err => {
-            console.warn("Failed to save session credentials in vault:", err);
-          });
+          // This failed silently when the vault was locked: the dialog
+          // closed, the session was linked to an entry that didn't exist,
+          // and the password was simply gone. Stay open and say why.
+          try {
+            await vaultSetEntry(entry);
+          } catch (err) {
+            setVaultSaveError(`The password wasn't saved: ${String(err)}. Unlock the vault (Vault in the top bar), then save again.`);
+            return;
+          }
+          extra.PlinkyVaultKey = finalKeyId;
+        } else if (vaultEntries.some(v => v.id === finalKeyId)) {
+          extra.PlinkyVaultKey = finalKeyId;
+        } else {
+          // Linking to an entry that doesn't exist left a dangling key.
+          setVaultSaveError('Enter the password to save in the vault, or untick "Save Credentials in Encrypted Vault".');
+          return;
         }
-        extra.PlinkyVaultKey = finalKeyId;
       }
     } else {
       delete extra.PlinkyVaultKey;
@@ -825,6 +851,12 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               />
             </div>
           </div>
+
+          {vaultSaveError && (
+            <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">
+              {vaultSaveError}
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-2 pt-3 border-t border-plinky-800 shrink-0">

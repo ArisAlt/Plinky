@@ -436,6 +436,34 @@ export async function getLocalHomeDir(): Promise<string> {
 }
 
 /**
+ * Fired after anything that changes what the vault can answer: create,
+ * unlock, lock, saving or deleting an entry. Open terminals used to check
+ * "is the vault unlocked?" once, when the tab opened -- unlock the vault
+ * afterwards and the tab never offered it.
+ */
+export const VAULT_CHANGED_EVENT = 'plinky:vault-changed';
+function notifyVaultChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(VAULT_CHANGED_EVENT));
+}
+
+/** Which vault entry (never its secret) holds a session's password. */
+export interface VaultLookup {
+  locked: boolean;
+  key: string | null;
+  hasEnableSecret: boolean;
+}
+
+export async function vaultLookup(sessionName: string, hostname?: string, username?: string): Promise<VaultLookup> {
+  if (!isTauriEnvironment()) return { locked: true, key: null, hasEnableSecret: false };
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<VaultLookup>('vault_lookup', {
+    sessionName,
+    hostname: hostname || undefined,
+    username: username || undefined,
+  });
+}
+
+/**
  * Types a vault entry's login or enable password into a session, then Enter.
  * The secret goes from the vault to the session inside the backend -- the
  * webview never holds it -- and a locked vault refuses.
@@ -760,6 +788,7 @@ export async function vaultCreate(masterPassword: string): Promise<boolean> {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('vault_create', { masterPassword });
+      notifyVaultChanged();
       return true;
     } catch (e) {
       console.error("Failed to create vault:", e);
@@ -774,6 +803,7 @@ export async function vaultUnlock(masterPassword: string): Promise<boolean> {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('vault_unlock', { masterPassword });
+      notifyVaultChanged();
       return true;
     } catch (e) {
       console.error("Failed to unlock vault:", e);
@@ -788,6 +818,7 @@ export async function vaultLock(): Promise<boolean> {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('vault_lock');
+      notifyVaultChanged();
       return true;
     } catch (e) {
       console.warn("Failed to lock vault:", e);
@@ -815,6 +846,7 @@ export async function vaultSet(key: string, secret: string): Promise<boolean> {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('vault_set', { key, secret });
+      notifyVaultChanged();
       return true;
     } catch (e) {
       console.error(`Failed to set key '${key}' in vault:`, e);
@@ -842,6 +874,7 @@ export async function vaultSetEntry(entry: VaultEntry): Promise<boolean> {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('vault_set_entry', { entry });
+      notifyVaultChanged();
       return true;
     } catch (e) {
       console.error(`Failed to set entry '${entry.id}' in vault:`, e);
@@ -855,7 +888,9 @@ export async function vaultDelete(key: string): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<boolean>('vault_delete', { key });
+      const deleted = await invoke<boolean>('vault_delete', { key });
+      notifyVaultChanged();
+      return deleted;
     } catch (e) {
       console.warn(`Failed to delete key '${key}' from vault:`, e);
       return false;

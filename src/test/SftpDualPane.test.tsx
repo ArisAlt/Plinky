@@ -17,6 +17,7 @@ vi.mock('../services/tauriBridge', () => ({
   ...bridge,
   SFTP_ERR_PASSWORD: '[password] ',
   SFTP_ERR_HOSTKEY: '[hostkey] ',
+  VAULT_CHANGED_EVENT: 'plinky:vault-changed',
 }));
 
 import {
@@ -108,5 +109,18 @@ describe('SftpDualPane', () => {
     render(<SftpDualPane sessionName="new" hostname="10.0.0.9" />);
     expect(await screen.findByText(/accept its key/)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/Password for/)).toBeNull();
+  });
+
+  it('retries by itself once the vault is unlocked', async () => {
+    let unlocked = false;
+    bridge.sftpRemoteHome.mockImplementation(async () => {
+      if (!unlocked) throw "[password] This server needs a password. If it's saved in the vault, unlock the vault and retry.";
+      return '/home/remote';
+    });
+    render(<SftpDualPane sessionName="Server 2" hostname="10.10.10.10" />);
+    expect(await screen.findByText(/unlock the vault and retry/)).toBeTruthy();
+    unlocked = true;
+    window.dispatchEvent(new Event('plinky:vault-changed'));
+    expect(await screen.findByText('report.pdf')).toBeTruthy();
   });
 });
