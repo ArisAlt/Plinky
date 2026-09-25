@@ -465,18 +465,26 @@
   - Added Rust unit test `test_detect_serial_ports_does_not_panic` in `crates/plinky-core/src/transport/serial.rs`.
   - Test suites: 30/30 Vitest tests pass across 9 suites; 70/70 Cargo workspace tests pass; `npm run build` succeeds in 1.89s with 0 TS errors.
 
-### 34. PRODUCTION PACKAGING & GITHUB ACTIONS AUTOMATED RELEASE
+### 34. PRODUCTION PACKAGING, VAULT CLOSE FIX & RELEASE PIPELINE
+* Vault Window Close & Cancel Resolution (`src/components/vault/VaultManager.tsx`):
+  - Solved missing close button issue: previously, the header was trapped inside `max-w-4xl mx-auto`, leaving the top right corner of the window empty, and the Initialize/Unlock cards had no cancel buttons.
+  - Refactored `VaultManager` with a full-width header (`bg-plinky-900/70 border-b border-plinky-800`) spanning 100% of the viewport with a prominent `[✕ Close]` button in the top-right corner.
+  - Added dedicated top-right `✕` close buttons and "Cancel" buttons directly onto the Initialize Vault card (View 1) and Unlock Vault card (View 2) allowing immediate return to the terminal session.
+  - Added test coverage in `src/test/VaultManager.test.tsx` verifying card Cancel and card Close buttons (32/32 tests pass).
+* Serial Phantom UART Port Filtering (`crates/plinky-core/src/transport/serial.rs`):
+  - Added `is_phantom_uart()` checking `/sys/class/tty/<name>/type`: Linux registers `ttyS0-ttyS31` regardless of hardware; type 0 (`PORT_UNKNOWN`) ports are filtered so real USB/serial ports are not buried.
+* Bundle Identifier Migration & Data Preservation (`src-tauri/src/lib.rs`):
+  - Added `migrate_identifier_dir()`: copies user data from legacy `com.plinky.app` to `com.plinky.desktop` across platforms prior to webview initialization, preventing data or vault loss.
 * Local Distribution Packaging:
   - Compiled release binaries and bundles via `NO_STRIP=true npx tauri build`:
     - `target/release/bundle/appimage/Plinky_0.1.0_amd64.AppImage` (107 MiB, portable ELF 64-bit)
     - `target/release/bundle/deb/Plinky_0.1.0_amd64.deb` (5.4 MiB)
     - `target/release/bundle/rpm/Plinky-0.1.0-1.x86_64.rpm` (5.4 MiB)
     - `target/release/plinky-desktop` (17 MiB optimized executable).
-* Bundle Configuration:
-  - Normalized Tauri bundle identifier in `src-tauri/tauri.conf.json` from `com.plinky.app` to `com.plinky.desktop` to adhere to desktop packaging guidelines.
 * CI/CD Release Automation:
   - Added `.github/workflows/release.yml` triggering on tag pushes `v*`.
   - Builds Linux AppImage, deb, rpm bundles and Windows MSI/NSIS installer packages.
   - Automatically creates and attaches distribution assets to GitHub Releases using `softprops/action-gh-release@v2`.
   - Pushed tag `v0.1.0` triggering the remote release pipeline.
+* Verification: 32/32 Vitest tests pass across 9 suites; 73/73 Cargo workspace tests pass; `npm run build` succeeds in 1.94s with 0 TS errors.
 

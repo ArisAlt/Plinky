@@ -12,7 +12,8 @@ This document tracks the directory architecture, file structure, component relat
 │
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                        # Multi-platform CI (Ubuntu + Windows, cargo-deny, Xvfb smoke)
+│       ├── ci.yml                        # Multi-platform CI (Ubuntu + Windows, cargo-deny, Xvfb smoke)
+│       └── release.yml                   # Automated Release Packaging on tag push (Linux + Windows)
 │
 ├── docs/
 │   └── THREAT_MODEL.md                   # Threat model & security architecture specification
@@ -50,7 +51,7 @@ This document tracks the directory architecture, file structure, component relat
 │   │   └── fuzz/                         # cargo-fuzz harness for untrusted .ppk and session files
 │   │
 │   └── plinky-core/                      # Core Terminal & Connection Engine (D5: minimal dependencies)
-│       │                                 # ✅ IMPLEMENTED & VERIFIED (36 core unit tests, 70/70 workspace tests pass)
+│       │                                 # ✅ IMPLEMENTED & VERIFIED (37 core unit tests, 73/73 workspace tests pass)
 │       ├── Cargo.toml                    # Dependencies: portable-pty, tokio, serde, regex, thiserror, serialport
 │       └── src/
 │           ├── lib.rs
@@ -106,7 +107,7 @@ This document tracks the directory architecture, file structure, component relat
     │   ├── terminalManager.ts            # Terminal registry, broadcast sync router
     │   ├── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
     │   └── sessionMetadata.ts            # D4 compliant session folder and tags sidecar persistence service
-    ├── test/                             # Frontend Vitest Test Suites (30 tests across 9 suites)
+    ├── test/                             # Frontend Vitest Test Suites (34 tests across 9 suites)
     │   ├── setup.ts                      # jsdom and canvas test polyfills
     │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
     │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests

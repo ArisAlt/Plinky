@@ -270,62 +270,74 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="flex-1 bg-plinky-950 p-6 overflow-y-auto text-slate-200">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-plinky-800 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400">
-              <Shield className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-white tracking-wide">Plinky Credential Vault</h1>
-              <p className="text-xs text-slate-400">
-                Argon2id (64 MiB, 3 iter) · AES-256-GCM authenticated container · In-memory Zeroize
-              </p>
-            </div>
+    <div className="flex-1 flex flex-col h-full bg-plinky-950 text-slate-200 select-none overflow-hidden">
+      {/* Top Header Bar across full viewport width */}
+      <div className="flex items-center justify-between px-6 py-3 bg-plinky-900/70 border-b border-plinky-800 flex-shrink-0">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400">
+            <Shield className="w-5 h-5" />
           </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={checkStatus}
-              title="Refresh Vault Status"
-              className="p-2 rounded bg-plinky-900 border border-plinky-800 hover:border-plinky-700 text-slate-400 hover:text-white transition"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            {isUnlocked && (
-              <button
-                onClick={handleLockVault}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-red-950/40 border border-red-800/50 hover:bg-red-900/50 text-red-300 text-xs transition"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Lock Vault</span>
-              </button>
-            )}
-            {onClose && (
-              <button
-                onClick={onClose}
-                title="Close Vault and return to Terminal (Esc)"
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-plinky-900 border border-plinky-800 hover:border-plinky-700 hover:bg-plinky-850 text-slate-300 hover:text-white text-xs transition ml-2"
-              >
-                <X className="w-4 h-4" />
-                <span>Close</span>
-              </button>
-            )}
+          <div>
+            <h1 className="text-sm font-semibold text-white tracking-wide">Plinky Credential Vault</h1>
+            <p className="text-[11px] text-slate-400">
+              Argon2id (64 MiB, 3 iter) · AES-256-GCM authenticated container · In-memory Zeroize
+            </p>
           </div>
         </div>
 
-        {error && (
-          <div className="p-3 rounded bg-red-950/30 border border-red-800/40 flex items-center space-x-2 text-xs text-red-300">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={checkStatus}
+            title="Refresh Vault Status"
+            className="p-1.5 rounded bg-plinky-900 border border-plinky-800 hover:border-plinky-700 text-slate-400 hover:text-white transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          {isUnlocked && (
+            <button
+              onClick={handleLockVault}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-red-950/40 border border-red-800/50 hover:bg-red-900/50 text-red-300 text-xs transition"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Lock Vault</span>
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close Vault and return to Terminal (Esc)"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded bg-plinky-800 border border-plinky-700 hover:bg-red-500/20 hover:border-red-500/40 text-slate-300 hover:text-red-300 text-xs transition ml-2 group"
+            >
+              <X className="w-4 h-4 text-slate-400 group-hover:text-red-300" />
+              <span>Close</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {error && (
+            <div className="p-3 rounded bg-red-950/30 border border-red-800/40 flex items-center space-x-2 text-xs text-red-300">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
         {/* View 1: Vault not initialized */}
         {!isInitialized ? (
-          <div className="bg-plinky-900 border border-plinky-800 rounded-lg p-6 max-w-md mx-auto space-y-4">
+          <div className="relative bg-plinky-900 border border-plinky-800 rounded-lg p-6 max-w-md mx-auto space-y-4 shadow-xl">
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                title="Cancel and return to Terminal (Esc)"
+                className="absolute top-3.5 right-3.5 p-1 rounded-md text-slate-400 hover:text-white hover:bg-plinky-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
             <div className="text-center space-y-1">
               <div className="mx-auto w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-400 mb-2">
                 <Shield className="w-5 h-5" />
@@ -359,19 +371,40 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={loading || !masterPassword}
-                className="w-full py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Create & Encrypt Vault</span>
-              </button>
+              <div className="flex items-center space-x-2 pt-1">
+                {onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 bg-plinky-800 hover:bg-plinky-700 text-slate-300 hover:text-white font-medium text-xs rounded transition"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading || !masterPassword}
+                  className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Create & Encrypt Vault</span>
+                </button>
+              </div>
             </form>
           </div>
         ) : !isUnlocked ? (
           /* View 2: Vault is locked */
-          <div className="bg-plinky-900 border border-plinky-800 rounded-lg p-6 max-w-md mx-auto space-y-4">
+          <div className="relative bg-plinky-900 border border-plinky-800 rounded-lg p-6 max-w-md mx-auto space-y-4 shadow-xl">
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                title="Cancel and return to Terminal (Esc)"
+                className="absolute top-3.5 right-3.5 p-1 rounded-md text-slate-400 hover:text-white hover:bg-plinky-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
             <div className="text-center space-y-1">
               <div className="mx-auto w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 mb-2">
                 <Lock className="w-5 h-5" />
@@ -395,14 +428,25 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={loading || !masterPassword}
-                className="w-full py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
-              >
-                <Unlock className="w-3.5 h-3.5" />
-                <span>Unlock Credential Vault</span>
-              </button>
+              <div className="flex items-center space-x-2 pt-1">
+                {onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 bg-plinky-800 hover:bg-plinky-700 text-slate-300 hover:text-white font-medium text-xs rounded transition"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading || !masterPassword}
+                  className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>Unlock Credential Vault</span>
+                </button>
+              </div>
             </form>
           </div>
         ) : (
@@ -565,5 +609,6 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
         )}
       </div>
     </div>
+  </div>
   );
 };
