@@ -15,7 +15,8 @@ import {
   setSyncChannel,
   HostKeyPromptInfo,
   injectShellIntegration,
-  isTauriEnvironment
+  isTauriEnvironment,
+  isSessionClosed
 } from '../../services/tauriBridge';
 import {
   Radio,
@@ -303,6 +304,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       },
     });
 
+    // Set once this view unmounts. Unmounting (switching tabs, a split pane
+    // re-render) must NOT kill the backend session -- it's detached, not
+    // closed, and the next mount reattaches with scrollback replay. Only an
+    // explicit tab close ends a session. Async work started by this effect
+    // checks the flag so a stale view never writes to its disposed terminal
+    // or spawns a second process for the same tab.
+    let disposed = false;
+
     // Subscribe to native host key prompt events from backend
     let unlistenPrompts: (() => void) | null = null;
     listenHostKeyPrompts((event) => {
@@ -311,10 +320,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         onUpdateTab(tab.id, { status: 'preauth' });
       }
     }).then((unlisten) => {
-      unlistenPrompts = unlisten;
+      if (disposed) {
+        unlisten?.();
+      } else {
+        unlistenPrompts = unlisten;
+      }
     });
 
     const handleIncomingChunk = (chunk: Uint8Array) => {
+      if (disposed) return;
       isLivePtyRef.current = true;
       term.write(chunk);
       const text = new TextDecoder().decode(chunk);
@@ -368,7 +382,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Attempt to reattach to existing session or start a new PTY session
     attachTerminalSession(tab.id, 0, handleIncomingChunk).then((attachInfo) => {
+      if (disposed) return;
       if (attachInfo) {
+        isLivePtyRef.current = true;
+        // A host-key prompt raised while this tab was in the background was
+        // broadcast to no listener; the backend still blocks input for it,
+        // so re-show the dialog or the session is stuck.
+        if (attachInfo.pending_prompt) {
+          setPendingPrompt(attachInfo.pending_prompt);
+        }
         if (attachInfo.replay_data && attachInfo.replay_data.length > 0) {
           handleIncomingChunk(new Uint8Array(attachInfo.replay_data));
           addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
@@ -391,6 +413,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           tab.username,
           (tab as any).logFileName
         ).then((started) => {
+          if (disposed) {
+            // Tab closed while the spawn was in flight: its close ran as a
+            // no-op before this session existed, so close the straggler now.
+            if (started && isSessionClosed(tab.id)) {
+              closeTerminalSession(tab.id);
+            }
+            return;
+          }
+          if (started) {
+            isLivePtyRef.current = true;
+          }
           if (!started) {
             onUpdateTab(tab.id, { status: 'disconnected' });
             if (isTauriEnvironment()) {
@@ -503,9 +536,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       terminalManager.unregisterTerminal(tab.id);
       osc133Disposable.dispose();
       osc7Disposable.dispose();
-      if (isLivePtyRef.current) {
-        closeTerminalSession(tab.id);
-      }
+      disposed = true;
       term.dispose();
     };
   }, [tab.id, tab.sessionName, tab.hostname, tab.port, tab.username]);

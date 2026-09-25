@@ -367,10 +367,37 @@ async fn test_sync_input_router_broadcast_all() {
     let count = registry.broadcast_sync_all(b"ALL_BROADCAST\n").unwrap();
     assert_eq!(count, 2, "Both sess-1 and sess-2 should receive ALL broadcast");
 
-    let chunk1 = rx1.recv().await.unwrap();
-    assert!(String::from_utf8_lossy(&chunk1).contains("ALL_BROADCAST"));
-    let chunk2 = rx2.recv().await.unwrap();
-    assert!(String::from_utf8_lossy(&chunk2).contains("ALL_BROADCAST"));
+    let mut buf1 = Vec::new();
+    let timeout1 = tokio::time::sleep(std::time::Duration::from_millis(1000));
+    tokio::pin!(timeout1);
+    loop {
+        tokio::select! {
+            Some(chunk) = rx1.recv() => {
+                buf1.extend_from_slice(&chunk);
+                if String::from_utf8_lossy(&buf1).contains("ALL_BROADCAST") {
+                    break;
+                }
+            }
+            _ = &mut timeout1 => break,
+        }
+    }
+    assert!(String::from_utf8_lossy(&buf1).contains("ALL_BROADCAST"));
+
+    let mut buf2 = Vec::new();
+    let timeout2 = tokio::time::sleep(std::time::Duration::from_millis(1000));
+    tokio::pin!(timeout2);
+    loop {
+        tokio::select! {
+            Some(chunk) = rx2.recv() => {
+                buf2.extend_from_slice(&chunk);
+                if String::from_utf8_lossy(&buf2).contains("ALL_BROADCAST") {
+                    break;
+                }
+            }
+            _ = &mut timeout2 => break,
+        }
+    }
+    assert!(String::from_utf8_lossy(&buf2).contains("ALL_BROADCAST"));
 
     // Disarming router prevents ALL broadcast
     registry.set_sync_armed(false);
@@ -399,9 +426,84 @@ async fn test_sync_input_router_remove_session_purges_protection() {
 
     let count = registry.broadcast_sync_all(b"PING\n").unwrap();
     assert_eq!(count, 1, "Re-created session must not retain stale protected state");
-    let chunk = rx2.recv().await.unwrap();
-    assert!(String::from_utf8_lossy(&chunk).contains("PING"));
+
+    let mut buf = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(1000));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(chunk) = rx2.recv() => {
+                buf.extend_from_slice(&chunk);
+                if String::from_utf8_lossy(&buf).contains("PING") {
+                    break;
+                }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+    assert!(String::from_utf8_lossy(&buf).contains("PING"));
 
     registry.close_session("sess-purge").unwrap();
 }
 
+
+#[tokio::test]
+async fn test_duplicate_session_id_is_refused_and_original_survives() {
+    // A second start for an id that's already live used to overwrite the map
+    // entry and orphan the first process. It must now be refused, and the
+    // original session must keep working.
+    let registry = SessionRegistry::new();
+    let (tx1, mut rx1) = mpsc::unbounded_channel();
+    let (tx2, _rx2) = mpsc::unbounded_channel();
+
+    registry.create_local_session("dup-id", "First", None, 80, 24, tx1).unwrap();
+    let second = registry.create_local_session("dup-id", "Second", None, 80, 24, tx2);
+    assert!(second.is_err(), "duplicate session id must be refused");
+    assert!(second.unwrap_err().to_string().contains("already exists"));
+
+    registry.write_input("dup-id", b"echo STILL_THE_FIRST\n").unwrap();
+    let mut buf = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(1000));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(chunk) = rx1.recv() => {
+                buf.extend_from_slice(&chunk);
+                if String::from_utf8_lossy(&buf).contains("STILL_THE_FIRST") { break; }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+    assert!(
+        String::from_utf8_lossy(&buf).contains("STILL_THE_FIRST"),
+        "original session must still be wired to its own subscriber"
+    );
+
+    registry.close_session("dup-id").unwrap();
+}
+
+#[tokio::test]
+async fn test_attach_reports_pending_hostkey_prompt() {
+    // The prompt event is broadcast once. A view that reattaches later (its
+    // tab was in the background) must get the prompt from attach, or the
+    // session is stuck: input is blocked and no dialog is showing.
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("pending-sess", "Test", None, 80, 24, tx).unwrap();
+    registry.reset_session_preauth("pending-sess").unwrap();
+
+    let (attach_tx, _attach_rx) = mpsc::unbounded_channel();
+    let before = registry.attach_session("pending-sess", attach_tx, 0).unwrap();
+    assert!(before.pending_prompt.is_none(), "no prompt before one arrives");
+
+    let prompt_chunk = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+    registry.simulate_preauth_bytes("pending-sess", prompt_chunk).unwrap();
+
+    let (attach_tx2, _attach_rx2) = mpsc::unbounded_channel();
+    let during = registry.attach_session("pending-sess", attach_tx2, 0).unwrap();
+    let prompt = during.pending_prompt.expect("attach must surface the pending host-key prompt");
+    assert_eq!(prompt.host, "192.0.2.1");
+
+    registry.answer_prompt("pending-sess", PromptAnswer::AcceptAndStore).unwrap();
+    registry.close_session("pending-sess").unwrap();
+}
