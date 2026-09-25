@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, broadcast};
 use crate::errors::{PlinkyError, Result};
@@ -54,7 +55,14 @@ pub struct ActiveSession {
     pub scrollback: ScrollbackRingBuffer,
     pub subscriber: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
     pub log_file: Option<std::fs::File>,
+    /// Unique per spawned process. A session id can be reused after a close,
+    /// so a reader task checks this before touching the map entry -- keyed
+    /// by id alone, a closed session's trailing output and EOF landed on its
+    /// successor.
+    pub instance: u64,
 }
+
+static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct SessionRegistry {
@@ -100,12 +108,17 @@ impl SessionRegistry {
         let sub_clone = subscriber.clone();
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
+        let instance = NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed);
 
         let reader = async move {
+            // Whether the loop's end has already been accounted for (Closed
+            // action sent its own notice, or the session was removed). If
+            // not, raw_rx hit EOF: the process exited on its own.
+            let mut reported = false;
             while let Some(chunk) = raw_rx.recv().await {
                 let action = {
                     let mut lock = registry_clone.sessions.lock().unwrap();
-                    if let Some(session) = lock.get_mut(&id_for_task) {
+                    if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
                         session.scrollback.push(&chunk);
                         // PuTTY-style "all session output" logging: every raw
                         // byte the PTY produces, regardless of PreAuth/Live
@@ -116,6 +129,7 @@ impl SessionRegistry {
                         }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
+                        reported = true;
                         break;
                     }
                 };
@@ -161,9 +175,13 @@ impl SessionRegistry {
                             };
                             let _ = tx.send(msg.into_bytes());
                         }
+                        reported = true;
                         break;
                     }
                 }
+            }
+            if !reported {
+                registry_clone.report_process_exit(&id_for_task, instance, &sub_clone);
             }
         };
 
@@ -178,6 +196,7 @@ impl SessionRegistry {
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024), // 2 MiB
             subscriber,
             log_file,
+            instance,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -208,18 +227,24 @@ impl SessionRegistry {
         let sub_clone = subscriber.clone();
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
+        let instance = NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed);
 
         let reader = async move {
+            // Whether the loop's end has already been accounted for (Closed
+            // action sent its own notice, or the session was removed). If
+            // not, raw_rx hit EOF: the process exited on its own.
+            let mut reported = false;
             while let Some(chunk) = raw_rx.recv().await {
                 let action = {
                     let mut lock = registry_clone.sessions.lock().unwrap();
-                    if let Some(session) = lock.get_mut(&id_for_task) {
+                    if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
                         session.scrollback.push(&chunk);
                         if let Some(f) = session.log_file.as_mut() {
                             let _ = f.write_all(&chunk);
                         }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
+                        reported = true;
                         break;
                     }
                 };
@@ -249,7 +274,7 @@ impl SessionRegistry {
                         // time (once for their password, once more for this).
                         if String::from_utf8_lossy(&bytes).contains("Press Return to begin session") {
                             let mut lock = registry_clone.sessions.lock().unwrap();
-                            if let Some(session) = lock.get_mut(&id_for_task) {
+                            if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
                                 let _ = session.transport.write(b"\r");
                             }
                         }
@@ -284,9 +309,13 @@ impl SessionRegistry {
                             };
                             let _ = tx.send(msg.into_bytes());
                         }
+                        reported = true;
                         break;
                     }
                 }
+            }
+            if !reported {
+                registry_clone.report_process_exit(&id_for_task, instance, &sub_clone);
             }
         };
 
@@ -298,6 +327,7 @@ impl SessionRegistry {
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024),
             subscriber,
             log_file,
+            instance,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -315,6 +345,30 @@ impl SessionRegistry {
     /// on the first chunk whose session id isn't in the map, so spawning it
     /// before the insert could lose the whole output stream if the PTY
     /// spoke first.
+    /// Called when a session's output stream ends without a Closed action --
+    /// the process exited by itself (the user typed `exit`, or plink quit
+    /// without a "FATAL ERROR:" line, e.g. "no valid host name provided").
+    /// Previously nothing was sent, so the tab kept looking live and input
+    /// went nowhere. The notice also goes into scrollback so a later
+    /// reattach still shows why the terminal is dead.
+    fn report_process_exit(
+        &self,
+        id: &str,
+        instance: u64,
+        subscriber: &Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
+    ) {
+        let notice = b"\r\n[Plinky: Session closed]\r\n";
+        {
+            let mut lock = self.sessions.lock().unwrap();
+            let Some(session) = lock.get_mut(id).filter(|s| s.instance == instance) else { return };
+            session.state_machine.terminate();
+            session.scrollback.push(notice);
+        }
+        if let Some(tx) = subscriber.lock().unwrap().as_ref() {
+            let _ = tx.send(notice.to_vec());
+        }
+    }
+
     fn insert_new_session(&self, id: String, mut active: ActiveSession) -> Result<()> {
         let mut lock = self.sessions.lock().unwrap();
         if lock.contains_key(&id) {

@@ -352,7 +352,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                             {session.name}
                           </span>
                           <span className="truncate max-w-[100px] font-mono text-[10px] text-slate-500">
-                            {session.hostname ? `${session.hostname}:${session.port}` : 'Local'}
+                            {session.hostname
+                              ? `${session.hostname}:${session.port}`
+                              : session.name === 'Local Shell' ? 'Local' : 'no host'}
                           </span>
                         </div>
 
@@ -430,7 +432,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
 
                       <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-400">
                         <span className="truncate max-w-[120px] font-mono text-[10px]">
-                          {session.hostname ? `${session.hostname}:${session.port}` : 'Local Shell'}
+                          {session.hostname
+                            ? `${session.hostname}:${session.port}`
+                            : session.name === 'Local Shell' ? 'Local Shell' : 'No host set'}
                         </span>
 
                         <div className="flex items-center space-x-1">

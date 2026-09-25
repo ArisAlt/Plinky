@@ -507,3 +507,36 @@ async fn test_attach_reports_pending_hostkey_prompt() {
     registry.answer_prompt("pending-sess", PromptAnswer::AcceptAndStore).unwrap();
     registry.close_session("pending-sess").unwrap();
 }
+
+#[tokio::test]
+async fn test_process_exit_is_reported_to_subscriber() {
+    // When the session's process exits on its own (user typed `exit`, or
+    // plink quit without a "FATAL ERROR:" line), the reader loop used to end
+    // silently: no closed notice, so the tab kept showing as live and
+    // keystrokes went nowhere.
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    registry.create_local_session("exit-sess", "Test", None, 80, 24, tx).unwrap();
+    registry.write_input("exit-sess", b"exit\n").unwrap();
+
+    let mut buf = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(3000));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            chunk = rx.recv() => match chunk {
+                Some(c) => {
+                    buf.extend_from_slice(&c);
+                    if String::from_utf8_lossy(&buf).contains("[Plinky: Session closed") { break; }
+                }
+                None => break,
+            },
+            _ = &mut timeout => break,
+        }
+    }
+    assert!(
+        String::from_utf8_lossy(&buf).contains("[Plinky: Session closed"),
+        "process exit must be surfaced; got: {:?}",
+        String::from_utf8_lossy(&buf)
+    );
+}
