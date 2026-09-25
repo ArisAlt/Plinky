@@ -33,6 +33,7 @@ export interface TerminalTab {
   hostname: string;
   port: number;
   username?: string;
+  protocol?: Protocol;
 }
 
 export interface TunnelEntry {

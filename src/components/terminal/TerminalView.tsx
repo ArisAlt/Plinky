@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -41,6 +41,8 @@ import {
   Settings as SettingsIcon,
   Upload
 } from 'lucide-react';
+
+type HookShell = 'bash' | 'zsh' | 'fish';
 
 interface PuTTYEventLog {
   id: string;
@@ -86,7 +88,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const isPromptInputRegionRef = useRef<boolean>(true);
   const promptLinesRef = useRef<number[]>([]);
 
-  const [hooksInjected, setHooksInjected] = useState(false);
+  // Shell the hooks were injected into, or null. Remembered per session name
+  // so the picker can mark the last choice -- never used to auto-inject.
+  const [hooksInjected, setHooksInjected] = useState<HookShell | null>(null);
+  const hooksShellKey = `plinky_shell_hooks:${tab.sessionName}`;
+  const lastHooksShell = (() => {
+    try {
+      return localStorage.getItem(hooksShellKey) as HookShell | null;
+    } catch {
+      return null;
+    }
+  })();
+  // Shell hooks are Unix-shell scripts. Serial/Telnet/Raw tabs are usually
+  // network gear (IOS, Junos, ...) whose CLI would try to run every line.
+  const supportsShellHooks = !tab.protocol || tab.protocol === 'SSH';
   const [hooksError, setHooksError] = useState<string | null>(null);
   // Only consider local if it's explicitly "Local Shell" or flagged as local.
   // PuTTY sessions or SSH targets (even localhost:22) must connect via plink.
@@ -110,6 +125,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Keep the menu inside the window. Its height varies (split actions, shell
+  // hooks), so a fixed-height estimate let it run off the bottom edge.
+  useLayoutEffect(() => {
+    const el = contextMenuRef.current;
+    if (!contextMenu || !el) return;
+    const fittedTop = Math.max(8, window.innerHeight - el.getBoundingClientRect().height - 8);
+    if (contextMenu.y > fittedTop) {
+      setContextMenu({ x: contextMenu.x, y: fittedTop });
+    }
+  }, [contextMenu]);
 
   // PuTTY Event Log State
   const [eventLogs, setEventLogs] = useState<PuTTYEventLog[]>([
@@ -665,8 +692,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       return;
     }
     const x = Math.min(e.clientX, window.innerWidth - 240);
-    const y = Math.min(e.clientY, window.innerHeight - 380);
-    setContextMenu({ x, y });
+    setContextMenu({ x, y: e.clientY });
   };
 
   const handleCopy = () => {
@@ -800,8 +826,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setSyncChannel(tab.id, nextChannel === 'none' ? null : nextChannel);
   };
 
-  const handleInjectHooks = async () => {
+  const handleInjectHooks = async (shell: HookShell) => {
     setHooksError(null);
+    setContextMenu(null);
+    if (hooksInjected) {
+      setHooksError(`Shell hooks are already active (${hooksInjected}).`);
+      setTimeout(() => setHooksError(null), 4000);
+      return;
+    }
     if (!isLivePtyRef.current) {
       // injectShellIntegration silently returns false on backend rejection
       // (e.g. write_input_live_only refusing a session that's still at a
@@ -812,9 +844,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       return;
     }
     try {
-      const ok = await injectShellIntegration(tab.id, 'bash');
+      // The shell must match: this used to always send the bash script. In
+      // zsh its `trap ... DEBUG` also fires inside command substitutions,
+      // leaking OSC bytes into prompt themes' arithmetic ("bad math
+      // expression: illegal character: ^["), and zsh ignores PROMPT_COMMAND.
+      const ok = await injectShellIntegration(tab.id, shell);
       if (ok) {
-        setHooksInjected(true);
+        setHooksInjected(shell);
+        try {
+          localStorage.setItem(hooksShellKey, shell);
+        } catch {
+          // Remembering the choice is a convenience only.
+        }
       } else {
         setHooksError('Failed to inject shell hooks.');
         setTimeout(() => setHooksError(null), 4000);
@@ -857,20 +898,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </div>
         )}
         <div className="flex items-center space-x-2">
-          {/* Shell Integration Hook Injector Button */}
-          <button
-            onClick={handleInjectHooks}
-            title="Inject OSC 133 semantic prompt markers & OSC 7 directory tracking into bash"
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-all ${
-              hooksInjected
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-300'
-            }`}
-          >
-            <Zap className="w-3 h-3 text-emerald-400" />
-            <span>{hooksInjected ? 'Hooks Active' : 'Shell Hooks'}</span>
-          </button>
-
           {/* Find In Terminal Button */}
           <button
             onClick={() => {
@@ -1052,7 +1079,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {/* Custom Terminal Context Menu */}
         {contextMenu && (
           <div
-            className="fixed z-50 w-52 bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+            ref={contextMenuRef}
+            className="fixed z-50 w-52 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1156,6 +1184,38 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <Search className="w-3.5 h-3.5 text-amber-400" />
               <span>Find in Terminal...</span>
             </button>
+            {supportsShellHooks && (
+              <>
+                <div className="border-t border-plinky-800 my-1" />
+                <div
+                  className="px-3 pt-1 pb-0.5 flex items-center space-x-2 text-slate-400"
+                  title="Optional. Teaches the remote Unix shell to report prompts and its current directory (SFTP folder-following, Ctrl+Up/Down prompt jumping). Not for network devices."
+                >
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    {hooksInjected ? `Shell hooks active (${hooksInjected})` : 'Shell hooks for:'}
+                  </span>
+                </div>
+                {!hooksInjected && (
+                  <div className="px-3 pb-1.5 flex items-center space-x-1">
+                    {(['bash', 'zsh', 'fish'] as const).map(shell => (
+                      <button
+                        key={shell}
+                        onClick={() => handleInjectHooks(shell)}
+                        title={shell === lastHooksShell ? 'Last used for this session' : undefined}
+                        className={`flex-1 py-0.5 rounded border font-mono text-[11px] transition ${
+                          shell === lastHooksShell
+                            ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                            : 'border-plinky-700 text-slate-300 hover:bg-sky-600/30 hover:text-sky-200'
+                        }`}
+                      >
+                        {shell}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
             {onSplitPane && (
               <>
                 <div className="border-t border-plinky-800 my-1" />

@@ -77,6 +77,7 @@ export const App: React.FC = () => {
       hostname: targetTab.hostname,
       port: targetTab.port,
       username: targetTab.username,
+      protocol: targetTab.protocol,
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -166,6 +167,7 @@ export const App: React.FC = () => {
       hostname: session.hostname || session.host_name || '',
       port: session.port || session.port_number || 22,
       username: session.username || session.user_name || undefined,
+      protocol: session.protocol,
     };
 
     setTabs(prev => [...prev, newTab]);
@@ -186,6 +188,7 @@ export const App: React.FC = () => {
       hostname: host,
       port,
       username: username || undefined,
+      protocol: 'SSH',
     };
 
     setTabs(prev => [...prev, newTab]);
