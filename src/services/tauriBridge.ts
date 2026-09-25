@@ -352,91 +352,87 @@ export async function inspectPpk(path: string): Promise<PpkInfo | null> {
   };
 }
 
-export async function listRemoteFiles(
-  sessionName: string, 
-  path: string,
-  hostname?: string,
-  port?: number,
-  username?: string
-): Promise<SftpFileEntry[]> {
-  if (isTauriEnvironment()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<SftpFileEntry[]>('sftp_list', {
-        sessionName,
-        remotePath: path,
-        hostname: hostname || undefined,
-        port: port || undefined,
-        username: username || undefined,
-      });
-    } catch (e) {
-      console.warn("Failed to invoke sftp_list via Tauri:", e);
-    }
-  }
-  // Mock SFTP remote filesystem listing
-  return [
-    { name: "..", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 18:00" },
-    { name: "etc", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 18:05" },
-    { name: "var", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 18:05" },
-    { name: "home", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 18:06" },
-    { name: "deploy", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "deploy", group: "deploy", modified: "Sep 22 19:30" },
-    { name: "app.log", isDir: false, isSymlink: false, size: 2048590, permissions: "-rw-r--r--", owner: "deploy", group: "deploy", modified: "Sep 22 20:15" },
-    { name: "nginx.conf", isDir: false, isSymlink: false, size: 3412, permissions: "-rw-r--r--", owner: "root", group: "root", modified: "Sep 20 11:22" },
-    { name: "docker-compose.yml", isDir: false, isSymlink: false, size: 1820, permissions: "-rw-r--r--", owner: "deploy", group: "deploy", modified: "Sep 21 14:10" },
-    { name: "backup.tar.gz", isDir: false, isSymlink: false, size: 45182900, permissions: "-rw-------", owner: "root", group: "root", modified: "Sep 19 04:00" },
-  ];
+/**
+ * Which server an SFTP call goes to. `password` is only for one typed into
+ * the SFTP pane: a saved session's vault password is read in the backend
+ * and never passes through here.
+ */
+export interface SftpTarget {
+  sessionName: string;
+  hostname?: string;
+  port?: number;
+  username?: string;
+  password?: string;
 }
 
-export async function createRemoteDir(
-  sessionName: string, 
-  path: string,
-  hostname?: string,
-  port?: number,
-  username?: string
-): Promise<boolean> {
-  if (isTauriEnvironment()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('sftp_mkdir', {
-        sessionName,
-        remotePath: path,
-        hostname: hostname || undefined,
-        port: port || undefined,
-        username: username || undefined,
-      });
-      return true;
-    } catch (e) {
-      console.warn("Failed to invoke sftp_mkdir via Tauri:", e);
-      return false;
-    }
-  }
-  return true;
+/** Prefixes the backend puts on errors the SFTP pane acts on. */
+export const SFTP_ERR_PASSWORD = '[password] ';
+export const SFTP_ERR_HOSTKEY = '[hostkey] ';
+
+async function sftpInvoke<T>(cmd: string, t: SftpTarget, args: Record<string, unknown> = {}): Promise<T> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, {
+    sessionName: t.sessionName,
+    hostname: t.hostname || undefined,
+    port: t.port || undefined,
+    username: t.username || undefined,
+    password: t.password || undefined,
+    ...args,
+  });
 }
 
-export async function removeRemoteFile(
-  sessionName: string, 
-  path: string,
-  hostname?: string,
-  port?: number,
-  username?: string
-): Promise<boolean> {
-  if (isTauriEnvironment()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('sftp_rm', {
-        sessionName,
-        remotePath: path,
-        hostname: hostname || undefined,
-        port: port || undefined,
-        username: username || undefined,
-      });
-      return true;
-    } catch (e) {
-      console.warn("Failed to invoke sftp_rm via Tauri:", e);
-      return false;
-    }
-  }
-  return true;
+// Browser dev preview only (no backend): a small fixed tree so the pane can
+// be laid out. The desktop app never falls back to it -- failures throw.
+const DEMO_REMOTE: SftpFileEntry[] = [
+  { name: "etc", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "root", group: "root", modified: "Sep 22 18:05" },
+  { name: "app.log", isDir: false, isSymlink: false, size: 2048590, permissions: "-rw-r--r--", owner: "deploy", group: "deploy", modified: "Sep 22 20:15" },
+];
+const DEMO_LOCAL: SftpFileEntry[] = [
+  { name: "Documents", isDir: true, isSymlink: false, size: 4096, permissions: "drwxr-xr-x", owner: "", group: "", modified: "Sep 22 20:10" },
+  { name: "notes.txt", isDir: false, isSymlink: false, size: 1250, permissions: "-rw-r--r--", owner: "", group: "", modified: "Sep 22 19:40" },
+];
+
+/** The remote folder psftp starts in: the user's home. */
+export async function sftpRemoteHome(t: SftpTarget): Promise<string> {
+  if (!isTauriEnvironment()) return '/home/demo';
+  return sftpInvoke<string>('sftp_home_dir', t);
+}
+
+export async function sftpList(t: SftpTarget, path: string): Promise<SftpFileEntry[]> {
+  if (!isTauriEnvironment()) return DEMO_REMOTE;
+  return sftpInvoke<SftpFileEntry[]>('sftp_list', t, { remotePath: path });
+}
+
+export async function sftpMkdir(t: SftpTarget, path: string): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await sftpInvoke('sftp_mkdir', t, { remotePath: path });
+}
+
+export async function sftpRemove(t: SftpTarget, path: string, isDir: boolean): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await sftpInvoke(isDir ? 'sftp_rmdir' : 'sftp_rm', t, { remotePath: path });
+}
+
+export async function sftpUpload(t: SftpTarget, localPath: string, remotePath: string): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await sftpInvoke('sftp_upload', t, { localPath, remotePath });
+}
+
+export async function sftpDownload(t: SftpTarget, remotePath: string, localPath: string): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await sftpInvoke('sftp_download', t, { remotePath, localPath });
+}
+
+export async function listLocalFiles(localPath: string): Promise<SftpFileEntry[]> {
+  if (!isTauriEnvironment()) return DEMO_LOCAL;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<SftpFileEntry[]>('sftp_list_local', { localPath });
+}
+
+export async function getLocalHomeDir(): Promise<string> {
+  if (!isTauriEnvironment()) return '/home/demo';
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('sftp_get_home_dir');
 }
 
 export async function startTerminalSession(

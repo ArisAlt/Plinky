@@ -93,12 +93,7 @@ fn start_terminal_session(
             .map_err(|e| format!("Failed to create local session: {e}"))
     } else if let Some(sess) = saved_serial {
         // These messages go straight to the terminal ("Failed to open serial
-        // line /dev/ttyUSB0: No such file or directory"); the error type's
-        // "Process error:" prefix only gets in the way there.
-        let shown = |e: plinky_core::errors::PlinkyError| match e {
-            plinky_core::errors::PlinkyError::ProcessError(msg) => msg,
-            other => other.to_string(),
-        };
+        // line /dev/ttyUSB0: No such file or directory").
         let config = plinky_core::transport::serial::SerialConfig::from_putty_keys(&sess.extra)
             .map_err(shown)?;
         registry
@@ -242,6 +237,68 @@ fn broadcast_sync_input(
     }
 }
 
+/// A backend error as the UI shows it. PlinkyError's Display prefixes
+/// "Process error:", which buried messages meant for the user -- and the
+/// "[password]"/"[hostkey]" tags the SFTP pane acts on.
+fn shown(e: plinky_core::errors::PlinkyError) -> String {
+    match e {
+        plinky_core::errors::PlinkyError::ProcessError(msg) => msg,
+        other => other.to_string(),
+    }
+}
+
+/// Where an SFTP call goes and the password it uses. A password typed into
+/// the SFTP pane wins; otherwise a saved session's vault entry is read here,
+/// in the backend, so the secret never passes through the webview. A saved
+/// session always connects with -load (its own host), so a session name
+/// can't send its vault password anywhere else.
+async fn sftp_target(
+    session_name: &str,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
+    password: Option<String>,
+    vault_state: &VaultState,
+) -> (Option<plinky_core::transport::plink::ExplicitTarget>, Option<String>) {
+    let target = hostname
+        .filter(|h| !h.is_empty())
+        .map(|h| plinky_core::transport::plink::ExplicitTarget {
+            hostname: h,
+            port: port.unwrap_or(22),
+            username,
+        });
+    if let Some(pwd) = password.filter(|p| !p.is_empty()) {
+        return (target, Some(pwd));
+    }
+    let vault_pwd = match putty_compat::sessions::read_session(session_name) {
+        Ok(sess) => match sess.extra.get("PlinkyVaultKey").filter(|k| !k.is_empty()) {
+            Some(key) => vault_state
+                .inner
+                .lock()
+                .await
+                .as_ref()
+                .and_then(|v| v.get_entry(key))
+                .map(|e| e.secret.expose_secret().to_string()),
+            None => None,
+        },
+        Err(_) => None,
+    };
+    (target, vault_pwd)
+}
+
+#[tauri::command]
+async fn sftp_home_dir(
+    session_name: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
+) -> Result<String, String> {
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::home_dir(&session_name, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+}
+
 #[tauri::command]
 async fn sftp_list(
     session_name: String,
@@ -249,17 +306,11 @@ async fn sftp_list(
     hostname: Option<String>,
     port: Option<u16>,
     username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
 ) -> Result<Vec<SftpFileEntry>, String> {
-    let explicit_target = hostname
-        .filter(|h| !h.is_empty())
-        .map(|h| plinky_core::transport::plink::ExplicitTarget {
-            hostname: h,
-            port: port.unwrap_or(22),
-            username,
-        });
-    PsftpClient::list_dir(&session_name, &remote_path, explicit_target.as_ref())
-        .await
-        .map_err(|e| format!("Failed to list remote directory: {e}"))
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::list_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
 }
 
 #[tauri::command]
@@ -269,17 +320,11 @@ async fn sftp_mkdir(
     hostname: Option<String>,
     port: Option<u16>,
     username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let explicit_target = hostname
-        .filter(|h| !h.is_empty())
-        .map(|h| plinky_core::transport::plink::ExplicitTarget {
-            hostname: h,
-            port: port.unwrap_or(22),
-            username,
-        });
-    PsftpClient::create_dir(&session_name, &remote_path, explicit_target.as_ref())
-        .await
-        .map_err(|e| format!("Failed to create remote directory: {e}"))
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::create_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
 }
 
 #[tauri::command]
@@ -289,17 +334,71 @@ async fn sftp_rm(
     hostname: Option<String>,
     port: Option<u16>,
     username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let explicit_target = hostname
-        .filter(|h| !h.is_empty())
-        .map(|h| plinky_core::transport::plink::ExplicitTarget {
-            hostname: h,
-            port: port.unwrap_or(22),
-            username,
-        });
-    PsftpClient::remove_file(&session_name, &remote_path, explicit_target.as_ref())
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::remove_file(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+}
+
+#[tauri::command]
+async fn sftp_rmdir(
+    session_name: String,
+    remote_path: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::remove_dir(&session_name, &remote_path, target.as_ref(), pwd.as_deref()).await.map_err(shown)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn sftp_upload(
+    session_name: String,
+    local_path: String,
+    remote_path: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::upload_file(&session_name, &local_path, &remote_path, target.as_ref(), pwd.as_deref())
         .await
-        .map_err(|e| format!("Failed to remove remote file: {e}"))
+        .map_err(shown)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn sftp_download(
+    session_name: String,
+    remote_path: String,
+    local_path: String,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
+    password: Option<String>,
+    vault_state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let (target, pwd) = sftp_target(&session_name, hostname, port, username, password, &vault_state).await;
+    PsftpClient::download_file(&session_name, &remote_path, &local_path, target.as_ref(), pwd.as_deref())
+        .await
+        .map_err(shown)
+}
+
+#[tauri::command]
+fn sftp_list_local(local_path: String) -> Result<Vec<SftpFileEntry>, String> {
+    PsftpClient::list_local_dir(&local_path).map_err(shown)
+}
+
+#[tauri::command]
+fn sftp_get_home_dir() -> String {
+    PsftpClient::get_local_home_dir()
 }
 
 /// Cancel flags for in-flight paced pastes, keyed by session id.
@@ -664,6 +763,12 @@ pub fn run() {
             sftp_list,
             sftp_mkdir,
             sftp_rm,
+            sftp_rmdir,
+            sftp_upload,
+            sftp_download,
+            sftp_list_local,
+            sftp_get_home_dir,
+            sftp_home_dir,
             vault_is_initialized,
             vault_is_unlocked,
             vault_create,
