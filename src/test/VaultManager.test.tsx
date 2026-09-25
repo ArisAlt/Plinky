@@ -35,4 +35,26 @@ describe('VaultManager Component', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  it('invokes onClose when Cancel button on unlock card is clicked', async () => {
+    const handleClose = vi.fn();
+    render(<VaultManager onClose={handleClose} />);
+
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
+    expect(cancelButton).toBeDefined();
+
+    fireEvent.click(cancelButton);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onClose when top-right card close button is clicked', async () => {
+    const handleClose = vi.fn();
+    render(<VaultManager onClose={handleClose} />);
+
+    const cardClose = await screen.findByTitle('Cancel and return to Terminal (Esc)');
+    expect(cardClose).toBeDefined();
+
+    fireEvent.click(cardClose);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
 });

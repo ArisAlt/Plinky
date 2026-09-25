@@ -126,13 +126,13 @@ flowchart TD
 
 ### Verification & Testing
 ```bash
-# Run frontend unit tests (30 tests across 9 suites via Vitest)
+# Run frontend unit tests (34 tests across 9 suites via Vitest)
 npm test
 
 # Check frontend TypeScript compilation & bundle
 npm run build
 
-# Run workspace Rust tests (70 tests including localhost sshd fixture)
+# Run workspace Rust tests (73 tests including localhost sshd fixture)
 cargo test --workspace
 
 # Run dependency license, advisory, and ban validation
