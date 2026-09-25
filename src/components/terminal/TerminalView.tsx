@@ -17,11 +17,14 @@ import {
   injectShellIntegration,
   isTauriEnvironment,
   isSessionClosed,
-  readPuttySession,
-  vaultIsUnlocked,
   vaultGetEntry,
-  VaultEntry
+  vaultIsInitialized,
+  vaultLookup,
+  vaultSendSecret,
+  VaultLookup,
+  VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
+import { classifyPasswordPrompt, appendRecentOutput } from '../../services/promptDetect';
 import {
   Radio,
   Sparkles,
@@ -168,115 +171,87 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const copyOnSelectRef = useRef(copyOnSelect);
   copyOnSelectRef.current = copyOnSelect;
 
-  // Encrypted Vault credentials state
-  const [vaultKey, setVaultKey] = useState<string | null>(tab.vaultKey || null);
-  const [vaultEntry, setVaultEntry] = useState<VaultEntry | null>(null);
-  const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
+  // Encrypted Vault. The backend decides which entry is this session's
+  // (vault_lookup: an explicit link, or an entry named after the session or
+  // host) and types it itself (vault_send_secret), so the webview never
+  // holds a password to send. This used to fetch the entry once on mount:
+  // unlocking the vault afterwards never reached an open tab, and locking
+  // it didn't stop the tab sending the password it had cached.
+  const [vault, setVault] = useState<VaultLookup | null>(null);
+  const [vaultExists, setVaultExists] = useState(false);
+  const vaultKey = vault?.key ?? null;
+  const isVaultUnlocked = !!vault && !vault.locked;
   const [isVaultMenuOpen, setIsVaultMenuOpen] = useState(false);
   const [detectedPasswordPrompt, setDetectedPasswordPrompt] = useState<'login' | 'enable' | null>(null);
   const [copiedVaultKey, setCopiedVaultKey] = useState<'login' | 'enable' | null>(null);
+  const recentOutputRef = useRef('');
+
+  const refreshVault = useCallback(async () => {
+    try {
+      const found = await vaultLookup(tab.sessionName, tab.hostname, tab.username);
+      setVault(found);
+      if (found.locked) setVaultExists(await vaultIsInitialized());
+    } catch {
+      setVault(null);
+    }
+  }, [tab.sessionName, tab.hostname, tab.username]);
 
   useEffect(() => {
-    let active = true;
-    const resolveVault = async () => {
-      let key = tab.vaultKey;
-      if (!key) {
-        const sess = await readPuttySession(tab.sessionName);
-        if (sess?.extra?.PlinkyVaultKey) {
-          key = sess.extra.PlinkyVaultKey;
-        }
-      }
-      if (!active) return;
-      if (key) {
-        setVaultKey(key);
-        const unlocked = await vaultIsUnlocked();
-        if (!active) return;
-        setIsVaultUnlocked(unlocked);
-        if (unlocked) {
-          const entry = await vaultGetEntry(key);
-          if (active && entry) {
-            setVaultEntry(entry);
-          }
-        }
-      }
-    };
-    resolveVault();
-    return () => { active = false; };
-  }, [tab.vaultKey, tab.sessionName]);
+    void refreshVault();
+    const onChange = () => void refreshVault();
+    window.addEventListener(VAULT_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(VAULT_CHANGED_EVENT, onChange);
+  }, [refreshVault]);
 
-  const handleSendVaultPassword = async () => {
+  const sendVaultSecret = async (field: 'login' | 'enable') => {
     if (!vaultKey) return;
-    let entry = vaultEntry;
-    if (!entry) {
-      entry = await vaultGetEntry(vaultKey);
-      if (entry) setVaultEntry(entry);
-    }
-    if (entry && entry.secret) {
-      writeTerminalInput(tab.id, new TextEncoder().encode(entry.secret + '\r'));
-      addEventLog("Injected login password from Encrypted Vault", 'info');
+    const label = field === 'enable' ? 'enable password' : 'password';
+    // Away from a password prompt the device echoes what's typed: at a shell
+    // prompt the password would show on screen, run as a command and land
+    // in the remote history and the session log.
+    if (!detectedPasswordPrompt && !confirm(`No password prompt is showing. Type the ${label} from vault entry "${vaultKey}" anyway? If the device echoes it, it will be visible.`)) return;
+    try {
+      await vaultSendSecret(tab.id, vaultKey, field);
+      addEventLog(`Sent the ${label} from vault entry "${vaultKey}"`, 'info');
       setDetectedPasswordPrompt(null);
+    } catch (e) {
+      addEventLog(`Vault: ${String(e)}`, 'error');
+      void refreshVault();
     }
   };
+  const handleSendVaultPassword = () => sendVaultSecret('login');
+  const handleSendVaultEnablePassword = () => sendVaultSecret('enable');
 
-  const handleSendVaultEnablePassword = async () => {
+  const copyVaultSecret = async (field: 'login' | 'enable') => {
     if (!vaultKey) return;
-    let entry = vaultEntry;
-    if (!entry) {
-      entry = await vaultGetEntry(vaultKey);
-      if (entry) setVaultEntry(entry);
-    }
-    if (entry && entry.enable_secret) {
-      writeTerminalInput(tab.id, new TextEncoder().encode(entry.enable_secret + '\r'));
-      addEventLog("Injected enable password from Encrypted Vault", 'info');
-      setDetectedPasswordPrompt(null);
-    }
-  };
-
-  const handleCopyVaultPassword = async () => {
-    if (!vaultKey) return;
-    let entry = vaultEntry;
-    if (!entry) {
-      entry = await vaultGetEntry(vaultKey);
-      if (entry) setVaultEntry(entry);
-    }
-    if (entry && entry.secret) {
-      navigator.clipboard.writeText(entry.secret);
-      setCopiedVaultKey('login');
+    try {
+      // Fetched for this copy only, never kept.
+      const entry = await vaultGetEntry(vaultKey);
+      const secret = field === 'enable' ? entry?.enable_secret : entry?.secret;
+      if (!secret) {
+        addEventLog('Vault: nothing to copy (is the vault locked?)', 'warn');
+        return;
+      }
+      await navigator.clipboard.writeText(secret);
+      setCopiedVaultKey(field);
       setTimeout(() => setCopiedVaultKey(null), 2000);
-      addEventLog("Copied login password to clipboard (auto-clears in 25s)", 'info');
+      // The clear below can't be verified in every webview (reading the
+      // clipboard back may be refused), and clipboard managers keep their own
+      // history -- so the message doesn't promise it.
+      addEventLog(`Copied the ${field === 'enable' ? 'enable ' : ''}password to the clipboard; Plinky will try to clear it in 25 s. A clipboard manager may keep a copy.`, 'info');
       setTimeout(async () => {
         try {
-          const current = await navigator.clipboard.readText();
-          if (current === entry.secret) {
-            await navigator.clipboard.writeText('');
-          }
-        } catch {}
+          if ((await navigator.clipboard.readText()) === secret) await navigator.clipboard.writeText('');
+        } catch {
+          // Can't check it's still ours, so leave the clipboard alone.
+        }
       }, 25000);
+    } catch (e) {
+      addEventLog(`Vault: ${String(e)}`, 'error');
     }
   };
-
-  const handleCopyVaultEnablePassword = async () => {
-    if (!vaultKey) return;
-    let entry = vaultEntry;
-    if (!entry) {
-      entry = await vaultGetEntry(vaultKey);
-      if (entry) setVaultEntry(entry);
-    }
-    if (entry && entry.enable_secret) {
-      navigator.clipboard.writeText(entry.enable_secret);
-      setCopiedVaultKey('enable');
-      setTimeout(() => setCopiedVaultKey(null), 2000);
-      addEventLog("Copied enable password to clipboard (auto-clears in 25s)", 'info');
-      setTimeout(async () => {
-        try {
-          const current = await navigator.clipboard.readText();
-          if (current === entry.enable_secret) {
-            await navigator.clipboard.writeText('');
-          }
-        } catch {}
-      }, 25000);
-    }
-  };
+  const handleCopyVaultPassword = () => copyVaultSecret('login');
+  const handleCopyVaultEnablePassword = () => copyVaultSecret('enable');
 
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
@@ -494,10 +469,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         /(?:[\$#%❯]\s*)$/m.test(text.trim())
       );
 
-      // Password & Enable Prompt Detection (PreAuth or In-Session Privileged Exec)
-      const trimmedText = text.trim();
-      const isEnablePrompt = /enable\s*password:\s*$/i.test(trimmedText);
-      const isPasswordPrompt = isEnablePrompt || /[pP]assword:\s*$/.test(trimmedText);
+      // Password & enable prompt detection, on the tail of the output so a
+      // prompt split across chunks, or IOS's "enable" then "Password:", is seen.
+      recentOutputRef.current = appendRecentOutput(recentOutputRef.current, text);
+      const promptKind = classifyPasswordPrompt(recentOutputRef.current);
+      const isEnablePrompt = promptKind === 'enable';
+      const isPasswordPrompt = promptKind !== null;
 
       if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
@@ -1036,7 +1013,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           {vaultKey && (
             <div className="relative">
               <button
-                onClick={() => setIsVaultMenuOpen(prev => !prev)}
+                onClick={() => {
+                  if (!isVaultMenuOpen) void refreshVault();
+                  setIsVaultMenuOpen(prev => !prev);
+                }}
                 title={`Encrypted Vault: ${vaultKey}`}
                 className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-medium transition-all ${
                   isVaultMenuOpen
@@ -1063,7 +1043,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   {!isVaultUnlocked ? (
                     <div className="p-2.5 text-center space-y-1.5">
                       <p className="text-[11px] text-slate-400">Vault is currently locked.</p>
-                      <p className="text-[10px] text-slate-500">Unlock via the Shield tab in the top bar to paste credentials.</p>
+                      <p className="text-[10px] text-slate-500">Unlock it with Vault in the top bar to send saved passwords.</p>
                     </div>
                   ) : (
                     <div className="py-1">
@@ -1078,7 +1058,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         <span>Send Login Password</span>
                       </button>
 
-                      {vaultEntry?.enable_secret && (
+                      {vault?.hasEnableSecret && (
                         <button
                           onClick={() => {
                             handleSendVaultEnablePassword();
@@ -1104,7 +1084,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         {copiedVaultKey === 'login' && <Check className="w-3 h-3 text-emerald-400" />}
                       </button>
 
-                      {vaultEntry?.enable_secret && (
+                      {vault?.hasEnableSecret && (
                         <button
                           onClick={handleCopyVaultEnablePassword}
                           className="w-full flex items-center justify-between px-3 py-1 hover:bg-slate-800 text-slate-300 text-left text-[11px] transition"
@@ -1289,24 +1269,39 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </div>
         )}
 
-        {/* Floating 1-Click Vault Autofill Notification */}
-        {detectedPasswordPrompt && vaultKey && isVaultUnlocked && (
+        {/* Vault autofill at a password prompt. Names the entry it will
+            use: prompt detection reads text the remote side controls, so
+            after hopping to another host the prompt may not be this
+            session's. An enable prompt is only offered an enable password. */}
+        {detectedPasswordPrompt && vaultKey && isVaultUnlocked &&
+          (detectedPasswordPrompt === 'login' || vault?.hasEnableSecret) && (
           <div className="absolute top-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded-lg shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
             <Key className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
             <span className="font-medium">
-              {detectedPasswordPrompt === 'enable' ? 'Enable Password Prompt Detected' : 'Password Prompt Detected'}
+              {detectedPasswordPrompt === 'enable' ? 'Enable password prompt' : 'Password prompt'}
             </span>
             <button
               onClick={detectedPasswordPrompt === 'enable' ? handleSendVaultEnablePassword : handleSendVaultPassword}
+              title={`Types the ${detectedPasswordPrompt === 'enable' ? 'enable ' : ''}password saved in vault entry "${vaultKey}"`}
               className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow-xs flex items-center space-x-1"
             >
-              <span>{detectedPasswordPrompt === 'enable' ? '⚡ Autofill Enable' : '🔑 Autofill Password'}</span>
+              <span>{detectedPasswordPrompt === 'enable' ? 'Send enable password' : 'Send password'}</span>
             </button>
+            <span className="text-[10px] text-amber-300/70 font-mono truncate max-w-[140px]" title={vaultKey}>{vaultKey}</span>
             <button
               onClick={() => setDetectedPasswordPrompt(null)}
               className="p-0.5 text-slate-400 hover:text-white rounded"
               title="Dismiss"
             >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        {detectedPasswordPrompt && vault?.locked && vaultExists && (
+          <div className="absolute top-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
+            <Key className="w-3.5 h-3.5 text-slate-400" />
+            <span>Password prompt. Unlock the vault (Vault in the top bar) to send a saved password.</span>
+            <button onClick={() => setDetectedPasswordPrompt(null)} className="p-0.5 text-slate-400 hover:text-white rounded" title="Dismiss">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -1381,7 +1376,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   <Key className="w-3.5 h-3.5 text-amber-400" />
                   <span>Send Login Password</span>
                 </button>
-                {vaultEntry?.enable_secret && (
+                {vault?.hasEnableSecret && (
                   <button
                     onClick={() => {
                       setContextMenu(null);

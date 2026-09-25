@@ -12,6 +12,7 @@ import {
   sftpDownload,
   listLocalFiles,
   getLocalHomeDir,
+  VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import {
   Folder,
@@ -210,6 +211,18 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
   }, [typedPassword]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { void loadLocal(null); }, [loadLocal]);
+
+  // "This server needs a password" often means "the vault is locked": once
+  // it's unlocked, retry with the password the backend can now read.
+  const needsPasswordRef = useRef(false);
+  needsPasswordRef.current = !!remoteError?.startsWith(SFTP_ERR_PASSWORD);
+  const retryRef = useRef(() => {});
+  retryRef.current = () => { if (needsPasswordRef.current) void loadRemote(remotePath, target); };
+  useEffect(() => {
+    const onVaultChanged = () => retryRef.current();
+    window.addEventListener(VAULT_CHANGED_EVENT, onVaultChanged);
+    return () => window.removeEventListener(VAULT_CHANGED_EVENT, onVaultChanged);
+  }, []);
 
   const openRemote = (entry: SftpFileEntry) => {
     if (remotePath === null) return;
