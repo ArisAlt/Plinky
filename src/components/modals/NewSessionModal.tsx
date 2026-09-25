@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { PuttySession, Protocol } from '../../types/session';
 import { 
   Terminal, X, Save, Key, Folder, Tag, Cpu, RefreshCw, 
-  Shield, Server, Laptop, ArrowRight, ChevronDown, ChevronRight 
+  Shield, Server, Laptop, ArrowRight, ChevronDown, ChevronRight, Lock 
 } from 'lucide-react';
-import { listSerialPorts, DetectedSerialPort } from '../../services/tauriBridge';
+import { 
+  listSerialPorts, DetectedSerialPort, 
+  vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry 
+} from '../../services/tauriBridge';
 
 interface NewSessionModalProps {
   isOpen: boolean;
@@ -29,6 +32,16 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [folder, setFolder] = useState('Saved Sessions');
   const [tags, setTags] = useState('');
   const [publicKeyFile, setPublicKeyFile] = useState('');
+
+  // Encrypted Vault credentials state
+  const [useVault, setUseVault] = useState(false);
+  const [vaultMode, setVaultMode] = useState<'new' | 'link'>('new');
+  const [vaultEntries, setVaultEntries] = useState<VaultEntryMeta[]>([]);
+  const [selectedVaultKey, setSelectedVaultKey] = useState('');
+  const [vaultKeyId, setVaultKeyId] = useState('');
+  const [vaultPassword, setVaultPassword] = useState('');
+  const [isNetworkDevice, setIsNetworkDevice] = useState(false);
+  const [vaultEnablePassword, setVaultEnablePassword] = useState('');
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -69,6 +82,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     refreshPorts();
+    vaultListEntriesMeta().then(setVaultEntries).catch(() => {});
     if (editingSession) {
       setName(editingSession.name);
       setHostname(editingSession.hostname);
@@ -95,6 +109,22 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setJumpHost(extra.ProxyHost || '');
       setJumpPort(extra.ProxyPort || '22');
       setJumpUsername(extra.ProxyUsername || '');
+
+      // Load vault credentials key
+      if (extra.PlinkyVaultKey) {
+        setUseVault(true);
+        setVaultMode('link');
+        setSelectedVaultKey(extra.PlinkyVaultKey);
+        setVaultKeyId(extra.PlinkyVaultKey);
+      } else {
+        setUseVault(false);
+        setVaultMode('new');
+        setSelectedVaultKey('');
+        setVaultKeyId(`session:${editingSession.name}`);
+      }
+      setVaultPassword('');
+      setIsNetworkDevice(false);
+      setVaultEnablePassword('');
     } else {
       setName('');
       setHostname('');
@@ -116,6 +146,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setJumpHost('');
       setJumpPort('22');
       setJumpUsername('');
+      setUseVault(false);
+      setVaultMode('new');
+      setSelectedVaultKey('');
+      setVaultKeyId('');
+      setVaultPassword('');
+      setIsNetworkDevice(false);
+      setVaultEnablePassword('');
     }
   }, [isOpen, editingSession]);
 
@@ -177,6 +214,33 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         delete extra.ProxyTelnetCommand;
         delete extra.PlinkyJumpHost;
       }
+    }
+
+    // Encrypted Vault Credential Binding
+    if (useVault) {
+      if (vaultMode === 'link' && selectedVaultKey) {
+        extra.PlinkyVaultKey = selectedVaultKey;
+      } else if (vaultMode === 'new') {
+        const finalKeyId = vaultKeyId.trim() || `session:${name.trim()}`;
+        if (vaultPassword) {
+          const now = Math.floor(Date.now() / 1000);
+          const entry: VaultEntry = {
+            id: finalKeyId,
+            username: isSerial ? undefined : (username.trim() || undefined),
+            secret: vaultPassword,
+            enable_secret: isNetworkDevice && vaultEnablePassword.trim() ? vaultEnablePassword.trim() : undefined,
+            notes: `Saved credentials for session "${name.trim()}"`,
+            created_at: now,
+            updated_at: now,
+          };
+          vaultSetEntry(entry).catch(err => {
+            console.warn("Failed to save session credentials in vault:", err);
+          });
+        }
+        extra.PlinkyVaultKey = finalKeyId;
+      }
+    } else {
+      delete extra.PlinkyVaultKey;
     }
 
     const session: PuttySession = {
@@ -595,6 +659,141 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               )}
             </div>
           )}
+
+          {/* ENCRYPTED VAULT CREDENTIALS SECTION */}
+          <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useVault}
+                  onChange={e => setUseVault(e.target.checked)}
+                  className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
+                />
+                <span className="text-slate-200 font-medium flex items-center space-x-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Save Credentials in Encrypted Vault</span>
+                </span>
+              </label>
+              {useVault && (
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Argon2id + AES-256-GCM
+                </span>
+              )}
+            </div>
+
+            {useVault && (
+              <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
+                {/* Mode toggle: Create New vs Link Existing */}
+                <div className="flex items-center space-x-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setVaultMode('new')}
+                    className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
+                      vaultMode === 'new'
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                        : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
+                    }`}
+                  >
+                    Create New Vault Entry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVaultMode('link')}
+                    className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
+                      vaultMode === 'link'
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                        : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
+                    }`}
+                  >
+                    Link to Existing Vault Entry
+                  </button>
+                </div>
+
+                {vaultMode === 'link' ? (
+                  <div className="space-y-1">
+                    <label className="text-slate-300 text-[11px]">Select Vault Credential *</label>
+                    <select
+                      value={selectedVaultKey}
+                      onChange={e => setSelectedVaultKey(e.target.value)}
+                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500 font-mono"
+                    >
+                      <option value="" disabled>-- Select a vault credential --</option>
+                      {vaultEntries.map(e => (
+                        <option key={e.id} value={e.id}>
+                          {e.id} {e.username ? `(${e.username})` : ''} {e.has_enable_secret ? '[+ Enable Pwd]' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {vaultEntries.length === 0 && (
+                      <p className="text-amber-400 text-[11px]">
+                        No credentials found in vault (or vault is locked). You can switch to "Create New Vault Entry".
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-slate-300 text-[11px]">Vault Key ID</label>
+                        <input
+                          type="text"
+                          value={vaultKeyId}
+                          onChange={e => setVaultKeyId(e.target.value)}
+                          placeholder={name.trim() ? `session:${name.trim()}` : 'session:device-name'}
+                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-slate-300 text-[11px]">Login Password *</label>
+                        <input
+                          type="password"
+                          value={vaultPassword}
+                          onChange={e => setVaultPassword(e.target.value)}
+                          placeholder="Session login password..."
+                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Network Device Enable Password Toggle */}
+                    <div className="pt-0.5">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isNetworkDevice}
+                          onChange={e => setIsNetworkDevice(e.target.checked)}
+                          className="rounded border-plinky-700 text-amber-500 focus:ring-0 bg-plinky-900"
+                        />
+                        <span className="text-slate-300 text-xs font-medium">
+                          Network Device (requires Enable Password / Privileged Exec)
+                        </span>
+                      </label>
+                    </div>
+
+                    {isNetworkDevice && (
+                      <div className="p-2 bg-amber-950/20 border border-amber-500/30 rounded space-y-1 animate-in fade-in duration-100">
+                        <label className="block text-[11px] text-amber-300 font-medium">
+                          Enable Password (Cisco / Arista / Huawei Privileged EXEC)
+                        </label>
+                        <input
+                          type="password"
+                          value={vaultEnablePassword}
+                          onChange={e => setVaultEnablePassword(e.target.value)}
+                          placeholder="e.g. Cisco enable secret..."
+                          className="w-full bg-plinky-900 border border-amber-500/40 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-[10px] text-slate-400 italic">
+                  🔒 Credentials are encrypted with Argon2id and never saved in plaintext PuTTY session files.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Organization & Tags */}
           <div className="grid grid-cols-2 gap-2">

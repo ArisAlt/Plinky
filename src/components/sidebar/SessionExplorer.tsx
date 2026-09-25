@@ -13,7 +13,8 @@ import {
   List,
   LayoutList,
   Trash2,
-  X
+  X,
+  Lock
 } from 'lucide-react';
 import {
   getUserFolders,
@@ -351,6 +352,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                           <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition">
                             {session.name}
                           </span>
+                          {session.extra?.PlinkyVaultKey && (
+                            <span title={`Encrypted Vault Credential: ${session.extra.PlinkyVaultKey}`} className="inline-flex items-center">
+                              <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                            </span>
+                          )}
                           <span className="truncate max-w-[100px] font-mono text-[10px] text-slate-500">
                             {session.hostname
                               ? `${session.hostname}:${session.port}`
@@ -426,6 +432,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                           <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition">
                             {session.name}
                           </span>
+                          {session.extra?.PlinkyVaultKey && (
+                            <span title={`Encrypted Vault Credential: ${session.extra.PlinkyVaultKey}`} className="inline-flex items-center">
+                              <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                            </span>
+                          )}
                         </div>
                         {getProtocolBadge(session.protocol)}
                       </div>

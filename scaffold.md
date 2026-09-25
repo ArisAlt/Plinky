@@ -69,7 +69,7 @@ This document tracks the directory architecture, file structure, component relat
 │           │   ├── parser.rs             # psftp ls -l parser, space-in-filename tokenizer, symlink handling
 │           │   └── client.rs             # PsftpClient process runner (list_dir, create_dir, remove_file)
 │           ├── vault/                    # Credential Vault (M4 Argon2id + AES-256-GCM + Zeroize)
-│           │   ├── mod.rs                # Vault in-memory struct, SecretString with ZeroizeOnDrop and redaction
+│           │   ├── mod.rs                # Vault struct, SecretString ZeroizeOnDrop/redaction, enable_secret & has_enable_secret
 │           │   └── storage.rs            # PLKV container format (36-byte header, AAD binding, atomic disk writes)
 │           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
@@ -88,7 +88,8 @@ This document tracks the directory architecture, file structure, component relat
 │       └── lib.rs                        # Tauri plugin setup & command registration:
 │                                         # list_putty_sessions, read_putty_session, write_putty_session,
 │                                         # list_putty_hostkeys, inspect_ppk, start/attach/write/resize/close,
-│                                         # sync channels & broadcast, sftp_list, sftp_mkdir, sftp_rm
+│                                         # sync channels & broadcast, sftp_list, sftp_mkdir, sftp_rm,
+│                                         # vault_*, list_serial_ports
 │
 └── src/                                  # Frontend UI Workbench (TypeScript + React 19 + xterm.js)
     ├── package.json                      # Dependencies: React 19, @xterm/xterm, dockview, lucide-react, tailwindcss
@@ -101,13 +102,13 @@ This document tracks the directory architecture, file structure, component relat
     ├── App.tsx                           # Master IDE-style workbench with tab management & view routing
     ├── index.css                         # CSS styling, dockview overrides, xterm customisation, free-type styles
     ├── types/
-    │   └── session.ts                    # TypeScript models (PuttySession, TerminalTab, SyncChannel, Sftp, Tunnels)
+    │   └── session.ts                    # TypeScript models (PuttySession, TerminalTab, SyncChannel, Sftp, Tunnels, VaultEntry)
     ├── services/
     │   ├── tauriBridge.ts                # Dual-mode IPC bridge (Tauri native + browser preview fallbacks)
     │   ├── terminalManager.ts            # Terminal registry, broadcast sync router
     │   ├── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
     │   └── sessionMetadata.ts            # D4 compliant session folder and tags sidecar persistence service
-    ├── test/                             # Frontend Vitest Test Suites (34 tests across 9 suites)
+    ├── test/                             # Frontend Vitest Test Suites (36 tests across 9 suites)
     │   ├── setup.ts                      # jsdom and canvas test polyfills
     │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
     │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests
@@ -117,7 +118,7 @@ This document tracks the directory architecture, file structure, component relat
     │   ├── SessionExplorer.test.tsx      # Tree rendering, double-click connect, density toggle tests
     │   ├── TitleBar.test.tsx             # Quick Connect history and auto-complete dropdown tests
     │   ├── tauriBridge.sessions.test.ts  # PuTTY session normalization & metadata test suite
-    │   └── NewSessionModal.test.tsx      # Serial USB auto-detection & MobaXterm jump host GUI tests
+    │   └── NewSessionModal.test.tsx      # Serial USB auto-detection, MobaXterm jump host, and Encrypted Vault credential tests
     └── components/
         ├── layout/
         │   ├── TitleBar.tsx              # Quick connect with history and autocomplete, view switchers, new session action

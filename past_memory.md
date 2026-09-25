@@ -491,4 +491,39 @@
   - Windows users can run `Plinky.exe` directly without installation or administrator privileges.
 * Verification: 34/34 Vitest tests pass across 9 suites; 73/73 Cargo workspace tests pass; `npm run build` succeeds in 1.94s with 0 TS errors.
 
+### 35. ENCRYPTED VAULT USAGE BY SAVED SESSIONS & NETWORK DEVICE ENABLE PASSWORDS
+* Scope & Security Invariant:
+  - User Requirement: Allow saved PuTTY sessions to use encrypted Vault credentials, supporting both standard login passwords and network device privileged EXEC "enable passwords" (e.g. Cisco/Arista/Huawei), recognizing that only some network devices have enable passwords, not all.
+  - PuTTY Storage Invariant: Plaintext passwords are NEVER stored in PuTTY session files (`~/.putty/sessions`) or Windows registry (`HKCU\Software\SimonTatham\PuTTY\Sessions`). Sessions link to vault entries via reference key (`extra.PlinkyVaultKey = "<key-id>"`).
+* Cryptographic Backend Extension (`crates/plinky-core/src/vault/mod.rs`):
+  - Added `pub enable_secret: Option<SecretString>` with `#[serde(default, skip_serializing_if = "Option::is_none")]` to `VaultEntry`. Zeroized on drop, redacted from debug/display logs.
+  - Added `pub has_enable_secret: bool` to `VaultEntryMeta` with `#[serde(default)]` to safely indicate enable secret presence without leaking plaintext or cipher bytes.
+  - Added builder method `with_enable_secret(mut self, enable_secret: impl Into<String>) -> Self`.
+  - Added unit tests: `test_vault_entry_enable_secret_roundtrip`, `test_vault_entry_meta_has_enable_secret`, `test_vault_backward_compatibility_without_enable_secret`. Fixed metadata test to assert `!json.contains("\"secret\"")`.
+  - 40/40 tests pass in `plinky-core`; 76/76 tests pass across workspace.
+* Types & IPC Bridge (`src/types/session.ts`, `src/services/tauriBridge.ts`):
+  - Updated `VaultEntry` interface with optional `enable_secret?: string`.
+  - Updated `VaultEntryMeta` interface with optional `has_enable_secret?: boolean`.
+  - Updated `TerminalTab` interface with optional `vaultKey?: string`.
+* Vault Manager GUI Updates (`src/components/vault/VaultManager.tsx`):
+  - Added "Network Device (Enable Password / Privileged Exec)" toggle in "Add Credential" form.
+  - Added `copyEnableToClipboard(key)` with 25s auto-clearing clipboard hygiene.
+  - Added `+ Enable Pwd` badge and `[Enable]` copy button in credential list card.
+* Session Configuration GUI Updates (`src/components/modals/NewSessionModal.tsx`):
+  - Added "Save credentials in Encrypted Vault" section with toggle between "Create New Vault Entry" and "Link to Existing Vault Entry".
+  - Includes Vault Key ID, Login Password, and conditional Network Device Enable Password fields.
+  - On save: writes encrypted entry to vault via `vaultSetEntry` and persists `extra.PlinkyVaultKey = finalKeyId` in PuTTY session.
+* Session Tree Lock Indicator (`src/components/sidebar/SessionExplorer.tsx`):
+  - Displays amber `Lock` badge next to sessions linked to encrypted vault credentials in both Compact and Comfortable views.
+* Terminal View Vault Integration (`src/components/terminal/TerminalView.tsx`):
+  - Reads `tab.vaultKey` and fetches decrypted `VaultEntry` when vault is unlocked.
+  - Real-time prompt detection in `handleIncomingChunk`: distinguishes between standard login password prompts (`[pP]assword:\s*$`) and network device privileged EXEC prompts (`enable\s*password:\s*$` / `[pP]assword:\s*$` in session).
+  - Added floating 1-click autofill banner (`[⚡ Autofill Enable]` / `[🔑 Autofill Password]`) appearing directly above terminal canvas on prompt detection.
+  - Added `[🔑 Vault]` dropdown toolbar menu with 1-click password injection, enable password injection, and 25s auto-clearing clipboard copy.
+  - Added Vault actions to terminal right-click context menu ("Send Login Password", "Send Enable Password").
+* Frontend Unit Tests & Verification:
+  - Added test cases in `src/test/NewSessionModal.test.tsx` verifying session creation with new vault credentials (including enable secret) and session linking to existing vault entries.
+  - 36/36 Vitest tests pass across 9 suites; `npm run build` succeeds with 0 TS errors (1.90s); 76/76 Cargo tests pass.
+
+
 

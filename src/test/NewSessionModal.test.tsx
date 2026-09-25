@@ -3,6 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { NewSessionModal } from '../components/modals/NewSessionModal';
 
+const mockVaultListEntriesMeta = vi.fn().mockResolvedValue([
+  { id: 'router-cisco-core', has_enable_secret: true },
+]);
+const mockVaultSetEntry = vi.fn().mockResolvedValue(true);
+
 vi.mock('../services/tauriBridge', () => ({
   listSerialPorts: vi.fn().mockResolvedValue([
     {
@@ -25,6 +30,8 @@ vi.mock('../services/tauriBridge', () => ({
       is_usb: false,
     },
   ]),
+  vaultListEntriesMeta: (...args: any[]) => mockVaultListEntriesMeta(...args),
+  vaultSetEntry: (...args: any[]) => mockVaultSetEntry(...args),
 }));
 
 describe('NewSessionModal Component', () => {
@@ -142,7 +149,7 @@ describe('NewSessionModal Component', () => {
     });
 
     // Enable Jump Host checkbox
-    const jumpCheckbox = screen.getByRole('checkbox');
+    const jumpCheckbox = screen.getByLabelText(/Connect through SSH Jump Host/i);
     fireEvent.click(jumpCheckbox);
 
     // Verify visual topology route banner is rendered
@@ -221,6 +228,126 @@ describe('NewSessionModal Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ extra: expect.objectContaining({ SerialLine: '/dev/ttyUSB7' }) })
+    );
+  });
+
+  it('saves session with new encrypted vault credentials including network device enable password', async () => {
+    const onSave = vi.fn();
+    mockVaultSetEntry.mockClear();
+
+    render(
+      <NewSessionModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />
+    );
+
+    // Session name & host
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
+      target: { value: 'Cisco-Core-Router' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), {
+      target: { value: '192.168.1.1' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. root, admin, or deploy/i), {
+      target: { value: 'cisco_admin' },
+    });
+
+    // Check "Save credentials in Encrypted Vault"
+    const vaultCheckbox = screen.getByLabelText(/Save credentials in Encrypted Vault/i);
+    fireEvent.click(vaultCheckbox);
+
+    // Fill in Vault Key ID and Login Password
+    const keyInput = screen.getByPlaceholderText(/session:Cisco-Core-Router/i);
+    fireEvent.change(keyInput, { target: { value: 'cisco-core-vault-key' } });
+
+    const pwdInput = screen.getByPlaceholderText(/Session login password\.\.\./i);
+    fireEvent.change(pwdInput, { target: { value: 'adminSecret123' } });
+
+    // Enable Network Device checkbox
+    const netDevCheckbox = screen.getByLabelText(/Network Device \(requires Enable Password \/ Privileged Exec\)/i);
+    fireEvent.click(netDevCheckbox);
+
+    // Fill in Enable Password
+    const enablePwdInput = screen.getByPlaceholderText(/e\.g\. Cisco enable secret\.\.\./i);
+    fireEvent.change(enablePwdInput, { target: { value: 'ciscoPrivilegedSecret456' } });
+
+    // Submit
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+
+    // Verify vaultSetEntry called with credentials including enable_secret
+    expect(mockVaultSetEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'cisco-core-vault-key',
+        username: 'cisco_admin',
+        secret: 'adminSecret123',
+        enable_secret: 'ciscoPrivilegedSecret456',
+      })
+    );
+
+    // Verify onSave session has PlinkyVaultKey and NO plaintext password
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Cisco-Core-Router',
+        hostname: '192.168.1.1',
+        extra: expect.objectContaining({
+          PlinkyVaultKey: 'cisco-core-vault-key',
+        }),
+      })
+    );
+  });
+
+  it('links session to existing encrypted vault entry', async () => {
+    const onSave = vi.fn();
+    mockVaultSetEntry.mockClear();
+
+    render(
+      <NewSessionModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
+      target: { value: 'Switch-01' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), {
+      target: { value: '192.168.1.2' },
+    });
+
+    // Check "Save credentials in Encrypted Vault"
+    const vaultCheckbox = screen.getByLabelText(/Save credentials in Encrypted Vault/i);
+    fireEvent.click(vaultCheckbox);
+
+    // Switch to "Link to Existing Vault Entry" mode
+    const linkModeBtn = screen.getByRole('button', { name: /Link to Existing/i });
+    fireEvent.click(linkModeBtn);
+
+    // Wait for vault entries to load
+    await waitFor(() => {
+      expect(screen.getByText(/router-cisco-core/)).toBeDefined();
+    });
+
+    // Select existing vault key
+    const vaultSelect = screen.getByDisplayValue(/-- Select a vault credential --/i);
+    fireEvent.change(vaultSelect, { target: { value: 'router-cisco-core' } });
+
+    // Submit
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+
+    // Should NOT call vaultSetEntry since it's linking existing
+    expect(mockVaultSetEntry).not.toHaveBeenCalled();
+
+    // Session has linked PlinkyVaultKey
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Switch-01',
+        extra: expect.objectContaining({
+          PlinkyVaultKey: 'router-cisco-core',
+        }),
+      })
     );
   });
 });

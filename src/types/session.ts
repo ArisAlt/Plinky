@@ -34,6 +34,7 @@ export interface TerminalTab {
   port: number;
   username?: string;
   protocol?: Protocol;
+  vaultKey?: string;
 }
 
 export interface TunnelEntry {
@@ -93,5 +94,24 @@ export interface SnippetItem {
   command: string;
   category: 'System' | 'Docker' | 'Logs' | 'Network' | 'Custom';
   description?: string;
+}
+
+export interface VaultEntry {
+  id: string;
+  username?: string;
+  secret: string;
+  enable_secret?: string;
+  notes?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface VaultEntryMeta {
+  id: string;
+  username?: string;
+  has_enable_secret?: boolean;
+  notes?: string;
+  created_at: number;
+  updated_at: number;
 }
 
