@@ -639,6 +639,7 @@ async fn test_paste_paced_refused_before_live_and_honours_cancel() {
     registry.close_session("paste-guard").unwrap();
 }
 
+#[cfg(unix)] // proves Enter via shell arithmetic, which cmd.exe doesn't have
 #[tokio::test]
 async fn test_type_secret_reaches_the_session_followed_by_enter() {
     // The vault's "Send password" path: the secret goes from the vault to
