@@ -319,11 +319,27 @@ impl SessionRegistry {
             }
         };
 
+        // The PreAuth gate guards plink's SSH handshake: host-key prompt,
+        // then the D9 "Access granted" marker. Serial / Telnet / Raw / Rlogin
+        // sessions (switch consoles, legacy gear) have no such phase -- plink
+        // never prints the marker, so they sat in PreAuth forever: skipped by
+        // sync broadcast, and force-closed once device output passed the
+        // 8 KiB cap (one `show running-config`). Every byte on those is device
+        // output from the start, so they begin Live. Explicit targets (Quick
+        // Connect) are always SSH, so only a saved non-SSH session qualifies.
+        let mut state_machine = PreAuthStateMachine::new();
+        let saved_protocol = putty_compat::sessions::read_session(session_name)
+            .map(|s| s.protocol)
+            .unwrap_or_default();
+        if !saved_protocol.is_empty() && !saved_protocol.eq_ignore_ascii_case("ssh") {
+            state_machine.force_live();
+        }
+
         let active = ActiveSession {
             id: id_owned.clone(),
             name: session_name.to_string(),
             transport: Box::new(transport),
-            state_machine: PreAuthStateMachine::new(),
+            state_machine,
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024),
             subscriber,
             log_file,

@@ -87,13 +87,11 @@ pub fn unescape_session_name(filename: &str) -> String {
 }
 
 pub fn session_dir() -> PathBuf {
+    // Real PuTTY always reads $PUTTYDIR/sessions/. Falling back to $PUTTYDIR
+    // itself when that subdirectory didn't exist yet meant Plinky saved
+    // sessions where PuTTY (and plink -load) can't see them.
     if let Ok(val) = std::env::var("PUTTYDIR") {
-        let p = PathBuf::from(val);
-        let s = p.join("sessions");
-        if s.is_dir() {
-            return s;
-        }
-        return p;
+        return PathBuf::from(val).join("sessions");
     }
 
     if let Ok(val) = std::env::var("XDG_CONFIG_HOME") {
