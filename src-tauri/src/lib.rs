@@ -549,10 +549,76 @@ fn list_serial_ports() -> Result<Vec<plinky_core::transport::serial::DetectedSer
     Ok(plinky_core::transport::serial::detect_serial_ports())
 }
 
+/// The bundle identifier before 17afa6d (Tauri warns that an identifier
+/// ending in ".app" clashes with macOS app bundles).
+const OLD_IDENTIFIER: &str = "com.plinky.app";
+
+/// Where Tauri and the webview keep per-identifier folders: the vault
+/// (app_data_dir) and the webview's localStorage -- snippets, user folders,
+/// tags, layout, Shell Hooks choices.
+fn identifier_data_bases() -> Vec<PathBuf> {
+    let env_dir = |k: &str| std::env::var_os(k).map(PathBuf::from).filter(|p| p.is_absolute());
+    let home = env_dir("HOME");
+    let mut bases = Vec::new();
+    if cfg!(windows) {
+        bases.extend(env_dir("APPDATA")); // app_data_dir
+        bases.extend(env_dir("LOCALAPPDATA")); // WebView2 profile
+    } else if cfg!(target_os = "macos") {
+        if let Some(h) = &home {
+            bases.push(h.join("Library/Application Support"));
+            bases.push(h.join("Library/WebKit"));
+        }
+    } else {
+        bases.extend(env_dir("XDG_DATA_HOME").or_else(|| home.map(|h| h.join(".local/share"))));
+    }
+    bases
+}
+
+/// Copies `base/old` to `base/new` if only the old folder exists. Without
+/// this, the first launch under a new identifier looked like a reset. It
+/// copies rather than moves, so an older build still finds its data, and
+/// renames into place from a staging folder, so an interrupted copy is
+/// retried next launch instead of counting as done.
+fn migrate_identifier_dir(base: &std::path::Path, old: &str, new: &str) -> std::io::Result<bool> {
+    let (from, to) = (base.join(old), base.join(new));
+    if old == new || !from.is_dir() || to.exists() {
+        return Ok(false);
+    }
+    let staging = base.join(format!("{new}.migrating"));
+    let _ = std::fs::remove_dir_all(&staging);
+    copy_dir_all(&from, &staging)?;
+    std::fs::rename(&staging, &to)?;
+    Ok(true)
+}
+
+fn copy_dir_all(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let dest = to.join(entry.file_name());
+        if kind.is_dir() {
+            copy_dir_all(&entry.path(), &dest)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), &dest)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
     let reg_for_setup = registry.clone();
+
+    // Before the builder runs: the webview opens its storage when the
+    // window is created, which happens ahead of the setup hook.
+    let context = tauri::generate_context!();
+    for base in identifier_data_bases() {
+        if let Err(e) = migrate_identifier_dir(&base, OLD_IDENTIFIER, &context.config().identifier) {
+            eprintln!("plinky: couldn't carry data over from {OLD_IDENTIFIER} in {}: {e}", base.display());
+        }
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -614,7 +680,48 @@ pub fn run() {
             inject_shell_integration,
             list_serial_ports
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running plinky desktop application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_identifier_dir;
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("plinky-mig-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn old_identifier_data_is_copied_once_and_left_in_place() {
+        let base = scratch("copy");
+        let store = base.join("old.id/localstorage");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(store.join("tauri_localhost_0.localstorage"), b"snippets").unwrap();
+
+        assert!(migrate_identifier_dir(&base, "old.id", "new.id").unwrap());
+        let copied = std::fs::read(base.join("new.id/localstorage/tauri_localhost_0.localstorage")).unwrap();
+        assert_eq!(copied, b"snippets");
+        assert!(store.exists(), "an older build must still find its data");
+        assert!(!base.join("new.id.migrating").exists());
+
+        // Data written under the new identifier is never overwritten later.
+        std::fs::write(base.join("new.id/localstorage/tauri_localhost_0.localstorage"), b"newer").unwrap();
+        assert!(!migrate_identifier_dir(&base, "old.id", "new.id").unwrap());
+        let kept = std::fs::read(base.join("new.id/localstorage/tauri_localhost_0.localstorage")).unwrap();
+        assert_eq!(kept, b"newer");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn nothing_happens_without_old_data() {
+        let base = scratch("none");
+        assert!(!migrate_identifier_dir(&base, "old.id", "new.id").unwrap());
+        assert!(!base.join("new.id").exists());
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 
