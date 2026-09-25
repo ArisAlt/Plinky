@@ -486,5 +486,9 @@
   - Builds Linux AppImage, deb, rpm bundles and Windows MSI/NSIS installer packages.
   - Automatically creates and attaches distribution assets to GitHub Releases using `softprops/action-gh-release@v2`.
   - Pushed tag `v0.1.0` triggering the remote release pipeline.
-* Verification: 32/32 Vitest tests pass across 9 suites; 73/73 Cargo workspace tests pass; `npm run build` succeeds in 1.94s with 0 TS errors.
+* Windows Portable Distribution Packaging:
+  - Added standalone Windows portable executable (`Plinky-Portable.exe`) and portable zip archive (`Plinky_0.1.0_x64_portable.zip`) to `.github/workflows/release.yml`.
+  - Windows users can run `Plinky.exe` directly without installation or administrator privileges.
+* Verification: 34/34 Vitest tests pass across 9 suites; 73/73 Cargo workspace tests pass; `npm run build` succeeds in 1.94s with 0 TS errors.
+
 
