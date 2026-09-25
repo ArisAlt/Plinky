@@ -44,6 +44,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [isNetworkDevice, setIsNetworkDevice] = useState(false);
   const [vaultEnablePassword, setVaultEnablePassword] = useState('');
   const [vaultSaveError, setVaultSaveError] = useState<string | null>(null);
+  // Automatic answers from the vault (owner decision: opt-in per session).
+  const [autoEnable, setAutoEnable] = useState(false);
+  const [autoLogin, setAutoLogin] = useState(false);
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -128,6 +131,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultPassword('');
       setIsNetworkDevice(false);
       setVaultEnablePassword('');
+      setAutoEnable(extra.PlinkyAutoEnable === '1');
+      setAutoLogin(extra.PlinkyAutoLogin === '1');
     } else {
       setName('');
       setHostname('');
@@ -156,6 +161,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultPassword('');
       setIsNetworkDevice(false);
       setVaultEnablePassword('');
+      setAutoEnable(false);
+      setAutoLogin(false);
     }
   }, [isOpen, editingSession]);
 
@@ -268,6 +275,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     } else {
       delete extra.PlinkyVaultKey;
     }
+
+    if (autoEnable) extra.PlinkyAutoEnable = '1'; else delete extra.PlinkyAutoEnable;
+    if (autoLogin && (protocol === 'Telnet' || protocol === 'Serial')) extra.PlinkyAutoLogin = '1';
+    else delete extra.PlinkyAutoLogin;
 
     const session: PuttySession = {
       name: name.trim(),
@@ -819,6 +830,37 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Automatic answers from the vault. SSH needs no switch: plink
+              logs in by itself. The others answer prompts the device prints,
+              so they're opt-in per session. */}
+          <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-[11px]">
+            <div className="text-slate-300 font-medium">Automatic login from the vault</div>
+            {protocol === 'SSH' && (
+              <p className="text-slate-500">
+                SSH logs in by itself when the vault is unlocked and holds this session's password
+                (linked above, or an entry named "session:{name.trim() || 'name'}" or after the host).
+              </p>
+            )}
+            {(protocol === 'Telnet' || protocol === 'Serial') && (
+              <label className="flex items-start space-x-2 cursor-pointer">
+                <input type="checkbox" checked={autoLogin} onChange={e => setAutoLogin(e.target.checked)} className="mt-0.5" />
+                <span className="text-slate-300">
+                  Log in automatically
+                  <span className="block text-slate-500">Types the vault username and password at the device's Username:/Password: prompts, once per connection.</span>
+                </span>
+              </label>
+            )}
+            <label className="flex items-start space-x-2 cursor-pointer">
+              <input type="checkbox" checked={autoEnable} onChange={e => setAutoEnable(e.target.checked)} className="mt-0.5" />
+              <span className="text-slate-300">
+                Send enable password automatically
+                <span className="block text-slate-500">
+                  After you type enable / en / super and the device asks for a password. Leave off if you hop from this device to others: they would get this device's enable password.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Organization & Tags */}

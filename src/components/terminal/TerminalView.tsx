@@ -24,7 +24,9 @@ import {
   VaultLookup,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
-import { classifyPasswordPrompt, appendRecentOutput } from '../../services/promptDetect';
+import {
+  classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
+} from '../../services/promptDetect';
 import {
   Radio,
   Sparkles,
@@ -253,6 +255,53 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const handleCopyVaultPassword = () => copyVaultSecret('login');
   const handleCopyVaultEnablePassword = () => copyVaultSecret('enable');
 
+  // ---- Automatic answers (opt-in per session, owner decision) ----------
+  // SSH login needs none of this: plink logs in from the vault by itself.
+  // What's left are prompts the device prints, which the device controls,
+  // so each fires only on something the user did in this tab:
+  //  - enable: right after the user typed enable/en/super (their keystrokes,
+  //    not the echo) and the device asked for a password within 5 s; once.
+  //  - Telnet/serial login: the device's Username:/Password: prompts, once
+  //    each per connection.
+  const typedRef = useRef<TypedInput>({ line: '', submitted: null });
+  const autoLoginSentRef = useRef({ user: false, password: false });
+  // Returns true when it answered, so the manual Send chip stays hidden.
+  const autoRespondRef = useRef<(kind: 'login' | 'enable' | null, recent: string) => boolean>(() => false);
+  autoRespondRef.current = (kind, recent) => {
+    const v = vault;
+    if (!v || v.locked || !v.key) return false;
+    const key = v.key;
+    const cmd = typedRef.current.submitted;
+    const justAskedForEnable = !!cmd && isPrivilegeCommand(cmd.line) && Date.now() - cmd.at < 5000;
+    const autoSend = (field: 'login' | 'enable') =>
+      vaultSendSecret(tab.id, key, field)
+        .then(() => addEventLog(`Sent the ${field === 'enable' ? 'enable password' : 'password'} automatically (vault entry "${key}")`, 'info'))
+        .catch(e => addEventLog(`Vault: ${String(e)}`, 'error'));
+
+    if (kind && justAskedForEnable) {
+      if (v.autoEnable && v.hasEnableSecret) {
+        typedRef.current = { ...typedRef.current, submitted: null }; // once per enable
+        void autoSend('enable');
+        return true;
+      }
+      return false; // never answer an enable prompt with the login password
+    }
+    const consoleLogin = v.autoLogin && (tab.protocol === 'Telnet' || tab.protocol === 'Serial');
+    if (!consoleLogin) return false;
+    if (isUsernamePrompt(recent) && v.username && !autoLoginSentRef.current.user) {
+      autoLoginSentRef.current.user = true;
+      writeTerminalInput(tab.id, new TextEncoder().encode(v.username + '\r'));
+      addEventLog(`Sent the username automatically (vault entry "${key}")`, 'info');
+      return true;
+    }
+    if (kind === 'login' && !autoLoginSentRef.current.password) {
+      autoLoginSentRef.current.password = true;
+      void autoSend('login');
+      return true;
+    }
+    return false;
+  };
+
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
     setEventLogs(prev => [...prev.slice(-200), { id: `${Date.now()}-${Math.random()}`, time, message, level }]);
@@ -475,6 +524,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const promptKind = classifyPasswordPrompt(recentOutputRef.current);
       const isEnablePrompt = promptKind === 'enable';
       const isPasswordPrompt = promptKind !== null;
+      const answeredAutomatically = autoRespondRef.current(promptKind, recentOutputRef.current);
 
       if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
@@ -494,6 +544,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       } else if (isPasswordPrompt) {
         setDetectedPasswordPrompt('login');
       }
+      if (answeredAutomatically) setDetectedPasswordPrompt(null);
 
       if (isLoggingRef.current) {
         if (loggingModeRef.current === 'printable') {
@@ -582,6 +633,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Handle user keyboard input
     term.onData((data) => {
+      typedRef.current = trackTypedInput(typedRef.current, data, Date.now());
       if (isLivePtyRef.current) {
         writeTerminalInput(tab.id, new TextEncoder().encode(data));
       } else if (!isTauriEnvironment()) {

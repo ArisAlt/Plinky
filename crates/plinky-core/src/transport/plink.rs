@@ -22,6 +22,33 @@ pub struct ExplicitTarget {
     pub username: Option<String>,
 }
 
+/// A vault password for plink to log in with by itself (SSH only).
+pub struct PlinkLogin {
+    pub password: crate::vault::SecretString,
+    /// Passed as `-l` only when the session has no username of its own.
+    pub username: Option<String>,
+}
+
+/// How long the password file outlives plink's start. plink reads
+/// `-pwfile` while parsing its arguments -- measured: the file deleted
+/// 150 ms after launch, plink still sent the password to the server --
+/// so a few seconds is a wide margin.
+const PWFILE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Writes the password for `-pwfile` to a file only this user can read
+/// (tempfile creates it 0600) and returns the guard that deletes it.
+fn write_pwfile(password: &crate::vault::SecretString) -> Result<tempfile::NamedTempFile> {
+    let mut file = tempfile::Builder::new()
+        .prefix(".plinky_login_")
+        .tempfile()
+        .map_err(|e| PlinkyError::ProcessError(format!("Couldn't create the login file: {e}")))?;
+    file.write_all(password.expose_secret().as_bytes())
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.flush())
+        .map_err(|e| PlinkyError::ProcessError(format!("Couldn't write the login file: {e}")))?;
+    Ok(file)
+}
+
 pub struct PlinkTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -187,10 +214,27 @@ impl PlinkTransport {
         args
     }
 
+    /// `-pwfile`/`-l` for automatic login. Put before the target: plink
+    /// takes the first non-option argument as the host.
+    pub fn login_args(pwfile: &Path, username: Option<&str>) -> Vec<String> {
+        let mut args = vec!["-pwfile".to_string(), pwfile.to_string_lossy().into_owned()];
+        if let Some(u) = username.filter(|u| !u.is_empty()) {
+            args.push("-l".to_string());
+            args.push(u.to_string());
+        }
+        args
+    }
+
     /// Spawns an interactive plink process attached to a new PTY pair.
+    ///
+    /// With `login`, plink authenticates by itself from a password file
+    /// instead of prompting. The password goes only where plink sends it --
+    /// the session's own host, after its host key has been checked -- and
+    /// is never typed into the terminal, so no prompt text can redirect it.
     pub fn spawn_session(
         session_name: &str,
         explicit_target: Option<&ExplicitTarget>,
+        login: Option<&PlinkLogin>,
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
@@ -207,7 +251,13 @@ impl PlinkTransport {
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
         let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
+        let pwfile = login.map(|l| write_pwfile(&l.password)).transpose()?;
         let mut cmd = CommandBuilder::new(plink_bin);
+        if let (Some(file), Some(l)) = (&pwfile, login) {
+            for arg in Self::login_args(file.path(), l.username.as_deref()) {
+                cmd.arg(arg);
+            }
+        }
         for arg in Self::build_args(session_name, has_saved_session, explicit_target) {
             cmd.arg(arg);
         }
@@ -233,6 +283,13 @@ impl PlinkTransport {
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
         let child = super::pump_pty_child(reader, child, out_tx);
+
+        if let Some(file) = pwfile {
+            std::thread::spawn(move || {
+                std::thread::sleep(PWFILE_LIFETIME);
+                drop(file);
+            });
+        }
 
         Ok(Self {
             master: pair.master,
@@ -279,6 +336,14 @@ impl Transport for PlinkTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn login_args_carry_a_file_path_never_the_password() {
+        let args = PlinkTransport::login_args(Path::new("/tmp/.plinky_login_x"), Some("admin"));
+        assert_eq!(args, vec!["-pwfile", "/tmp/.plinky_login_x", "-l", "admin"]);
+        let args = PlinkTransport::login_args(Path::new("/tmp/.plinky_login_x"), Some(""));
+        assert_eq!(args, vec!["-pwfile", "/tmp/.plinky_login_x"], "an empty username adds no -l");
+    }
 
     #[test]
     fn saved_session_uses_load_even_with_explicit_target() {

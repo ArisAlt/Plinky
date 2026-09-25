@@ -397,4 +397,29 @@ describe('NewSessionModal Component', () => {
       })
     );
   });
+
+  it('saves the automation opt-ins, and "log in automatically" only for Telnet/serial', async () => {
+    const onSave = vi.fn();
+    const { unmount } = render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'SW1' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.2' } });
+    expect(screen.queryByLabelText(/Log in automatically/i)).toBeNull(); // SSH logs in by itself
+    fireEvent.click(screen.getByLabelText(/Send enable password automatically/i));
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].extra.PlinkyAutoEnable).toBe('1');
+    expect(onSave.mock.calls[0][0].extra.PlinkyAutoLogin).toBeUndefined();
+    unmount();
+
+    const onSave2 = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave2} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Old-SW' } });
+    fireEvent.change(screen.getByDisplayValue(/SSH/i), { target: { value: 'Telnet' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.3' } });
+    fireEvent.click(screen.getByLabelText(/Log in automatically/i));
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    await waitFor(() => expect(onSave2).toHaveBeenCalled());
+    expect(onSave2.mock.calls[0][0].extra.PlinkyAutoLogin).toBe('1');
+    expect(onSave2.mock.calls[0][0].extra.PlinkyAutoEnable).toBeUndefined();
+  });
 });
