@@ -435,6 +435,17 @@ export async function getLocalHomeDir(): Promise<string> {
   return invoke<string>('sftp_get_home_dir');
 }
 
+/**
+ * Types a vault entry's login or enable password into a session, then Enter.
+ * The secret goes from the vault to the session inside the backend -- the
+ * webview never holds it -- and a locked vault refuses.
+ */
+export async function vaultSendSecret(sessionId: string, key: string, field: 'login' | 'enable'): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('vault_send_secret', { sessionId, key, field });
+}
+
 export async function startTerminalSession(
   sessionId: string,
   sessionName: string,

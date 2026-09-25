@@ -638,3 +638,41 @@ async fn test_paste_paced_refused_before_live_and_honours_cancel() {
     assert!(res.is_err(), "paced paste must be refused while not Live");
     registry.close_session("paste-guard").unwrap();
 }
+
+#[tokio::test]
+async fn test_type_secret_reaches_the_session_followed_by_enter() {
+    // The vault's "Send password" path: the secret goes from the vault to
+    // the session inside the backend, never through the webview.
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    registry.create_local_session("secret-sess", "Test", None, 80, 24, tx).unwrap();
+    let secret = plinky_core::SecretString::new("echo PLINKY_SECRET_$((6*7))");
+    registry.type_secret("secret-sess", &secret).unwrap();
+
+    // The shell ran it, so it arrived whole and Enter followed it.
+    let mut buf = Vec::new();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < deadline && !String::from_utf8_lossy(&buf).contains("PLINKY_SECRET_42") {
+        if let Ok(Some(c)) = tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await {
+            buf.extend_from_slice(&c);
+        }
+    }
+    assert!(String::from_utf8_lossy(&buf).contains("PLINKY_SECRET_42"), "{:?}", String::from_utf8_lossy(&buf));
+    registry.close_session("secret-sess").unwrap();
+}
+
+#[tokio::test]
+async fn test_type_secret_is_refused_while_a_host_key_is_unanswered() {
+    // A password typed into an unanswered "Store key in cache? (y/n)" would
+    // be read as the answer; the host-key block must hold for vault sends.
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("hk-sess", "Test", None, 80, 24, tx).unwrap();
+    registry.reset_session_preauth("hk-sess").unwrap();
+    let prompt = b"The host key is not cached for this server:\r\n  192.0.2.1 (port 22)\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+    registry.simulate_preauth_bytes("hk-sess", prompt).unwrap();
+
+    let res = registry.type_secret("hk-sess", &plinky_core::SecretString::new("y"));
+    assert!(res.is_err(), "a vault send must not answer a host-key prompt");
+    registry.close_session("hk-sess").unwrap();
+}
