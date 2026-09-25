@@ -540,3 +540,69 @@ async fn test_process_exit_is_reported_to_subscriber() {
         String::from_utf8_lossy(&buf)
     );
 }
+
+#[tokio::test]
+async fn test_paste_paced_sends_lines_in_order_with_delay() {
+    use std::sync::{atomic::AtomicBool, Arc};
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    registry.create_local_session("paste-sess", "Test", None, 80, 24, tx).unwrap();
+
+    let started = std::time::Instant::now();
+    let mut progress = Vec::new();
+    let sent = registry
+        .paste_paced(
+            "paste-sess",
+            "echo PASTE_ONE\necho PASTE_TWO\necho PASTE_THREE\n",
+            std::time::Duration::from_millis(100),
+            Arc::new(AtomicBool::new(false)),
+            |done, total| progress.push((done, total)),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sent, 3);
+    assert_eq!(progress, vec![(1, 3), (2, 3), (3, 3)]);
+    assert!(started.elapsed() >= std::time::Duration::from_millis(200), "two gaps of 100ms between three lines");
+
+    let mut buf = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_millis(1500));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(c) = rx.recv() => {
+                buf.extend_from_slice(&c);
+                if String::from_utf8_lossy(&buf).matches("PASTE_THREE").count() >= 2 { break; }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+    let text = String::from_utf8_lossy(&buf);
+    let one = text.find("PASTE_ONE").expect("line 1 reached the shell");
+    let three = text.rfind("PASTE_THREE").expect("line 3 reached the shell");
+    assert!(one < three, "lines must arrive in order");
+    registry.close_session("paste-sess").unwrap();
+}
+
+#[tokio::test]
+async fn test_paste_paced_refused_before_live_and_honours_cancel() {
+    use std::sync::{atomic::AtomicBool, Arc};
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("paste-guard", "Test", None, 80, 24, tx).unwrap();
+
+    // Cancelled before start: nothing is sent.
+    let sent = registry
+        .paste_paced("paste-guard", "a\nb\n", std::time::Duration::ZERO, Arc::new(AtomicBool::new(true)), |_, _| {})
+        .await
+        .unwrap();
+    assert_eq!(sent, 0);
+
+    // At a pre-auth prompt (e.g. a password prompt): refused, so pasted
+    // lines can never be submitted as password guesses.
+    registry.reset_session_preauth("paste-guard").unwrap();
+    let res = registry
+        .paste_paced("paste-guard", "line1\nline2\n", std::time::Duration::ZERO, Arc::new(AtomicBool::new(false)), |_, _| {})
+        .await;
+    assert!(res.is_err(), "paced paste must be refused while not Live");
+    registry.close_session("paste-guard").unwrap();
+}

@@ -282,6 +282,63 @@ async fn sftp_rm(
         .map_err(|e| format!("Failed to remove remote file: {e}"))
 }
 
+/// Cancel flags for in-flight paced pastes, keyed by session id.
+#[derive(Default)]
+pub struct PasteJobs(std::sync::Mutex<std::collections::HashMap<String, Arc<std::sync::atomic::AtomicBool>>>);
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PasteProgress {
+    session_id: String,
+    sent: usize,
+    total: usize,
+}
+
+/// Pastes `text` one line at a time with `line_delay_ms` between lines (for
+/// console ports and network gear that drop characters on a fast paste).
+/// Emits "paste:progress" after each line; resolves with the lines sent.
+#[tauri::command]
+async fn paste_paced(
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<SessionRegistry>>,
+    jobs: State<'_, PasteJobs>,
+    session_id: String,
+    text: String,
+    line_delay_ms: u64,
+) -> Result<usize, String> {
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let mut map = jobs.0.lock().unwrap();
+        if map.contains_key(&session_id) {
+            return Err("A paste is already in progress for this session".into());
+        }
+        map.insert(session_id.clone(), cancel.clone());
+    }
+    let result = registry
+        .paste_paced(
+            &session_id,
+            &text,
+            std::time::Duration::from_millis(line_delay_ms),
+            cancel,
+            |sent, total| {
+                let _ = app.emit(
+                    "paste:progress",
+                    PasteProgress { session_id: session_id.clone(), sent, total },
+                );
+            },
+        )
+        .await;
+    jobs.0.lock().unwrap().remove(&session_id);
+    result.map_err(|e| format!("Paste failed: {e}"))
+}
+
+#[tauri::command]
+fn cancel_paste(jobs: State<'_, PasteJobs>, session_id: String) {
+    if let Some(flag) = jobs.0.lock().unwrap().get(&session_id) {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 pub struct VaultState {
     pub inner: Mutex<Option<Vault>>,
     pub custom_path: Mutex<Option<PathBuf>>,
@@ -466,6 +523,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(registry)
         .manage(VaultState::new())
+        .manage(PasteJobs::default())
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let mut rx = reg_for_setup.subscribe_prompts();
@@ -483,6 +541,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            paste_paced,
+            cancel_paste,
             putty_detect,
             list_putty_sessions,
             read_putty_session,
