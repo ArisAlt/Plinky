@@ -206,7 +206,7 @@ impl Drop for SerialTransport {
     }
 }
 
-/// Represents a detected hardware serial or USB-serial device.
+/// A serial device found on this machine, for the session editor's picker.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct DetectedSerialPort {
     pub port_name: String,
@@ -216,159 +216,55 @@ pub struct DetectedSerialPort {
     pub product: Option<String>,
 }
 
-#[cfg(target_os = "linux")]
+/// Lists the serial devices present right now, USB adapters first. Uses the
+/// `serialport` crate's own scan: sysfs on Linux (no libudev needed), the
+/// device installer's friendly names on Windows, IOKit on macOS.
 pub fn detect_serial_ports() -> Vec<DetectedSerialPort> {
-    let mut usb_ports = Vec::new();
-    let mut other_ports = Vec::new();
-
-    if let Ok(entries) = std::fs::read_dir("/sys/class/tty") {
-        for entry in entries.flatten() {
-            let file_name = entry.file_name();
-            let name = file_name.to_string_lossy();
-            let link_path = entry.path();
-
-            if let Ok(target) = std::fs::canonicalize(&link_path) {
-                let target_str = target.to_string_lossy();
-                // Skip virtual pseudo-terminals and virtual consoles
-                if target_str.contains("/virtual/") {
-                    continue;
-                }
-
-                let dev_path = format!("/dev/{name}");
-                let is_usb = target_str.contains("/usb") || name.starts_with("ttyUSB") || name.starts_with("ttyACM");
-                
-                let mut product = None;
-                let mut manufacturer = None;
-
-                if is_usb {
-                    let dev_dir = target.join("device");
-                    let candidates = [
-                        dev_dir.join("../product"),
-                        dev_dir.join("../../product"),
-                        dev_dir.join("product"),
-                    ];
-                    for p in &candidates {
-                        if let Ok(s) = std::fs::read_to_string(p) {
-                            let trimmed = s.trim().to_string();
-                            if !trimmed.is_empty() {
-                                product = Some(trimmed);
-                                break;
-                            }
-                        }
-                    }
-                    let mfg_candidates = [
-                        dev_dir.join("../manufacturer"),
-                        dev_dir.join("../../manufacturer"),
-                        dev_dir.join("manufacturer"),
-                    ];
-                    for m in &mfg_candidates {
-                        if let Ok(s) = std::fs::read_to_string(m) {
-                            let trimmed = s.trim().to_string();
-                            if !trimmed.is_empty() {
-                                manufacturer = Some(trimmed);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                let display_name = match (&product, &manufacturer) {
-                    (Some(prod), Some(mfg)) => format!("{dev_path} ({mfg} {prod})"),
-                    (Some(prod), None) => format!("{dev_path} ({prod})"),
-                    (None, Some(mfg)) => format!("{dev_path} ({mfg})"),
-                    (None, None) => {
-                        if is_usb {
-                            format!("{dev_path} (USB Serial)")
-                        } else {
-                            format!("{dev_path} (Serial Port)")
-                        }
-                    }
-                };
-
-                let port_item = DetectedSerialPort {
-                    port_name: dev_path,
-                    display_name,
-                    is_usb,
-                    manufacturer,
-                    product,
-                };
-
-                if is_usb {
-                    usb_ports.push(port_item);
-                } else if name.starts_with("ttyS") {
-                    let suffix = name.trim_start_matches("ttyS");
-                    if let Ok(idx) = suffix.parse::<u32>() {
-                        if idx <= 3 {
-                            other_ports.push(port_item);
-                        }
-                    }
-                } else {
-                    other_ports.push(port_item);
-                }
-            }
-        }
+    // serialport's sysfs scan panics if /sys/class/tty is missing (some
+    // containers); an empty list is the right answer there.
+    #[cfg(target_os = "linux")]
+    if !std::path::Path::new("/sys/class/tty").is_dir() {
+        return Vec::new();
     }
-
-    usb_ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
-    other_ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
-    usb_ports.extend(other_ports);
-    usb_ports
-}
-
-#[cfg(target_os = "windows")]
-pub fn detect_serial_ports() -> Vec<DetectedSerialPort> {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
-    use winreg::RegKey;
-
-    let mut ports = Vec::new();
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    if let Ok(key) = hklm.open_subkey("HARDWARE\\DEVICEMAP\\SERIALCOMM") {
-        for val in key.enum_values().flatten() {
-            let val_name = val.0;
-            if let winreg::RegValue { bytes, .. } = val.1 {
-                let s = String::from_utf8_lossy(&bytes).trim_matches('\0').trim().to_string();
-                if !s.is_empty() {
-                    let is_usb = val_name.to_lowercase().contains("usb") || val_name.to_lowercase().contains("vcp");
-                    let display_name = if is_usb {
-                        format!("{s} (USB Serial Port)")
-                    } else {
-                        format!("{s} (Serial Port)")
-                    };
-                    ports.push(DetectedSerialPort {
-                        port_name: s,
-                        display_name,
-                        is_usb,
-                        manufacturer: None,
-                        product: None,
-                    });
-                }
+    let found = serialport::available_ports().unwrap_or_default();
+    let mut ports: Vec<DetectedSerialPort> = found
+        .into_iter()
+        .filter(|p| !is_phantom_uart(std::path::Path::new("/sys/class/tty"), &p.port_name))
+        .map(|p| {
+            let (is_usb, manufacturer, product, kind) = match p.port_type {
+                serialport::SerialPortType::UsbPort(info) => (true, info.manufacturer, info.product, "USB serial"),
+                serialport::SerialPortType::BluetoothPort => (false, None, None, "Bluetooth serial"),
+                _ => (false, None, None, "Serial port"),
+            };
+            let label = match (&manufacturer, &product) {
+                (Some(m), Some(pr)) if pr.contains(m.as_str()) => Some(pr.clone()),
+                (Some(m), Some(pr)) => Some(format!("{m} {pr}")),
+                (None, Some(pr)) => Some(pr.clone()),
+                (Some(m), None) => Some(m.clone()),
+                (None, None) => None,
+            };
+            DetectedSerialPort {
+                display_name: format!("{} ({})", p.port_name, label.as_deref().unwrap_or(kind)),
+                port_name: p.port_name,
+                is_usb,
+                manufacturer,
+                product,
             }
-        }
-    }
-    ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+        })
+        .collect();
+    ports.sort_by(|a, b| b.is_usb.cmp(&a.is_usb).then_with(|| a.port_name.cmp(&b.port_name)));
     ports
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
-pub fn detect_serial_ports() -> Vec<DetectedSerialPort> {
-    let mut ports = Vec::new();
-    if let Ok(entries) = std::fs::read_dir("/dev") {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("cu.usb") || name.starts_with("tty.usb") {
-                let path = format!("/dev/{name}");
-                ports.push(DetectedSerialPort {
-                    port_name: path.clone(),
-                    display_name: format!("{path} (USB Serial)"),
-                    is_usb: true,
-                    manufacturer: None,
-                    product: None,
-                });
-            }
-        }
+/// Linux registers ttyS0-ttyS31 whether or not a UART is behind them; the
+/// kernel reports UART type 0 (PORT_UNKNOWN) for the empty ones. Listing
+/// them would bury the real ports under 31 dead entries.
+fn is_phantom_uart(sys_class_tty: &std::path::Path, port_name: &str) -> bool {
+    let Some(name) = port_name.strip_prefix("/dev/") else { return false };
+    match std::fs::read_to_string(sys_class_tty.join(name).join("type")) {
+        Ok(t) => t.trim() == "0",
+        Err(_) => false,
     }
-    ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
-    ports
 }
 
 #[cfg(test)]
@@ -427,12 +323,27 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_serial_ports_does_not_panic() {
+    fn detected_ports_have_names_and_list_usb_first() {
         let ports = detect_serial_ports();
-        // Regardless of whether hardware is plugged in, detect_serial_ports must complete cleanly
         for p in &ports {
             assert!(!p.port_name.is_empty());
-            assert!(!p.display_name.is_empty());
+            assert!(p.display_name.starts_with(&p.port_name));
         }
+        let first_non_usb = ports.iter().position(|p| !p.is_usb).unwrap_or(ports.len());
+        assert!(ports[first_non_usb..].iter().all(|p| !p.is_usb), "USB adapters must come first");
+    }
+
+    #[test]
+    fn phantom_uarts_are_recognised_by_type_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, uart_type) in [("ttyS0", "4\n"), ("ttyS1", "0\n")] {
+            std::fs::create_dir(dir.path().join(name)).unwrap();
+            std::fs::write(dir.path().join(name).join("type"), uart_type).unwrap();
+        }
+        std::fs::create_dir(dir.path().join("ttyUSB0")).unwrap(); // USB ttys have no type file
+        assert!(!is_phantom_uart(dir.path(), "/dev/ttyS0"), "16550A is real");
+        assert!(is_phantom_uart(dir.path(), "/dev/ttyS1"), "type 0 is an empty slot");
+        assert!(!is_phantom_uart(dir.path(), "/dev/ttyUSB0"));
+        assert!(!is_phantom_uart(dir.path(), "COM3"));
     }
 }
