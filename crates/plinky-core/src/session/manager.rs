@@ -27,6 +27,10 @@ pub struct AttachInfo {
     pub replay_data: Vec<u8>,
     pub truncated: bool,
     pub is_live: bool,
+    /// Set when the session is still waiting on a host-key decision. The
+    /// prompt event is broadcast once, so a view attaching later (tab was
+    /// in the background) needs it here to re-show the dialog.
+    pub pending_prompt: Option<HostKeyPromptInfo>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -97,7 +101,7 @@ impl SessionRegistry {
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
 
-        tokio::spawn(async move {
+        let reader = async move {
             while let Some(chunk) = raw_rx.recv().await {
                 let action = {
                     let mut lock = registry_clone.sessions.lock().unwrap();
@@ -161,7 +165,7 @@ impl SessionRegistry {
                     }
                 }
             }
-        });
+        };
 
         let mut sm = PreAuthStateMachine::new();
         sm.force_live(); // Local shells are always Live immediately
@@ -176,7 +180,8 @@ impl SessionRegistry {
             log_file,
         };
 
-        self.sessions.lock().unwrap().insert(id_owned, active);
+        self.insert_new_session(id_owned, active)?;
+        tokio::spawn(reader);
         Ok(())
     }
 
@@ -204,7 +209,7 @@ impl SessionRegistry {
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
 
-        tokio::spawn(async move {
+        let reader = async move {
             while let Some(chunk) = raw_rx.recv().await {
                 let action = {
                     let mut lock = registry_clone.sessions.lock().unwrap();
@@ -283,7 +288,7 @@ impl SessionRegistry {
                     }
                 }
             }
-        });
+        };
 
         let active = ActiveSession {
             id: id_owned.clone(),
@@ -295,7 +300,30 @@ impl SessionRegistry {
             log_file,
         };
 
-        self.sessions.lock().unwrap().insert(id_owned, active);
+        self.insert_new_session(id_owned, active)?;
+        tokio::spawn(reader);
+        Ok(())
+    }
+
+    /// Registers a freshly spawned session, refusing an id that's already
+    /// live. A duplicate start used to silently overwrite the map entry,
+    /// orphaning the first process (and its SSH connection) with no handle
+    /// left to kill it. On conflict the NEW transport is killed instead, so
+    /// the session the user is already looking at is never disturbed.
+    ///
+    /// The reader task is spawned only after this succeeds: its loop exits
+    /// on the first chunk whose session id isn't in the map, so spawning it
+    /// before the insert could lose the whole output stream if the PTY
+    /// spoke first.
+    fn insert_new_session(&self, id: String, mut active: ActiveSession) -> Result<()> {
+        let mut lock = self.sessions.lock().unwrap();
+        if lock.contains_key(&id) {
+            let _ = active.transport.kill();
+            return Err(PlinkyError::ProcessError(format!(
+                "Session '{id}' already exists; refusing to spawn a duplicate"
+            )));
+        }
+        lock.insert(id, active);
         Ok(())
     }
 
@@ -314,12 +342,17 @@ impl SessionRegistry {
 
         let (replay_data, truncated) = session.scrollback.get_since(from_seq);
         *session.subscriber.lock().unwrap() = Some(out_tx);
+        let pending_prompt = match session.state_machine.state() {
+            SessionState::HostKeyPending { prompt } => Some(prompt.clone()),
+            _ => None,
+        };
 
         Ok(AttachInfo {
             session_id: id.to_string(),
             replay_data,
             truncated,
             is_live: session.state_machine.is_live(),
+            pending_prompt,
         })
     }
 

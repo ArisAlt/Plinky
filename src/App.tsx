@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput } from './services/tauriBridge';
+import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession } from './services/tauriBridge';
 import { TitleBar } from './components/layout/TitleBar';
 import { StatusBar } from './components/layout/StatusBar';
 import { SessionExplorer } from './components/sidebar/SessionExplorer';
@@ -86,6 +86,7 @@ export const App: React.FC = () => {
     localStorage.removeItem('plinky_workbench_layout_v1');
     setLayoutMode('single');
     if (tabs.length > 1) {
+      tabs.slice(1).forEach(t => closeTerminalSession(t.id));
       setTabs([tabs[0]]);
       setActiveTabId(tabs[0].id);
     }
@@ -199,6 +200,9 @@ export const App: React.FC = () => {
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    // Closing a tab is the only thing that ends its backend session --
+    // TerminalView unmounting (tab switch, split re-render) just detaches.
+    closeTerminalSession(id);
     const remaining = tabs.filter(t => t.id !== id);
     setTabs(remaining);
     if (activeTabId === id) {
@@ -299,10 +303,17 @@ export const App: React.FC = () => {
     }
   };
 
-  // Determine tabs displayed in split views
-  const splitTabs = tabs.length >= 2
-    ? [activeTab, ...tabs.filter(t => t.id !== activeTab?.id)]
-    : tabs;
+  // Tabs shown in split/grid panes, in stable tab order. Putting the active
+  // tab first (as this used to) meant clicking the other pane swapped which
+  // pane div each tab rendered in, remounting both terminals. The active
+  // tab is still guaranteed a slot: if it's past the first n, it takes the
+  // last one.
+  const paneTabs = (n: number): TerminalTab[] => {
+    const head = tabs.slice(0, n);
+    if (!activeTab || head.some(t => t.id === activeTab.id)) return head;
+    return [...head.slice(0, n - 1), activeTab];
+  };
+  const splitTabs = paneTabs(2);
 
   return (
     <div 
@@ -607,7 +618,7 @@ export const App: React.FC = () => {
                 ) : (
                   /* 4-Pane Cluster Grid Layout */
                   <div className="flex-1 grid grid-cols-2 grid-rows-2 w-full h-full overflow-hidden divide-x divide-y divide-plinky-800">
-                    {splitTabs.slice(0, 4).map((tab) => (
+                    {paneTabs(4).map((tab) => (
                       <div
                         key={tab.id}
                         onClick={() => setActiveTabId(tab.id)}

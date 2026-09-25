@@ -17,6 +17,7 @@ export interface AttachInfo {
   replay_data: number[];
   truncated: boolean;
   is_live: boolean;
+  pending_prompt?: HostKeyPromptInfo | null;
 }
 
 export interface HostKeyPromptInfo {
@@ -510,7 +511,18 @@ export async function resizeTerminal(sessionId: string, cols: number, rows: numb
   }
 }
 
+// Tab ids whose session was explicitly closed. A start_terminal_session call
+// already in flight when its tab is closed would otherwise create a session
+// after the close ran as a no-op -- TerminalView checks this when its start
+// resolves late and closes the straggler.
+const closedSessionIds = new Set<string>();
+
+export function isSessionClosed(sessionId: string): boolean {
+  return closedSessionIds.has(sessionId);
+}
+
 export async function closeTerminalSession(sessionId: string): Promise<void> {
+  closedSessionIds.add(sessionId);
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
