@@ -465,3 +465,18 @@
   - Added Rust unit test `test_detect_serial_ports_does_not_panic` in `crates/plinky-core/src/transport/serial.rs`.
   - Test suites: 30/30 Vitest tests pass across 9 suites; 70/70 Cargo workspace tests pass; `npm run build` succeeds in 1.89s with 0 TS errors.
 
+### 34. PRODUCTION PACKAGING & GITHUB ACTIONS AUTOMATED RELEASE
+* Local Distribution Packaging:
+  - Compiled release binaries and bundles via `NO_STRIP=true npx tauri build`:
+    - `target/release/bundle/appimage/Plinky_0.1.0_amd64.AppImage` (107 MiB, portable ELF 64-bit)
+    - `target/release/bundle/deb/Plinky_0.1.0_amd64.deb` (5.4 MiB)
+    - `target/release/bundle/rpm/Plinky-0.1.0-1.x86_64.rpm` (5.4 MiB)
+    - `target/release/plinky-desktop` (17 MiB optimized executable).
+* Bundle Configuration:
+  - Normalized Tauri bundle identifier in `src-tauri/tauri.conf.json` from `com.plinky.app` to `com.plinky.desktop` to adhere to desktop packaging guidelines.
+* CI/CD Release Automation:
+  - Added `.github/workflows/release.yml` triggering on tag pushes `v*`.
+  - Builds Linux AppImage, deb, rpm bundles and Windows MSI/NSIS installer packages.
+  - Automatically creates and attaches distribution assets to GitHub Releases using `softprops/action-gh-release@v2`.
+  - Pushed tag `v0.1.0` triggering the remote release pipeline.
+
