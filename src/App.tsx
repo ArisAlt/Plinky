@@ -41,11 +41,13 @@ export const App: React.FC = () => {
   );
   const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
   const [terminalCursorStyle, setTerminalCursorStyle] = useState<'block' | 'bar' | 'underline'>('bar');
-  const [sftpSession, setSftpSession] = useState<{ name: string; host: string; remotePath?: string }>({
-    name: 'Production Cluster Alpha',
-    host: '192.0.2.10',
-    remotePath: '/var/www',
-  });
+  // The session picked with a session's SFTP button. Without one, SFTP
+  // follows the active terminal tab. (It used to default to a hardcoded
+  // demo server, 192.0.2.10, that nobody could reach.)
+  const [sftpPinned, setSftpPinned] = useState<{ name: string; host: string; port?: number; username?: string } | null>(null);
+  // Each tab's last reported working directory (shell integration, OSC 7),
+  // so SFTP can open where that tab's shell is.
+  const [tabCwds, setTabCwds] = useState<Record<string, string>>({});
   const [copyOnSelect, setCopyOnSelect] = useState<boolean>(() => {
     const saved = localStorage.getItem('plinky_copy_on_select');
     return saved !== null ? saved === 'true' : true;
@@ -136,9 +138,8 @@ export const App: React.FC = () => {
     // waiting for you to choose one.
   };
 
-  const handleCwdChange = (cwd: string) => {
-    // Synchronize SFTP panel remote directory (directory following)
-    setSftpSession(prev => ({ ...prev, remotePath: cwd }));
+  const handleCwdChange = (tabId: string, cwd: string) => {
+    setTabCwds(prev => (prev[tabId] === cwd ? prev : { ...prev, [tabId]: cwd }));
   };
 
   const handleConnectSession = (session: PuttySession, forceNew: boolean = false) => {
@@ -198,8 +199,19 @@ export const App: React.FC = () => {
   };
 
   const handleOpenSftp = (session: PuttySession) => {
-    setSftpSession({ name: session.name, host: session.hostname || '192.0.2.10' });
+    setSftpPinned({
+      name: session.name,
+      host: session.hostname || session.host_name || '',
+      port: session.port || session.port_number,
+      username: session.username || session.user_name || undefined,
+    });
     setActiveView('sftp');
+  };
+
+  // The top bar's SFTP button follows the active tab, not an old pick.
+  const handleSetActiveView = (view: typeof activeView) => {
+    if (view === 'sftp') setSftpPinned(null);
+    setActiveView(view);
   };
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
@@ -330,7 +342,7 @@ export const App: React.FC = () => {
         onNewSession={() => setIsNewSessionOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         activeView={activeView}
-        setActiveView={setActiveView}
+        setActiveView={handleSetActiveView}
         sessions={sessions}
       />
 
@@ -475,7 +487,7 @@ export const App: React.FC = () => {
                       tab={activeTab}
                       onUpdateTab={handleUpdateTab}
                       onSplitPane={handleSplitPane}
-                      onCwdChange={handleCwdChange}
+                      onCwdChange={cwd => handleCwdChange(activeTab.id, cwd)}
                       onDuplicateTab={handleDuplicateTab}
                       onOpenSettings={() => setIsSettingsOpen(true)}
                       fontFamily={terminalFontFamily}
@@ -493,7 +505,7 @@ export const App: React.FC = () => {
                         tab={activeTab}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
-                        onCwdChange={handleCwdChange}
+                        onCwdChange={cwd => handleCwdChange(activeTab.id, cwd)}
                         onDuplicateTab={handleDuplicateTab}
                         onOpenSettings={() => setIsSettingsOpen(true)}
                         fontFamily={terminalFontFamily}
@@ -506,8 +518,10 @@ export const App: React.FC = () => {
                     <div className="w-[42%] h-full relative overflow-hidden bg-plinky-950">
                       <SftpDualPane
                         sessionName={activeTab.sessionName}
-                        hostname={activeTab.hostname || 'localhost'}
-                        initialRemotePath={sftpSession.remotePath || '/var/www'}
+                        hostname={activeTab.hostname}
+                        port={activeTab.port}
+                        username={activeTab.username}
+                        initialRemotePath={tabCwds[activeTab.id]}
                       />
                     </div>
                   </div>
@@ -522,7 +536,7 @@ export const App: React.FC = () => {
                         tab={splitTabs[0]}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
-                        onCwdChange={handleCwdChange}
+                        onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
                         onDuplicateTab={handleDuplicateTab}
                         onOpenSettings={() => setIsSettingsOpen(true)}
                         fontFamily={terminalFontFamily}
@@ -542,7 +556,7 @@ export const App: React.FC = () => {
                           tab={splitTabs[1]}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
-                          onCwdChange={handleCwdChange}
+                          onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
                           onDuplicateTab={handleDuplicateTab}
                           onOpenSettings={() => setIsSettingsOpen(true)}
                           fontFamily={terminalFontFamily}
@@ -576,7 +590,7 @@ export const App: React.FC = () => {
                         tab={splitTabs[0]}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
-                        onCwdChange={handleCwdChange}
+                        onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
                         onDuplicateTab={handleDuplicateTab}
                         onOpenSettings={() => setIsSettingsOpen(true)}
                         fontFamily={terminalFontFamily}
@@ -596,7 +610,7 @@ export const App: React.FC = () => {
                           tab={splitTabs[1]}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
-                          onCwdChange={handleCwdChange}
+                          onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
                           onDuplicateTab={handleDuplicateTab}
                           onOpenSettings={() => setIsSettingsOpen(true)}
                           fontFamily={terminalFontFamily}
@@ -632,7 +646,7 @@ export const App: React.FC = () => {
                           tab={tab}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
-                          onCwdChange={handleCwdChange}
+                          onCwdChange={cwd => handleCwdChange(tab.id, cwd)}
                           onDuplicateTab={handleDuplicateTab}
                           onOpenSettings={() => setIsSettingsOpen(true)}
                           fontFamily={terminalFontFamily}
@@ -655,14 +669,30 @@ export const App: React.FC = () => {
             </>
           )}
 
-          {activeView === 'sftp' && (
+          {activeView === 'sftp' && (sftpPinned ? (
             <SftpDualPane
-              sessionName={sftpSession.name}
-              hostname={sftpSession.host}
-              initialRemotePath={sftpSession.remotePath}
+              sessionName={sftpPinned.name}
+              hostname={sftpPinned.host}
+              port={sftpPinned.port}
+              username={sftpPinned.username}
               onClose={() => setActiveView('sessions')}
             />
-          )}
+          ) : activeTab ? (
+            <SftpDualPane
+              sessionName={activeTab.sessionName}
+              hostname={activeTab.hostname}
+              port={activeTab.port}
+              username={activeTab.username}
+              initialRemotePath={tabCwds[activeTab.id]}
+              onClose={() => setActiveView('sessions')}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-sm space-y-2">
+              <p>No session to browse.</p>
+              <p className="text-xs text-slate-500">Connect to a session, or use a saved session's SFTP button in the sidebar.</p>
+              <button onClick={() => setActiveView('sessions')} className="mt-2 px-3 py-1 rounded bg-plinky-800 hover:bg-plinky-700 text-xs">Back</button>
+            </div>
+          ))}
 
           {activeView === 'tunnels' && (
             <TunnelManager 

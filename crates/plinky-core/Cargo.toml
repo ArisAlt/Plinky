@@ -21,6 +21,6 @@ rand = "0.8"
 # ADR-005: native serial transport. default-features off: skips the libudev
 # link (port enumeration), so no new system library for the AppImage.
 serialport = { version = "4.10", default-features = false }
+tempfile = "3.10"
 
 [dev-dependencies]
-tempfile = "3.10"
