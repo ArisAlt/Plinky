@@ -427,3 +427,15 @@
   - `tauriBridge.ts`: `normalizeSession` reads folder from `raw.folder || raw.extra?.PlinkyFolder || getSessionMetadata(raw.name)?.folder || 'Saved Sessions'`, and tags from `extra.PlinkyTags` / metadata. `writePuttySession` serializes `extra.PlinkyFolder` and `extra.PlinkyTags` to preserve them inside PuTTY session files and sidecar storage.
   - `SessionExplorer.tsx`: Added `+ Folder` header button with inline input creation, empty folder preservation, dashed drop zone ("Empty folder — drag sessions here"), empty folder deletion via trash icon, and `addUserFolder` invocation in context menu "Move to Folder".
 * Verification: 23/23 Vitest tests passing across 7 suites; 49/49 Cargo workspace tests passing; `npm run build` compiles with 0 TS errors; AppImage bundled.
+
+### 32. SIDEBAR HEADER UI COLLISION RESOLUTION & PTY CHUNK TIMEOUT HARDENING
+* 1. SessionExplorer Header UI Collision Resolution (`SessionExplorer.tsx`):
+  - Solved header layout collision where "PuTTY Sessions" title wrapped into two lines ("PUTTY" / "SESSIONS") and the "+ New" button was truncated to "+ Ne...".
+  - Refactored `+ Folder` to an icon-only button (`FolderPlus`, `w-3.5 h-3.5 text-amber-400`, `aria-label="Create New Folder"`, `title="Create New Folder"`).
+  - Applied `whitespace-nowrap truncate` to the title and `shrink-0` to the button container.
+  - Reduced total header width demand from 287px to 209px, fitting comfortably inside `w-64` (232px usable) with zero wrapping or truncation.
+* 2. PTY Echo Chunk Accumulation in Core Tests (`crates/plinky-core/tests/core_tests.rs`):
+  - Fixed test flakiness in `test_sync_input_router_broadcast_all` and `test_sync_input_router_remove_session_purges_protection` where `rx.recv().await` captured initial PTY shell startup bytes instead of the broadcast echo.
+  - Replaced single `recv()` calls with timeout-backed accumulation loops until expected tokens are found.
+* Verification: 23/23 Vitest tests pass across 7 suites; 49/49 Cargo workspace tests pass; `npm run build` succeeds in 1.97s with 0 TS errors.
+
