@@ -21,7 +21,7 @@ It combines the rock-solid reliability, profile compatibility, and credential pr
 ---
 
 ## Documentation Protocol
-- **Always use and update `README.md`**: Reflect the current state, capabilities, installation/usage instructions, and feature roadmap of the project.
+- **`README.md` is the front page for users** (owner, 2026-09-26): what Plinky is and what it does, in plain language. **No technical details** there: architecture, milestones, test counts, build steps and specs go in `docs/DEVELOPMENT.md`, which you keep up to date instead.
 - **Always use and update `scaffold.md`**: Maintain an accurate, up-to-date map of directory structure, module responsibilities, and planned components.
 - **Always use an implementation plan**: Any non-trivial modification, architectural extension, or implementation phase must follow a structured plan before execution.
 

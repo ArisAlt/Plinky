@@ -6,7 +6,7 @@ This document tracks the directory architecture, file structure, component relat
 ./
 ├── GEMINI.md                             # AI operational rules, project overview, memory governance
 ├── past_memory.md                        # Dense ledger of architectural decisions and context
-├── README.md                             # Master user guide, project vision, feature breakdown
+├── README.md                             # Front page: what Plinky is, for users. No technical detail (owner, 2026-09-26)
 ├── scaffold.md                           # Living directory and module architecture map (this file)
 ├── deny.toml                             # Cargo-deny configuration (licenses, bans, advisories, sources)
 │
@@ -16,6 +16,7 @@ This document tracks the directory architecture, file structure, component relat
 │       └── release.yml                   # Automated Release Packaging on tag push (Linux + Windows)
 │
 ├── docs/
+│   ├── DEVELOPMENT.md                    # Developer docs: architecture, milestones, build & test (moved from README)
 │   └── THREAT_MODEL.md                   # Threat model & security architecture specification
 │
 ├── specs/                                # Technical Specifications & Proposal Suite

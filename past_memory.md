@@ -616,3 +616,7 @@
 * PuTTY logging honoured at start: `LogType` 1 printable / 2 all with `LogFileName`; `&Y &M &D &T &H &P &&` expanded; relative names under the home dir (cwd is inside the read-only AppImage). Other LogTypes ignored.
 * Verified in the real GUI (Xvfb): Save dialog -> file on disk while the session runs (433 B, printable, colours stripped); a saved session with LogType=2 created ~/putty-127.0.0.1-<date>.log on connect. Tests: 7 unit (log.rs), 1 integration (core_tests: file readable mid-session).
 * Container-only failures (also on master, green in CI): sftp_fixture_tests, sshd_fixture_tests (root, PuTTY 0.81).
+
+### 47. FRONT PAGE CLEANUP (owner, 2026-09-26)
+* Owner: GitHub front page should only describe what Plinky is, no technical details.
+* README.md rewritten for users (what/why/features/platforms/download/license). All previous technical content moved to `docs/DEVELOPMENT.md` (links re-pointed to ../specs). GEMINI.md documentation rule updated so technical material goes to DEVELOPMENT.md, not README.
