@@ -27,3 +27,5 @@ This directory contains the in-depth architectural breakdown, community feature 
      * **[ADR-001](specs/adr/ADR-001-primary-ssh-transport.md)**: Primary SSH Transport Architecture (`plink` only in v1, `russh` deferred behind spikes).
      * **[ADR-002](specs/adr/ADR-002-putty-discovery-and-versioning.md)**: PuTTY Discovery, Version Floor (0.75+), and No Bundling.
 
+6. **[ARCHITECTURE_REVIEW_2026-09-26.md](ARCHITECTURE_REVIEW_2026-09-26.md)**
+   * Architecture review of v0.1.3 against SYSTEM_DESIGN: nine findings (vault secret not bound to its session, Windows console flashes, one SSH login per SFTP operation, Plinky fields in PuTTY files, localStorage persistence, PuTTY discovery) and a phased plan P0–P7 for Linux + Windows. macOS on hold.

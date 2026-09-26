@@ -27,6 +27,7 @@ This document tracks the directory architecture, file structure, component relat
 ├── specs/WINDTERM_ANALYSIS.md            # In-depth autopsy of kingToolbox/WindTerm & community requests
 ├── specs/PUTTY_WRAPPER_SPEC.md           # Technical specification for PuTTY bridge & wrappers
 ├── specs/FEATURE_MATRIX.md               # Detailed feature comparison: WindTerm vs PuTTY vs Plinky
+├── specs/ARCHITECTURE_REVIEW_2026-09-26.md # v0.1.3 architecture review: findings F1-F9, plan P0-P7 (Linux + Windows)
 └── specs/adr/                            # Architecture Decision Records
     ├── README.md                         # ADR index and status table
     ├── ADR-001-primary-ssh-transport.md  # Decision: plink-only in v1, russh deferred
