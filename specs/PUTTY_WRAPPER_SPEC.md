@@ -25,10 +25,22 @@ On Linux systems, PuTTY binaries (such as `/usr/bin/putty`, `plink`, `psftp`) re
 ```
 
 #### Linux Session Filename Encoding
-Session names containing spaces or punctuation are percent-encoded directly in the filename:
+Verified against PuTTY 0.85 `unix/storage.c` (`make_session_filename` / `decode_session_filename`). The session name is percent-encoded byte by byte into the filename:
+* **Kept literal:** `A`–`Z`, `a`–`z`, `0`–`9` and exactly these five punctuation characters: `+` `-` `.` `@` `_`.
+* **Everything else is `%XX`** with upper-case hex: space, `%` itself, `/`, `:`, `,`, `=`, `~`, control bytes, and each byte of a non-ASCII (UTF-8) name.
+* **An empty name** is saved as `Default Settings`.
+* **Decoding** turns every `%XX` back into its byte, so a listing shows the name however the file was spelled.
+
+The encoding has to match PuTTY's byte for byte: `plink -load <name>` and PuTTY's own session list only find the file under exactly this name.
+
 * `"192.0.2.10 "` $\rightarrow$ `~/.putty/sessions/192.0.2.10%20`
 * `"COM USB0"` $\rightarrow$ `~/.putty/sessions/COM%20USB0`
 * `"Default Settings"` $\rightarrow$ `~/.putty/sessions/Default%20Settings`
+* `"admin@router"` $\rightarrow$ `~/.putty/sessions/admin@router`
+* `"myserver/prod:22"` $\rightarrow$ `~/.putty/sessions/myserver%2Fprod%3A22`
+* `"café"` $\rightarrow$ `~/.putty/sessions/caf%C3%A9`
+
+**Legacy Plinky filenames.** Earlier Plinky builds also escaped `+` and `@` (`admin%40router`). Such a file is still found. The first time it's read it is moved to PuTTY's name, by hard link then unlink so a file PuTTY has saved is never replaced. If the move can't be made, it is moved on the next save instead. When both files exist, the session is listed once and PuTTY's file is the one used.
 
 #### Linux Session File Format
 Each file is a key-value format parsed line-by-line:
