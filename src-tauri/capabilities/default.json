@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Backend events for the main window: the host-key prompt (session:prompt) and paced-paste progress (paste:progress). Without any capability Tauri refused plugin:event|listen, so the trust dialog never appeared and a first connection to an unknown host sat at \"The\" forever. Plinky's own commands need no grant; nothing else from Tauri's core API is called from the page.",
+  "windows": ["main"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

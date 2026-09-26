@@ -1079,6 +1079,25 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::migrate_identifier_dir;
+
+    /// The page hears the host-key prompt and paste progress through
+    /// plugin:event|listen, which Tauri refuses unless a capability grants
+    /// it. There was none at all: the refusal was caught and logged to
+    /// a console nobody sees, so the trust dialog never appeared and a first
+    /// connection to an unknown host sat at "The" for good. Checked against
+    /// the release binary: without the file, "Command plugin:event|listen
+    /// not allowed by ACL"; with it, listen succeeds.
+    #[test]
+    fn the_main_window_may_listen_to_backend_events() {
+        let cap: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let has = |key: &str, want: &str| {
+            cap[key].as_array().is_some_and(|a| a.iter().any(|v| v == want))
+        };
+        assert!(has("windows", "main"));
+        assert!(has("permissions", "core:event:allow-listen"));
+        assert!(has("permissions", "core:event:allow-unlisten"));
+    }
     use super::{find_session_entry, session_url_for_entry, vault_key_candidates};
     use plinky_core::{Vault, VaultEntry};
 
