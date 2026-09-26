@@ -609,6 +609,15 @@ export function isSessionClosed(sessionId: string): boolean {
   return closedSessionIds.has(sessionId);
 }
 
+/**
+ * Takes an id off the closed list so a session can be started again under
+ * it (Reconnect restarts a tab in place). Otherwise a tab switch during the
+ * restart would treat the new session as a closed tab's straggler.
+ */
+export function reopenSessionId(sessionId: string): void {
+  closedSessionIds.delete(sessionId);
+}
+
 export async function closeTerminalSession(sessionId: string): Promise<void> {
   closedSessionIds.add(sessionId);
   if (isTauriEnvironment()) {

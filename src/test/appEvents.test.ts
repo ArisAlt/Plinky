@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pasteLineDelayFrom, isMultiLinePaste, MAX_PASTE_LINE_DELAY_MS } from '../services/appEvents';
+import { pasteLineDelayFrom, isMultiLinePaste, MAX_PASTE_LINE_DELAY_MS, keepaliveSecondsFrom, keepaliveKeys } from '../services/appEvents';
 
 describe('paste line delay helpers', () => {
   it('reads the session setting, treating missing or bad values as off', () => {
@@ -21,3 +21,18 @@ describe('paste line delay helpers', () => {
     expect(isMultiLinePaste('show version')).toBe(false);
   });
 });
+
+describe('keepalive settings', () => {
+  it('reads PuTTY\'s two keys the way PuTTY does: minutes + seconds', () => {
+    expect(keepaliveSecondsFrom({ PingInterval: '2', PingIntervalSecs: '5' })).toBe(125);
+    expect(keepaliveSecondsFrom({ PingIntervalSecs: '30' })).toBe(30);
+    expect(keepaliveSecondsFrom({})).toBe(0);
+  });
+
+  it('writes them the way PuTTY does, so a session opens the same in PuTTY', () => {
+    expect(keepaliveKeys(90)).toEqual({ PingInterval: '1', PingIntervalSecs: '30' });
+    expect(keepaliveKeys(0)).toEqual({ PingInterval: '0', PingIntervalSecs: '0' });
+    expect(keepaliveSecondsFrom(keepaliveKeys(3661))).toBe(3661);
+  });
+});
+

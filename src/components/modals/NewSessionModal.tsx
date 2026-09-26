@@ -9,7 +9,7 @@ import {
   vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
-import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom } from '../../services/appEvents';
+import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
 
 interface NewSessionModalProps {
   isOpen: boolean;
@@ -50,6 +50,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [autoLogin, setAutoLogin] = useState(false);
   // Paste line delay in ms ('' or 0 = paste normally).
   const [pasteDelay, setPasteDelay] = useState('');
+  // Connection (T-016): PuTTY's keepalive settings and Plinky's auto-reconnect.
+  const [keepalive, setKeepalive] = useState('');
+  const [tcpKeepalives, setTcpKeepalives] = useState(false);
+  const [autoReconnect, setAutoReconnect] = useState(false);
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -147,6 +151,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setAutoLogin(extra.PlinkyAutoLogin === '1');
       const delay = pasteLineDelayFrom(extra);
       setPasteDelay(delay ? String(delay) : '');
+      const ka = keepaliveSecondsFrom(extra);
+      setKeepalive(ka ? String(ka) : '');
+      setTcpKeepalives(extra.TCPKeepalives === '1');
+      setAutoReconnect(extra.PlinkyAutoReconnect === '1');
     } else {
       setName('');
       setHostname('');
@@ -179,6 +187,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setAutoEnable(false);
       setAutoLogin(false);
       setPasteDelay('');
+      setKeepalive('');
+      setTcpKeepalives(false);
+      setAutoReconnect(false);
     }
   }, [isOpen, editingSession]);
 
@@ -301,6 +312,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     }
 
     if (autoEnable) extra.PlinkyAutoEnable = '1'; else delete extra.PlinkyAutoEnable;
+    if (!isSerial) {
+      // Keepalives stop idle NAT/firewall timeouts killing the session and
+      // let plink notice a dead link, which is what auto-reconnect acts on.
+      Object.assign(extra, keepaliveKeys(parseInt(keepalive, 10) || 0));
+      extra.TCPKeepalives = tcpKeepalives ? '1' : '0';
+    }
+    const autoReconnectOn = autoReconnect && !isSerial;
+    if (autoReconnectOn) extra.PlinkyAutoReconnect = '1'; else delete extra.PlinkyAutoReconnect;
     const pasteLineDelayMs = pasteLineDelayFrom({ PlinkyPasteLineDelayMs: pasteDelay });
     if (pasteLineDelayMs > 0) extra.PlinkyPasteLineDelayMs = String(pasteLineDelayMs);
     else delete extra.PlinkyPasteLineDelayMs;
@@ -324,7 +343,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     onSave(session);
     // Open terminals of this session apply the new delay right away.
     window.dispatchEvent(new CustomEvent<SessionSavedDetail>(SESSION_SAVED_EVENT, {
-      detail: { name: session.name, pasteLineDelayMs },
+      detail: { name: session.name, pasteLineDelayMs, autoReconnect: autoReconnectOn },
     }));
     onClose();
   };
@@ -863,6 +882,40 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Connection (T-016): keepalives + auto-reconnect */}
+          {!isSerial && (
+            <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-[11px]">
+              <div className="text-slate-300 font-medium">Connection</div>
+              <label className="flex items-center justify-between space-x-2">
+                <span className="text-slate-300">Send keepalives every</span>
+                <span className="flex items-center space-x-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={keepalive}
+                    onChange={e => setKeepalive(e.target.value)}
+                    placeholder="0"
+                    aria-label="Keepalive interval in seconds"
+                    className="w-20 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs text-right focus:outline-none focus:border-sky-500"
+                  />
+                  <span className="text-slate-500">s (0 = off)</span>
+                </span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" checked={tcpKeepalives} onChange={e => setTcpKeepalives(e.target.checked)} />
+                <span className="text-slate-300">TCP keepalives</span>
+              </label>
+              <label className="flex items-start space-x-2 cursor-pointer">
+                <input type="checkbox" checked={autoReconnect} onChange={e => setAutoReconnect(e.target.checked)} className="mt-0.5" />
+                <span className="text-slate-300">
+                  Reconnect automatically if the connection drops
+                  <span className="block text-slate-500">Not after you type exit or a login fails. Tries 5 times, waiting longer each time.</span>
+                </span>
+              </label>
+            </div>
+          )}
 
           {/* Paste line delay (T-015) */}
           <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1 text-[11px]">
