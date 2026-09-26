@@ -55,7 +55,7 @@ jobs:
         run: npm run build
 
       - name: Run Cargo Workspace Tests
-        run: cargo test --workspace --verbose
+        run: cargo test --workspace --verbose --no-fail-fast
 
       - name: Install & Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
@@ -104,4 +104,4 @@ jobs:
         run: npm run build
 
       - name: Run Cargo Workspace Tests
-        run: cargo test --workspace --verbose
+        run: cargo test --workspace --verbose --no-fail-fast

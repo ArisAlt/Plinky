@@ -326,7 +326,20 @@ fn find_session_entry<'v>(
     username: Option<&str>,
 ) -> Option<&'v VaultEntry> {
     let saved = putty_compat::sessions::read_session(session_name).ok();
-    let (explicit, host, user) = match &saved {
+    find_session_entry_for(vault, saved.as_ref(), session_name, hostname, username)
+}
+
+/// [`find_session_entry`] given the saved session (if any) instead of
+/// reading it: the test runs on Windows too, where sessions live in the
+/// registry and a file under PUTTYDIR is never read.
+fn find_session_entry_for<'v>(
+    vault: &'v Vault,
+    saved: Option<&putty_compat::sessions::PuttySession>,
+    session_name: &str,
+    hostname: Option<&str>,
+    username: Option<&str>,
+) -> Option<&'v VaultEntry> {
+    let (explicit, host, user) = match saved {
         Some(s) => (
             s.extra.get("PlinkyVaultKey").map(String::as_str),
             Some(s.host_name.as_str()),
@@ -766,8 +779,15 @@ async fn vault_send_secret(
 /// Where a vault entry points, for the KeePass URL field: an entry keyed
 /// "session:<name>" belongs to that saved session.
 fn session_url_for_entry(id: &str) -> Option<String> {
+    session_url_for_entry_with(id, |name| putty_compat::sessions::read_session(name).ok())
+}
+
+fn session_url_for_entry_with(
+    id: &str,
+    read: impl Fn(&str) -> Option<putty_compat::sessions::PuttySession>,
+) -> Option<String> {
     let name = id.strip_prefix("session:")?;
-    let s = putty_compat::sessions::read_session(name).ok()?;
+    let s = read(name)?;
     if s.host_name.is_empty() {
         return None;
     }
@@ -1098,7 +1118,7 @@ mod tests {
         assert!(has("permissions", "core:event:allow-listen"));
         assert!(has("permissions", "core:event:allow-unlisten"));
     }
-    use super::{find_session_entry, session_url_for_entry, vault_key_candidates};
+    use super::{find_session_entry_for, session_url_for_entry_with, vault_key_candidates};
     use plinky_core::{Vault, VaultEntry};
 
     #[test]
@@ -1114,33 +1134,40 @@ mod tests {
     fn a_session_finds_its_vault_entry_without_an_explicit_link() {
         // The owner's case: a password saved from the Vault screen, no
         // PlinkyVaultKey in the session file -- it used to be ignored.
+        // The saved session is handed in rather than written to PUTTYDIR:
+        // on Windows sessions are read from the registry, and this test
+        // failed there once CI's Windows job got far enough to run it.
+        let server2 = putty_compat::sessions::PuttySession {
+            name: "Server 2".into(),
+            host_name: "10.10.10.10".into(),
+            port_number: 22,
+            user_name: "citizenzero".into(),
+            protocol: "ssh".into(),
+            ..Default::default()
+        };
+        let saved = |name: &str| (name == "Server 2").then(|| server2.clone());
         let dir = std::env::temp_dir().join(format!("plinky-vault-lookup-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("sessions")).unwrap();
-        std::env::set_var("PUTTYDIR", &dir);
-        std::fs::write(
-            dir.join("sessions").join("Server%202"),
-            "HostName=10.10.10.10\nPortNumber=22\nUserName=citizenzero\nProtocol=ssh\n",
-        )
-        .unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
         let mut vault = Vault::create_fast(dir.join("vault.bin"), "pw").unwrap();
 
         vault.set_entry(VaultEntry::new("10.10.10.10", "by-host"));
-        let e = find_session_entry(&vault, "Server 2", None, None).unwrap();
+        let e = find_session_entry_for(&vault, saved("Server 2").as_ref(), "Server 2", None, None).unwrap();
         assert_eq!(e.id, "10.10.10.10", "the saved session's own host is used");
 
         vault.set_entry(VaultEntry::new("session:Server 2", "by-session"));
-        assert_eq!(find_session_entry(&vault, "Server 2", None, None).unwrap().id, "session:Server 2");
+        let e = find_session_entry_for(&vault, saved("Server 2").as_ref(), "Server 2", None, None).unwrap();
+        assert_eq!(e.id, "session:Server 2");
 
         // Quick Connect: no saved session, so the host the tab connects to.
         vault.set_entry(VaultEntry::new("192.0.2.7", "quick"));
-        assert_eq!(find_session_entry(&vault, "192.0.2.7:22", Some("192.0.2.7"), None).unwrap().id, "192.0.2.7");
-        assert!(find_session_entry(&vault, "elsewhere", Some("198.51.100.1"), None).is_none());
+        assert_eq!(find_session_entry_for(&vault, None, "192.0.2.7:22", Some("192.0.2.7"), None).unwrap().id, "192.0.2.7");
+        assert!(find_session_entry_for(&vault, None, "elsewhere", Some("198.51.100.1"), None).is_none());
 
         // KeePass export: a session's entry gets that session's address.
-        assert_eq!(session_url_for_entry("session:Server 2").as_deref(), Some("ssh://citizenzero@10.10.10.10:22"));
-        assert_eq!(session_url_for_entry("10.10.10.10"), None);
-        assert_eq!(session_url_for_entry("session:No Such Session"), None);
+        assert_eq!(session_url_for_entry_with("session:Server 2", saved).as_deref(), Some("ssh://citizenzero@10.10.10.10:22"));
+        assert_eq!(session_url_for_entry_with("10.10.10.10", saved), None);
+        assert_eq!(session_url_for_entry_with("session:No Such Session", saved), None);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
