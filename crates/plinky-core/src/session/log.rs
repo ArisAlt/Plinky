@@ -83,6 +83,9 @@ impl SessionLog {
 #[derive(Default)]
 pub struct PrintableFilter {
     state: FilterState,
+    /// Text written since the last newline: a cursor move to another line
+    /// then ends the line (see `feed`).
+    line_open: bool,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -108,7 +111,12 @@ impl PrintableFilter {
         for &b in input {
             self.state = match (self.state, b) {
                 (Text, 0x1b) => Escape,
-                (Text, b'\n' | b'\t') => {
+                (Text, b'\n') => {
+                    out.push(b);
+                    self.line_open = false;
+                    Text
+                }
+                (Text, b'\t') => {
                     out.push(b);
                     Text
                 }
@@ -116,12 +124,25 @@ impl PrintableFilter {
                 (Text, 0x00..=0x1f | 0x7f) => Text,
                 (Text, _) => {
                     out.push(b);
+                    self.line_open = true;
                     Text
                 }
                 (Escape, b'[') => Csi,
                 (Escape, b']' | b'P' | b'_' | b'^' | b'X') => String,
                 (Escape, b'(' | b')' | b'*' | b'+' | b'#' | b'%') => OneMore,
                 (Escape, _) => Text,
+                // Windows' console layer (ConPTY) starts a new line with a
+                // cursor move (CUP `H`/`f`, CNL `E`) instead of CR LF. Dropped
+                // like any other sequence, it glued lines together in CI:
+                // "All rights reserved.C:\Users\...>". A move after text on
+                // the line ends it.
+                (Csi, b'H' | b'f' | b'E') => {
+                    if self.line_open {
+                        out.push(b'\n');
+                        self.line_open = false;
+                    }
+                    Text
+                }
                 (Csi, 0x40..=0x7e) => Text,
                 (Csi, _) => Csi,
                 (String, 0x07) => Text,
@@ -220,6 +241,14 @@ mod tests {
         out.extend(f.feed(b"1mX\x1b]2;t"));
         out.extend(f.feed(b"itle\x1b\\ done"));
         assert_eq!(String::from_utf8(out).unwrap(), "red:X done");
+    }
+
+    #[test]
+    fn a_cursor_move_to_the_next_line_ends_the_line() {
+        // Verbatim shape of ConPTY output (windows-latest CI, 2026-09-26).
+        let mut f = PrintableFilter::default();
+        let out = f.feed(b"\x1b[2J\x1b[HMicrosoft Windows\x1b[2;1H(c) Microsoft.\x1b[4;1HC:\\Users>\x1b[?25h");
+        assert_eq!(String::from_utf8(out).unwrap(), "Microsoft Windows\n(c) Microsoft.\nC:\\Users>");
     }
 
     #[test]

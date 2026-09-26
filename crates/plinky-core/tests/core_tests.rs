@@ -822,7 +822,11 @@ async fn a_session_log_is_on_disk_while_the_session_is_still_running() {
 
     let opened = registry.start_log("log-live", &path, LogMode::Printable).unwrap();
     assert_eq!(opened, path);
-    registry.write_input("log-live", b"echo LOG_$((6*7))_MARK\r").unwrap();
+    // The marker only appears once the shell has run the command, never in
+    // the echo of what was typed. Windows' local shell is cmd.exe: an empty
+    // substring of %COMSPEC% there, arithmetic in a POSIX shell.
+    let command: &[u8] = if cfg!(windows) { b"echo LOG_%COMSPEC:~0,0%42_MARK\r" } else { b"echo LOG_$((6*7))_MARK\r" };
+    registry.write_input("log-live", command).unwrap();
 
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
     let mut on_disk = String::new();
