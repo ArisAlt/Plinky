@@ -579,3 +579,26 @@ describe('the session editor tabs (T-014)', () => {
     expect(panel('general').hidden).toBe(false);
   });
 });
+
+describe('a new session from a folder (T-010)', () => {
+  it('starts in the folder it was created from', () => {
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} initialFolder="Corp 1/Site 1" />);
+    expect((screen.getByPlaceholderText('e.g. Staging or Network') as HTMLInputElement).value).toBe('Corp 1/Site 1');
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'site1-core' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.5' } });
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    expect(onSave.mock.calls[0][0].folder).toBe('Corp 1/Site 1');
+  });
+
+  it('an edited session keeps its own folder', () => {
+    const existing = { name: 'db', hostname: '192.0.2.9', port: 22, protocol: 'SSH' as const, folder: 'Home' };
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={existing} initialFolder="Corp 1" />);
+    expect((screen.getByPlaceholderText('e.g. Staging or Network') as HTMLInputElement).value).toBe('Home');
+  });
+
+  it('without one, a new session goes to Saved Sessions as before', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect((screen.getByPlaceholderText('e.g. Staging or Network') as HTMLInputElement).value).toBe('Saved Sessions');
+  });
+});
