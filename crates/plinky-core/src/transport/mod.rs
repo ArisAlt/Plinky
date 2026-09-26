@@ -1,4 +1,5 @@
 use crate::errors::Result;
+use crate::session::flow::FlowGate;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -33,23 +34,30 @@ pub(crate) fn pump_pty_child(
     mut reader: Box<dyn Read + Send>,
     mut child: Box<dyn portable_pty::Child + Send + Sync>,
     out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    flow: Arc<FlowGate>,
 ) -> PtyChild {
     let killer = child.clone_killer();
     let alive = Arc::new(AtomicBool::new(true));
     let sender = Arc::new(Mutex::new(Some(out_tx)));
     let last_output = Arc::new(AtomicU64::new(now_ms()));
 
-    let (reader_sender, reader_last) = (sender.clone(), last_output.clone());
+    let (reader_sender, reader_last, reader_flow) = (sender.clone(), last_output.clone(), flow.clone());
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
+            // Don't read while the page is a full window behind (ADR-006):
+            // the PTY buffer fills and plink slows down instead.
+            reader_flow.wait_for_room();
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     reader_last.store(now_ms(), Ordering::Relaxed);
                     let guard = reader_sender.lock().unwrap();
                     match guard.as_ref() {
-                        Some(tx) if tx.send(buf[..n].to_vec()).is_ok() => {}
+                        // Charged here, at the source: if the tasks between
+                        // here and the page fall behind, the reader still
+                        // stops at the window instead of racing ahead.
+                        Some(tx) if tx.send(buf[..n].to_vec()).is_ok() => reader_flow.charge(n),
                         _ => break,
                     }
                 }
@@ -67,6 +75,8 @@ pub(crate) fn pump_pty_child(
             std::thread::sleep(Duration::from_millis(50));
         }
         sender.lock().unwrap().take();
+        // A reader waiting for room must not outlive the process.
+        flow.close();
     });
 
     PtyChild { killer, alive }

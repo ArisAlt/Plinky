@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{ipc::Channel, Emitter, Manager, State};
+use tauri::{ipc::{Channel, InvokeResponseBody}, Emitter, Manager, State};
 use tokio::sync::Mutex;
 use putty_compat::sessions::PuttySession;
 use putty_compat::hostkeys::HostKeyEntry;
@@ -64,6 +64,54 @@ fn inspect_ppk(path: String) -> Result<PpkHeader, String> {
         .map_err(|e| format!("Failed to parse PPK header for '{path}': {e}"))
 }
 
+/// Largest message sent to the page at once. In a flood several 4 KB PTY
+/// reads are waiting; one message for all of them saves a Tauri IPC round
+/// trip each (payloads over 1 KB go through a fetch).
+const COALESCE_MAX: usize = 64 * 1024;
+
+/// Hands a session's output to its page as raw bytes (ADR-006). It was a
+/// `Channel<Vec<u8>>`, which Tauri serialises as a JSON number array: a 4 KB
+/// read became ~14 KB of text to build here and parse in the page.
+fn forward_output(mut rx: mpsc::UnboundedReceiver<Vec<u8>>, on_data: Channel) {
+    tokio::spawn(async move {
+        while let Some(mut batch) = rx.recv().await {
+            while batch.len() < COALESCE_MAX {
+                match rx.try_recv() {
+                    Ok(more) => batch.extend_from_slice(&more),
+                    Err(_) => break,
+                }
+            }
+            if on_data.send(InvokeResponseBody::Raw(batch)).is_err() {
+                break;
+            }
+        }
+    });
+}
+
+/// The page finished drawing `bytes` of a session's output (ADR-006). Async
+/// so the stream of acks during a flood stays off the main thread.
+#[tauri::command]
+async fn ack_terminal_output(
+    registry: State<'_, Arc<SessionRegistry>>,
+    session_id: String,
+    bytes: u64,
+) -> Result<(), String> {
+    registry.ack_output(&session_id, bytes);
+    Ok(())
+}
+
+/// The tab left the screen. The session keeps running into scrollback and is
+/// no longer held to the page's pace; attaching again replays it.
+#[tauri::command]
+fn detach_terminal_session(
+    registry: State<Arc<SessionRegistry>>,
+    session_id: String,
+) -> Result<(), String> {
+    registry
+        .detach_session(&session_id)
+        .map_err(|e| format!("Failed to detach session: {e}"))
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn start_terminal_session(
@@ -74,21 +122,14 @@ async fn start_terminal_session(
     is_local: bool,
     cols: u16,
     rows: u16,
-    on_data: Channel<Vec<u8>>,
+    on_data: Channel,
     hostname: Option<String>,
     port: Option<u16>,
     username: Option<String>,
     log_file_name: Option<String>,
 ) -> Result<(), String> {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
-
-    tokio::spawn(async move {
-        while let Some(chunk) = rx.recv().await {
-            if on_data.send(chunk).is_err() {
-                break;
-            }
-        }
-    });
+    let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    forward_output(rx, on_data);
 
     // Saved serial sessions open on the native serial transport (ADR-005):
     // plink can't send a Break. Line settings come from the PuTTY file.
@@ -157,17 +198,10 @@ fn attach_terminal_session(
     registry: State<Arc<SessionRegistry>>,
     session_id: String,
     from_seq: usize,
-    on_data: Channel<Vec<u8>>,
+    on_data: Channel,
 ) -> Result<AttachInfo, String> {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
-
-    tokio::spawn(async move {
-        while let Some(chunk) = rx.recv().await {
-            if on_data.send(chunk).is_err() {
-                break;
-            }
-        }
-    });
+    let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    forward_output(rx, on_data);
 
     registry
         .attach_session(&session_id, tx, from_seq)
@@ -1055,6 +1089,8 @@ pub fn run() {
             inspect_ppk,
             start_terminal_session,
             attach_terminal_session,
+            detach_terminal_session,
+            ack_terminal_output,
             answer_hostkey_prompt,
             write_terminal_input,
             resize_terminal,

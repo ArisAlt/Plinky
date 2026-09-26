@@ -238,6 +238,7 @@ impl PlinkTransport {
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
+        flow: std::sync::Arc<crate::session::flow::FlowGate>,
     ) -> Result<Self> {
         let plink_bin = Self::find_plink_binary()?;
         let pty_system = native_pty_system();
@@ -282,7 +283,7 @@ impl PlinkTransport {
             .take_writer()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
-        let child = super::pump_pty_child(reader, child, out_tx);
+        let child = super::pump_pty_child(reader, child, out_tx, flow);
 
         if let Some(file) = pwfile {
             std::thread::spawn(move || {

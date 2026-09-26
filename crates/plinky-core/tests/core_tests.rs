@@ -756,3 +756,52 @@ async fn test_the_password_can_be_typed_after_the_host_key_is_accepted() {
     assert!(registry.answer_prompt("pw-sess", PromptAnswer::AcceptAndStore).is_err(), "nothing left to answer");
     registry.close_session("pw-sess").unwrap();
 }
+
+/// ADR-006: a flood stops at the output window until the page catches up.
+/// Without flow control the reader read as fast as `yes` wrote, and a page
+/// that couldn't keep up fell behind without limit.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_flood_waits_for_the_page_and_a_detached_tab_runs_free() {
+    use plinky_core::session::flow::OUTPUT_WINDOW;
+    use std::time::Duration;
+
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    registry.create_local_session("flood", "Flood", None, 80, 24, tx).unwrap();
+    let gate = registry.flow_gate("flood").unwrap();
+    registry.write_input("flood", b"yes 0123456789abcdefghijklmnopqrstuvwxyz\n").unwrap();
+
+    // The page receives but never acknowledges.
+    async fn drain(rx: &mut mpsc::UnboundedReceiver<Vec<u8>>, for_ms: u64) -> usize {
+        let mut n = 0;
+        let deadline = tokio::time::sleep(Duration::from_millis(for_ms));
+        tokio::pin!(deadline);
+        loop {
+            tokio::select! {
+                Some(c) = rx.recv() => n += c.len(),
+                _ = &mut deadline => return n,
+            }
+        }
+    }
+    let first = drain(&mut rx, 1500).await as u64;
+    assert!(first >= OUTPUT_WINDOW / 2, "the flood got going ({first} bytes)");
+    // One read past the check at most: the reader charges as it reads.
+    assert!(first <= OUTPUT_WINDOW + 4096 + 512, "stopped at the window, got {first}");
+    assert_eq!(drain(&mut rx, 500).await, 0, "nothing more until the page acknowledges");
+
+    // The page catches up: more arrives.
+    gate.ack(gate.unacked());
+    let second = drain(&mut rx, 1000).await as u64;
+    assert!(second >= OUTPUT_WINDOW / 2, "an ack let the flood continue ({second} bytes)");
+
+    // The tab leaves the screen: the session keeps running into scrollback.
+    registry.detach_session("flood").unwrap();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let scrollback = registry.get_scrollback("flood").unwrap().len() as u64;
+    assert!(scrollback > 3 * OUTPUT_WINDOW, "a detached tab isn't held to the window ({scrollback} bytes)");
+    assert_eq!(gate.unacked(), 0, "and builds up no debt");
+
+    registry.close_session("flood").unwrap();
+}
+
