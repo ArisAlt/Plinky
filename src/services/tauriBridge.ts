@@ -517,9 +517,10 @@ export async function startTerminalSession(
   if (isTauriEnvironment()) {
     try {
       const { invoke, Channel } = await import('@tauri-apps/api/core');
-      const channel = new Channel<number[]>();
-      channel.onmessage = (bytes: number[]) => {
-        onData(new Uint8Array(bytes));
+      // Raw bytes (an ArrayBuffer), not a JSON number array (ADR-006).
+      const channel = new Channel<ArrayBuffer>();
+      channel.onmessage = (buf: ArrayBuffer) => {
+        onData(new Uint8Array(buf));
       };
       await invoke('start_terminal_session', {
         sessionId,
@@ -552,9 +553,10 @@ export async function attachTerminalSession(
   if (isTauriEnvironment()) {
     try {
       const { invoke, Channel } = await import('@tauri-apps/api/core');
-      const channel = new Channel<number[]>();
-      channel.onmessage = (bytes: number[]) => {
-        onData(new Uint8Array(bytes));
+      // Raw bytes (an ArrayBuffer), not a JSON number array (ADR-006).
+      const channel = new Channel<ArrayBuffer>();
+      channel.onmessage = (buf: ArrayBuffer) => {
+        onData(new Uint8Array(buf));
       };
       const info = await invoke<AttachInfo>('attach_terminal_session', {
         sessionId,
@@ -568,6 +570,62 @@ export async function attachTerminalSession(
     }
   }
   return null;
+}
+
+/** Output the page may owe before it tells the backend it caught up. */
+export const ACK_BATCH_BYTES = 128 * 1024;
+
+/**
+ * Tells the backend, in batches, how much of a session's output the page has
+ * finished drawing (ADR-006). The backend stops reading a session that is
+ * 512 KB behind, so a flood waits for the page instead of burying it.
+ * Batched by size, with a short timer for the tail of a burst.
+ */
+export function createOutputAcker(
+  sessionId: string,
+  send: (sessionId: string, bytes: number) => unknown = ackTerminalOutput,
+) {
+  let pending = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (pending > 0) {
+      const n = pending;
+      pending = 0;
+      send(sessionId, n);
+    }
+  };
+  return {
+    ack(bytes: number) {
+      pending += bytes;
+      if (pending >= ACK_BATCH_BYTES) flush();
+      else if (!timer) timer = setTimeout(flush, 30);
+    },
+    dispose: flush,
+  };
+}
+
+export async function ackTerminalOutput(sessionId: string, bytes: number): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('ack_terminal_output', { sessionId, bytes });
+    } catch (e) {
+      console.warn('Failed to acknowledge terminal output:', e);
+    }
+  }
+}
+
+/** The tab left the screen: its session keeps running into scrollback. */
+export async function detachTerminalSession(sessionId: string): Promise<void> {
+  if (isTauriEnvironment()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('detach_terminal_session', { sessionId });
+    } catch {
+      // Already closed: nothing to detach.
+    }
+  }
 }
 
 export async function writeTerminalInput(sessionId: string, data: Uint8Array): Promise<void> {

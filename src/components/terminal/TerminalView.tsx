@@ -7,6 +7,8 @@ import { terminalManager } from '../../services/terminalManager';
 import { 
   startTerminalSession, 
   attachTerminalSession,
+  detachTerminalSession,
+  createOutputAcker,
   writeTerminalInput, 
   resizeTerminal, 
   closeTerminalSession,
@@ -650,10 +652,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
-    const handleIncomingChunk = (chunk: Uint8Array) => {
+    // Tells the backend what this page has drawn, so a flood waits for it
+    // (ADR-006). Only live output counts: a replay was never sent by the
+    // backend, so there is nothing to acknowledge.
+    const acker = createOutputAcker(tab.id);
+    const handleIncomingChunk = (chunk: Uint8Array, live = true) => {
       if (disposed) return;
       isLivePtyRef.current = true;
-      term.write(chunk, scheduleHighlight);
+      term.write(chunk, () => {
+        scheduleHighlight();
+        if (live) acker.ack(chunk.length);
+      });
       const text = new TextDecoder().decode(chunk);
 
       // Status transitions
@@ -807,7 +816,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           setPendingPrompt(attachInfo.pending_prompt);
         }
         if (attachInfo.replay_data && attachInfo.replay_data.length > 0) {
-          handleIncomingChunk(new Uint8Array(attachInfo.replay_data));
+          handleIncomingChunk(new Uint8Array(attachInfo.replay_data), false);
           addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
         } else {
           addEventLog(`Attached to active session "${tab.sessionName}"`, 'success');
@@ -929,6 +938,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
       setSyncChannel(tab.id, null);
       terminalManager.unregisterTerminal(tab.id);
+      // Nothing will draw this session's output now: let it run into
+      // scrollback rather than wait for acknowledgements (ADR-006).
+      acker.dispose();
+      if (!isSessionClosed(tab.id)) void detachTerminalSession(tab.id);
       osc133Disposable.dispose();
       osc7Disposable.dispose();
       disposed = true;

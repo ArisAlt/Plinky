@@ -7,6 +7,7 @@ use crate::errors::{PlinkyError, Result};
 use crate::transport::Transport;
 use crate::transport::local::LocalTransport;
 use crate::transport::plink::PlinkTransport;
+use crate::session::flow::{FlowGate, OUTPUT_WINDOW};
 use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo, CloseReason};
 use crate::session::ring_buffer::ScrollbackRingBuffer;
 
@@ -55,6 +56,9 @@ pub struct ActiveSession {
     pub scrollback: ScrollbackRingBuffer,
     pub subscriber: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
     pub log_file: Option<std::fs::File>,
+    /// How far the attached page is behind (ADR-006). Shared with the
+    /// transport's reader, which waits on it.
+    pub flow: Arc<FlowGate>,
     /// Unique per spawned process. A session id can be reused after a close,
     /// so a reader task checks this before touching the map entry -- keyed
     /// by id alone, a closed session's trailing output and EOF landed on its
@@ -97,8 +101,9 @@ impl SessionRegistry {
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
         let (raw_tx, raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let transport = LocalTransport::spawn(cols, rows, raw_tx)?;
-        self.register_live_session(id, name, Box::new(transport), raw_rx, log_file_name, out_tx)
+        let flow = Arc::new(FlowGate::new(OUTPUT_WINDOW));
+        let transport = LocalTransport::spawn(cols, rows, raw_tx, flow.clone())?;
+        self.register_live_session(id, name, Box::new(transport), raw_rx, log_file_name, out_tx, flow)
     }
 
     /// Opens a serial console session with the native transport (ADR-005).
@@ -112,7 +117,10 @@ impl SessionRegistry {
     ) -> Result<()> {
         let (raw_tx, raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let transport = crate::transport::serial::SerialTransport::open(config, raw_tx)?;
-        self.register_live_session(id, name, Box::new(transport), raw_rx, log_file_name, out_tx)
+        // A serial line can't outrun the page (115200 baud is ~11 KB/s), so
+        // its reader doesn't wait; the gate only keeps the accounting uniform.
+        let flow = Arc::new(FlowGate::new(OUTPUT_WINDOW));
+        self.register_live_session(id, name, Box::new(transport), raw_rx, log_file_name, out_tx, flow)
     }
 
     /// Holds a line break for `duration` (serial sessions only). The map lock
@@ -132,6 +140,7 @@ impl SessionRegistry {
 
     /// Registers a session with no pre-auth phase (local shell, serial line):
     /// every byte is terminal output from the start, so it begins Live.
+    #[allow(clippy::too_many_arguments)]
     fn register_live_session(
         &self,
         id: &str,
@@ -140,6 +149,7 @@ impl SessionRegistry {
         mut raw_rx: mpsc::UnboundedReceiver<Vec<u8>>,
         log_file_name: Option<String>,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
+        flow: Arc<FlowGate>,
     ) -> Result<()> {
         let log_file = log_file_name
             .as_deref()
@@ -152,6 +162,7 @@ impl SessionRegistry {
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
         let instance = NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed);
+        let flow_for_task = flow.clone();
 
         let reader = async move {
             // Whether the loop's end has already been accounted for (Closed
@@ -177,15 +188,24 @@ impl SessionRegistry {
                     }
                 };
 
+                // Charged by the reader when read; what doesn't reach the
+                // page (a withheld prompt, a detached tab) is refunded below.
+                let chunk_len = chunk.len();
+                let mut forwarded = 0usize;
                 match action {
                     PreAuthAction::Hold => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(chunk);
+                            if tx.send(chunk).is_ok() {
+                                forwarded = chunk_len;
+                            }
                         }
                     }
                     PreAuthAction::PassThrough(bytes) | PreAuthAction::TransitionToLive(bytes) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(bytes);
+                            let n = bytes.len();
+                            if tx.send(bytes).is_ok() {
+                                forwarded = n;
+                            }
                         }
                     }
                     PreAuthAction::Suppress => {}
@@ -223,6 +243,7 @@ impl SessionRegistry {
                         break;
                     }
                 }
+                flow_for_task.ack(chunk_len.saturating_sub(forwarded) as u64);
             }
             if !reported {
                 registry_clone.report_process_exit(&id_for_task, instance, &sub_clone);
@@ -240,6 +261,7 @@ impl SessionRegistry {
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024), // 2 MiB
             subscriber,
             log_file,
+            flow,
             instance,
         };
 
@@ -277,7 +299,8 @@ impl SessionRegistry {
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx)?;
+        let flow = Arc::new(FlowGate::new(OUTPUT_WINDOW));
+        let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx, flow.clone())?;
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
@@ -289,6 +312,7 @@ impl SessionRegistry {
         let registry_clone = self.clone();
         let id_for_task = id.to_string();
         let instance = NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed);
+        let flow_for_task = flow.clone();
 
         let reader = async move {
             // Whether the loop's end has already been accounted for (Closed
@@ -310,22 +334,33 @@ impl SessionRegistry {
                     }
                 };
 
+                // Charged by the reader when read; what doesn't reach the
+                // page (a withheld prompt, a detached tab) is refunded below.
+                let chunk_len = chunk.len();
+                let mut forwarded = 0usize;
                 match action {
                     PreAuthAction::Hold => {
                         // Forward pre-auth interactive bytes (username prompt, password prompt, login banner)
                         // directly to the subscriber so the user can see prompts and enter credentials.
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(chunk);
+                            if tx.send(chunk).is_ok() {
+                                forwarded = chunk_len;
+                            }
                         }
                     }
                     PreAuthAction::PassThrough(bytes) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(bytes);
+                            let n = bytes.len();
+                            if tx.send(bytes).is_ok() {
+                                forwarded = n;
+                            }
                         }
                     }
                     PreAuthAction::TransitionToLive(bytes) => {
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
-                            let _ = tx.send(bytes.clone());
+                            if tx.send(bytes.clone()).is_ok() {
+                                forwarded = bytes.len();
+                            }
                         }
                         // plink prints "Press Return to begin session." as a
                         // one-time continuation gate right after auth
@@ -375,6 +410,7 @@ impl SessionRegistry {
                         break;
                     }
                 }
+                flow_for_task.ack(chunk_len.saturating_sub(forwarded) as u64);
             }
             if !reported {
                 registry_clone.report_process_exit(&id_for_task, instance, &sub_clone);
@@ -405,6 +441,7 @@ impl SessionRegistry {
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024),
             subscriber,
             log_file,
+            flow,
             instance,
         };
 
@@ -474,6 +511,7 @@ impl SessionRegistry {
 
         let (replay_data, truncated) = session.scrollback.get_since(from_seq);
         *session.subscriber.lock().unwrap() = Some(out_tx);
+        session.flow.attach();
         let pending_prompt = match session.state_machine.state() {
             SessionState::HostKeyPending { prompt } => Some(prompt.clone()),
             _ => None,
@@ -625,10 +663,35 @@ impl SessionRegistry {
         lock.keys().cloned().collect()
     }
 
+    /// The page drawing a session went away (its tab left the screen). The
+    /// session keeps running: output goes to scrollback only, the reader is
+    /// no longer gated, and the next attach replays it.
+    pub fn detach_session(&self, id: &str) -> Result<()> {
+        let lock = self.sessions.lock().unwrap();
+        let session = lock.get(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        *session.subscriber.lock().unwrap() = None;
+        session.flow.detach();
+        Ok(())
+    }
+
+    /// The session's flow gate, for whatever hands its output to the page
+    /// (it charges what it sends).
+    pub fn flow_gate(&self, id: &str) -> Option<Arc<FlowGate>> {
+        self.sessions.lock().unwrap().get(id).map(|s| s.flow.clone())
+    }
+
+    /// The page finished drawing `bytes` of this session's output.
+    pub fn ack_output(&self, id: &str, bytes: u64) {
+        if let Some(s) = self.sessions.lock().unwrap().get(id) {
+            s.flow.ack(bytes);
+        }
+    }
+
     /// Terminates and removes a session.
     pub fn close_session(&self, id: &str) -> Result<()> {
         let mut lock = self.sessions.lock().unwrap();
         if let Some(mut session) = lock.remove(id) {
+            session.flow.close();
             let _ = session.transport.kill();
         }
         self.sync_router.lock().unwrap().remove_session(id);

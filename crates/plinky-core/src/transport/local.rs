@@ -15,6 +15,7 @@ impl LocalTransport {
         cols: u16,
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
+        flow: std::sync::Arc<crate::session::flow::FlowGate>,
     ) -> Result<Self> {
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -52,7 +53,7 @@ impl LocalTransport {
             .take_writer()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
-        let child = super::pump_pty_child(reader, child, out_tx);
+        let child = super::pump_pty_child(reader, child, out_tx, flow);
 
         Ok(Self {
             master: pair.master,
