@@ -51,6 +51,14 @@ jobs:
         run: |
           NO_STRIP=true npx tauri build
 
+      # The bundled Ubuntu libwayland made newer Mesa abort with
+      # EGL_BAD_PARAMETER: a grey window (see the script's header).
+      - name: Drop bundled libwayland from the AppImage
+        run: |
+          for f in target/release/bundle/appimage/*.AppImage; do
+            scripts/appimage-drop-wayland.sh "$f"
+          done
+
       - name: Upload Release Assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
