@@ -89,6 +89,7 @@ itself stopped running. In the app, that is every tab and the whole UI.
   1 KB take the fetch path too. Measure the end-to-end path in the real app
   before choosing.
 - Keystroke echo when idle is small (a few bytes), so it takes the direct
-  path: the 12–16 ms figures above are close to what a user sees on Linux.
+  path. The renderer's share of an idle echo is the 12–16 ms above; the
+  round trip to the device comes on top of it.
 - Windows: re-run this harness in Edge (Chromium, like WebView2) on the
   owner's machine; GPU and driver differ from CI.
