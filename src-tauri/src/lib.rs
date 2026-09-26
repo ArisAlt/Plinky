@@ -64,17 +64,32 @@ fn inspect_ppk(path: String) -> Result<PpkHeader, String> {
         .map_err(|e| format!("Failed to parse PPK header for '{path}': {e}"))
 }
 
-/// Largest message sent to the page at once. In a flood several 4 KB PTY
-/// reads are waiting; one message for all of them saves a Tauri IPC round
-/// trip each (payloads over 1 KB go through a fetch).
-const COALESCE_MAX: usize = 64 * 1024;
+/// Largest message sent to the page at once.
+const COALESCE_MAX: usize = 256 * 1024;
+
+/// While output keeps coming, how often a message goes to the page. Under a
+/// flood the PTY hands over reads well under 1 KB, and Tauri delivers each
+/// small raw message by evaluating a script in the page: measured in the
+/// real app, 0.8 KB messages and 7.6 MB/s. Output after a quiet spell -- a
+/// keystroke's echo -- still goes at once.
+const BATCH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(4);
 
 /// Hands a session's output to its page as raw bytes (ADR-006). It was a
 /// `Channel<Vec<u8>>`, which Tauri serialises as a JSON number array: a 4 KB
 /// read became ~14 KB of text to build here and parse in the page.
 fn forward_output(mut rx: mpsc::UnboundedReceiver<Vec<u8>>, on_data: Channel) {
     tokio::spawn(async move {
+        let mut last_send: Option<tokio::time::Instant> = None;
         while let Some(mut batch) = rx.recv().await {
+            // Busy: gather until an interval has passed since the last send.
+            if let Some(deadline) = last_send.map(|t| t + BATCH_INTERVAL) {
+                while batch.len() < COALESCE_MAX {
+                    match tokio::time::timeout_at(deadline, rx.recv()).await {
+                        Ok(Some(more)) => batch.extend_from_slice(&more),
+                        _ => break,
+                    }
+                }
+            }
             while batch.len() < COALESCE_MAX {
                 match rx.try_recv() {
                     Ok(more) => batch.extend_from_slice(&more),
@@ -84,6 +99,7 @@ fn forward_output(mut rx: mpsc::UnboundedReceiver<Vec<u8>>, on_data: Channel) {
             if on_data.send(InvokeResponseBody::Raw(batch)).is_err() {
                 break;
             }
+            last_send = Some(tokio::time::Instant::now());
         }
     });
 }
