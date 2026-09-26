@@ -525,5 +525,54 @@
   - Added test cases in `src/test/NewSessionModal.test.tsx` verifying session creation with new vault credentials (including enable secret) and session linking to existing vault entries.
   - 36/36 Vitest tests pass across 9 suites; `npm run build` succeeds with 0 TS errors (1.90s); 76/76 Cargo tests pass.
 
+### 36. FULL SFTP SUBSYSTEM STABILIZATION & REAL TRANSFERS
+* psftp Script Runner & Failure Detection (`crates/plinky-core/src/sftp/client.rs`):
+  - Fixed S1 blocker: `psftp` exits 0 for failed commands when fed through stdin. Re-engineered all SFTP operations (`list_dir`, `create_dir`, `remove_file`, `remove_dir`, `upload_file`, `download_file`) to write commands to a temporary batch script and run `psftp -batch -b <file>` without `-be`. Failures now properly exit with non-zero status and extract real error diagnostics.
+  - S2 & S3: Removed arbitrary timeouts on large file transfers; downloads write to `.plinky-part` temporary files and atomically rename upon completion, cleaning up on failure.
+  - Standardized error prefixes: `[password] ` when interactive authentication is needed; `[hostkey] ` when host key is not yet trusted.
+  - S4 & S5: Local directory listings and home directory resolution (`list_local_dir`, `get_local_home_dir`) with permission checking and path sanitization.
+* SFTP Dual-Pane Frontend (`src/components/sftp/SftpDualPane.tsx`):
+  - Real local filesystem exploration with breadcrumbs, folder traversal, search filtering, and cross-platform path handling.
+  - Real remote file listing and transfers via target-based bridge API (`sftpList`, `sftpUpload`, `sftpDownload`, `sftpMkdir`, `sftpRm`, `sftpRmdir`).
+  - Active session switcher in header allowing instant targeting of active terminal tabs or saved PuTTY sessions.
+  - Error diagnostic banner and inline password authentication prompt when server requires credentials. Automatically retries once vault is unlocked.
+  - Added test coverage in `src/test/SftpDualPane.test.tsx` (8 tests pass).
+
+### 37. VAULT SECURITY HARDENING & PROMPT DETECTION
+* Security Invariants & Audit Resolutions (V1-V4, E1-E3):
+  - V1: Eliminated caching of decrypted `VaultEntry` secrets in React component state. Created backend command `vault_send_secret(sessionId, key, field)` so credentials are written directly into the session PTY in Rust and never cross into JS memory.
+  - V2: Copy to clipboard fetches on-demand and immediately drops the secret without making unverified auto-clear claims.
+  - V3: Real Cisco IOS prompt detection (`src/services/promptDetect.ts`). Detects enable context (`enable`, `en`, `super` command or `>` device prompt) before `Password:` prompt, offering privileged EXEC password rather than login password.
+  - V4: Send items gated to active password prompts; chip explicitly displays the matched vault key identifier before sending.
+  - E1-E3: `NewSessionModal` properly awaits `vaultSetEntry` with clear user errors on failure; prevents dangling `PlinkyVaultKey` links; secrets are preserved without trimming.
+  - Backend vault entry lookup (`src-tauri/src/lib.rs`): Matches explicit `extra.PlinkyVaultKey`, then `session:<name>`, `<name>`, `<user>@<host>`, `<host>`.
+  - Added `VAULT_CHANGED_EVENT` notifying open tabs and views on vault create, unlock, lock, set, or delete.
+
+### 38. AUTOMATED LOGIN & PRIVILEGED EXEC ENABLE
+* Automated Authentication Protocol (`crates/plinky-core/src/transport/plink.rs`):
+  - SSH: Automatically provides passwords via ephemeral 0600 `-pwfile` temp file deleted after startup.
+  - Network Device Enable: Opt-in per session via `extra.PlinkyAutoEnable = "1"`, triggering strictly after typed `enable`/`en` command.
+  - Telnet / Serial Login: Opt-in per session via `extra.PlinkyAutoLogin = "1"`, triggering strictly on connection start.
+  - All automated prompts verified in `src/test/promptDetect.test.ts` (8 tests pass) and integration fixtures.
+
+### 39. PUTTY WINDOWS REGISTRY & UNIX FILENAME COMPATIBILITY
+* Windows Registry Native Storage (`crates/putty-compat/src/registry.rs`):
+  - On Windows, reads/writes PuTTY sessions and host keys directly in `HKCU\Software\SimonTatham\PuTTY\Sessions` and `SshHostKeys` matching PuTTY's native Win32 registry format.
+* Unix Session Filename Mapping (`crates/putty-compat/src/sessions.rs`):
+  - Session filenames match PuTTY 0.85 specification exactly (+ and @ kept literal; legacy `%40` and `%2B` filenames automatically migrated on first read; legacy files cleaned up on session delete).
+  - Added unit and integration tests covering session listing, roundtrip editing, and deletion.
+
+### 40. KEEPASS KDBX EXPORT & VAULT DESTRUCTION
+* KeePass Export (`crates/plinky-core/src/vault/keepass_export.rs`, `src/components/vault/VaultManager.tsx`):
+  - Added `vault_export_kdbx(masterPassword)` exporting all vault entries, login secrets, enable secrets, and metadata to encrypted KDBX4 database.
+  - Added "Export to KeePass" action and modal in VaultManager.
+* Vault Destruction with Dual Confirmation (`src/components/modals/SettingsModal.tsx`):
+  - Settings -> Credential Vault -> Delete Vault permanently destroys vault file with two progressive confirmation warnings and zeroization on drop.
+
+### 41. COMPREHENSIVE VERIFICATION & TEST METRICS
+* Rust Workspace: 99/99 automated tests pass across `plinky-core`, `putty-compat`, `plinky-desktop-lib`, and integration fixtures.
+* Frontend: 121/121 Vitest tests pass across 22 test suites (`npm test`).
+* Build: `npm run build` succeeds in 1.93s with 0 TypeScript compiler warnings or errors.
+
 
 

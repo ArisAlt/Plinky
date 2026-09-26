@@ -70,7 +70,8 @@ This document tracks the directory architecture, file structure, component relat
 │           │   └── client.rs             # PsftpClient process runner (list_dir, create_dir, remove_file)
 │           ├── vault/                    # Credential Vault (M4 Argon2id + AES-256-GCM + Zeroize)
 │           │   ├── mod.rs                # Vault struct, SecretString ZeroizeOnDrop/redaction, enable_secret & has_enable_secret
-│           │   └── storage.rs            # PLKV container format (36-byte header, AAD binding, atomic disk writes)
+│           │   ├── storage.rs            # PLKV container format (36-byte header, AAD binding, atomic disk writes)
+│           │   └── keepass_export.rs     # KeePass (.kdbx) export generator
 │           └── session/                  # Session Lifecycle & State Persistence (D3/D8/D9 state machine)
 │               ├── mod.rs
 │               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events
@@ -79,17 +80,18 @@ This document tracks the directory architecture, file structure, component relat
 │               └── shell_integration.rs  # Shell integration bootstrap (OSC 133 prompt markers + OSC 7 CWD reporting)
 │
 ├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings (IMPLEMENTED)
-│   ├── Cargo.toml                        # Workspace member: tauri, putty-compat, tokio
+│   ├── Cargo.toml                        # Workspace member: tauri, putty-compat, tokio, keepass, tauri-plugin-dialog
 │   ├── tauri.conf.json                   # Tauri v2 window, dimensions (1280x820), security, icons
 │   ├── build.rs                          # tauri_build entry
 │   ├── icons/                            # Desktop app icons (32x32, 128x128, 256x256, .ico, .icns)
 │   └── src/
 │       ├── main.rs                       # Desktop entrypoint & windows subsystem flags
 │       └── lib.rs                        # Tauri plugin setup & command registration:
-│                                         # list_putty_sessions, read_putty_session, write_putty_session,
+│                                         # list_putty_sessions, read_putty_session, write_putty_session, delete_putty_session,
 │                                         # list_putty_hostkeys, inspect_ppk, start/attach/write/resize/close,
-│                                         # sync channels & broadcast, sftp_list, sftp_mkdir, sftp_rm,
-│                                         # vault_*, list_serial_ports
+│                                         # sync channels & broadcast, sftp_list, sftp_mkdir, sftp_rm, sftp_rmdir,
+│                                         # sftp_upload, sftp_download, sftp_list_local, sftp_get_home_dir,
+│                                         # vault_*, vault_send_secret, vault_export_kdbx, vault_destroy, list_serial_ports
 │
 └── src/                                  # Frontend UI Workbench (TypeScript + React 19 + xterm.js)
     ├── package.json                      # Dependencies: React 19, @xterm/xterm, dockview, lucide-react, tailwindcss
@@ -105,16 +107,19 @@ This document tracks the directory architecture, file structure, component relat
     │   └── session.ts                    # TypeScript models (PuttySession, TerminalTab, SyncChannel, Sftp, Tunnels, VaultEntry)
     ├── services/
     │   ├── tauriBridge.ts                # Dual-mode IPC bridge (Tauri native + browser preview fallbacks)
+    │   ├── promptDetect.ts               # Terminal prompt detection (Cisco IOS enable prompt, password prompt, auto-login)
     │   ├── terminalManager.ts            # Terminal registry, broadcast sync router
     │   ├── layoutPersistence.ts          # R1-R3 compliant layout state auto-saving and fail-closed quarantine
     │   └── sessionMetadata.ts            # D4 compliant session folder and tags sidecar persistence service
-    ├── test/                             # Frontend Vitest Test Suites (36 tests across 9 suites)
+    ├── test/                             # Frontend Vitest Test Suites (121 tests across 22 suites)
     │   ├── setup.ts                      # jsdom and canvas test polyfills
     │   ├── layoutPersistence.test.ts     # R1-R3 layout state and quarantine tests
     │   ├── terminalManager.test.ts       # Multi-terminal channel routing tests
     │   ├── sessionMetadata.test.ts       # Session folder and user custom folders persistence tests
-    │   ├── VaultManager.test.tsx         # Vault Close X button and Escape key dismiss tests
-    │   ├── SettingsModal.test.tsx        # Preference modal rendering and change callbacks
+    │   ├── promptDetect.test.ts          # Cisco IOS enable, login password, and auto-login prompt tests
+    │   ├── SftpDualPane.test.tsx         # Real local/remote browsing, transfers, and password auth tests
+    │   ├── VaultManager.test.tsx         # Vault Close X button, KeePass export, and Escape key dismiss tests
+    │   ├── SettingsModal.test.tsx        # Preference modal rendering, delete vault 2-step confirmation tests
     │   ├── SessionExplorer.test.tsx      # Tree rendering, double-click connect, density toggle tests
     │   ├── TitleBar.test.tsx             # Quick Connect history and auto-complete dropdown tests
     │   ├── tauriBridge.sessions.test.ts  # PuTTY session normalization & metadata test suite
@@ -139,7 +144,7 @@ This document tracks the directory architecture, file structure, component relat
         │   └── SyncBroadcastBar.tsx      # Multi-session command broadcast bar (All, A, B, C, D)
         └── modals/
             ├── NewSessionModal.tsx       # PuTTY session modal with atomic persistence and edit capability
-            └── SettingsModal.tsx         # User preferences (fonts, cursor, copy on select, right-click action, cache clear)
+            └── SettingsModal.tsx         # User preferences (fonts, cursor, copy on select, right-click action, delete vault)
     └── styles/                           # Styling & Theme Variables
         ├── themes/                       # WindTerm Dark, PuTTY Classic, Dracula, Nord
 ```
