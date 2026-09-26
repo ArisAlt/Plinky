@@ -188,6 +188,7 @@ impl SessionRegistry {
                             let _ = tx.send(bytes);
                         }
                     }
+                    PreAuthAction::Suppress => {}
                     PreAuthAction::HostKeyPrompt(info) => {
                         // Priority 1 security fix: DO NOT forward raw chunk to terminal.
                         // Broadcast structured prompt event for native UI dialog.
@@ -339,6 +340,7 @@ impl SessionRegistry {
                             }
                         }
                     }
+                    PreAuthAction::Suppress => {}
                     PreAuthAction::HostKeyPrompt(info) => {
                         // Priority 1 security fix: DO NOT forward raw chunk to terminal.
                         // Broadcast structured prompt event for native UI dialog.
@@ -502,7 +504,9 @@ impl SessionRegistry {
             PromptAnswer::AcceptOnce => b"n\r",
             PromptAnswer::Reject => b"\r",
         };
-        session.transport.write(bytes)
+        session.transport.write(bytes)?;
+        session.state_machine.prompt_answered();
+        Ok(())
     }
 
     /// Writes raw input directly into session PTY master, for the user's OWN

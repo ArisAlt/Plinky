@@ -677,3 +677,79 @@ async fn test_type_secret_is_refused_while_a_host_key_is_unanswered() {
     assert!(res.is_err(), "a vault send must not answer a host-key prompt");
     registry.close_session("hk-sess").unwrap();
 }
+
+// Verbatim plink 0.85 host-key prompt tail for a given port.
+fn hostkey_prompt(port: u16) -> Vec<u8> {
+    format!(
+        "The host key is not cached for this server:\r\n  127.0.0.1 (port {port})\r\n\
+         The server's ssh-ed25519 key fingerprint is:\r\n  ssh-ed25519 255 SHA256:AAAA{port}\r\n\
+         Store key in cache? (y/n, Return cancels connection, i for more info) "
+    )
+    .into_bytes()
+}
+
+#[test]
+fn test_a_host_key_prompt_is_announced_once() {
+    // Against a real sshd one prompt was announced 92 times: every later
+    // chunk re-matched the prompt still sitting in the buffer.
+    let mut sm = PreAuthStateMachine::new();
+    assert!(matches!(sm.feed_bytes(&hostkey_prompt(22)), PreAuthAction::HostKeyPrompt(_)));
+    assert_eq!(sm.feed_bytes(b"more prompt text"), PreAuthAction::Suppress);
+    assert_eq!(sm.feed_bytes(b"\r\n"), PreAuthAction::Suppress);
+}
+
+#[test]
+fn test_after_answering_output_shows_and_a_second_host_key_prompt_is_its_own() {
+    // Through a jump host plink asks about the bastion's key, then the
+    // target's. The answered prompt used to stay in the buffer: output was
+    // hidden and the target's question came back with the bastion's port and
+    // fingerprint -- accepting it accepted a key the user never saw.
+    let mut sm = PreAuthStateMachine::new();
+    match sm.feed_bytes(&hostkey_prompt(50357)) {
+        PreAuthAction::HostKeyPrompt(p) => assert_eq!(p.port, 50357),
+        other => panic!("{other:?}"),
+    }
+    sm.prompt_answered();
+    assert_eq!(*sm.state(), SessionState::PreAuth);
+
+    match sm.feed_bytes(&hostkey_prompt(39477)) {
+        PreAuthAction::HostKeyPrompt(p) => {
+            assert_eq!(p.port, 39477, "the target's own prompt, not the bastion's");
+            assert!(p.fingerprint.contains("AAAA39477"));
+        }
+        other => panic!("{other:?}"),
+    }
+    sm.prompt_answered();
+
+    // A password prompt after the key is accepted reaches the terminal.
+    assert_eq!(sm.feed_bytes(b"citizenzero@127.0.0.1's password: "), PreAuthAction::Hold);
+}
+
+#[test]
+fn test_a_connection_dropped_while_the_dialog_is_open_closes_the_session() {
+    let mut sm = PreAuthStateMachine::new();
+    sm.feed_bytes(&hostkey_prompt(22));
+    assert!(matches!(
+        sm.feed_bytes(b"\r\nFATAL ERROR: Remote side unexpectedly closed network connection\r\n"),
+        PreAuthAction::Closed(_)
+    ));
+}
+
+#[tokio::test]
+async fn test_the_password_can_be_typed_after_the_host_key_is_accepted() {
+    // First connection to a password server: accept the key, then type the
+    // password. Typing stayed blocked ("awaiting host key trust approval")
+    // because answering never left HostKeyPending.
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    registry.create_local_session("pw-sess", "Test", None, 80, 24, tx).unwrap();
+    registry.reset_session_preauth("pw-sess").unwrap();
+    registry.simulate_preauth_bytes("pw-sess", &hostkey_prompt(22)).unwrap();
+    assert!(registry.write_input("pw-sess", b"x").is_err(), "blocked while the dialog is up");
+
+    registry.answer_prompt("pw-sess", PromptAnswer::AcceptAndStore).unwrap();
+    registry.simulate_preauth_bytes("pw-sess", b"user@host's password: ").unwrap();
+    registry.write_input("pw-sess", b"secret\r").expect("the user can type the password");
+    assert!(registry.answer_prompt("pw-sess", PromptAnswer::AcceptAndStore).is_err(), "nothing left to answer");
+    registry.close_session("pw-sess").unwrap();
+}
