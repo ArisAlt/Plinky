@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Search, Terminal, Clock, Server, Plus } from 'lucide-react';
 import { PuttySession } from '../../types/session';
 
@@ -33,6 +33,13 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Opened from low on the screen (an empty grid cell) it would run off the
+  // bottom: keep it inside the window.
+  const [top, setTop] = useState(anchor.top);
+  useLayoutEffect(() => {
+    const h = rootRef.current?.offsetHeight ?? 0;
+    setTop(Math.max(8, Math.min(anchor.top, window.innerHeight - h - 8)));
+  }, [anchor.top]);
 
   const items = useMemo<Item[]>(() => {
     const q = query.trim().toLowerCase();
@@ -131,7 +138,7 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
       ref={rootRef}
       role="dialog"
       aria-label="Open a tab"
-      style={{ top: anchor.top, left: Math.max(8, Math.min(anchor.left, window.innerWidth - 296)) }}
+      style={{ top, left: Math.max(8, Math.min(anchor.left, window.innerWidth - 296)) }}
       className="fixed z-50 w-72 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl p-1.5 text-xs"
       onKeyDown={onKeyDown}
     >
