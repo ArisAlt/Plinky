@@ -107,6 +107,15 @@ fn trust_host_key(putty_dir: &Path, port: u16, key: &Path) {
 
 #[tokio::test]
 async fn test_sftp_operations_report_real_success_and_real_failure() {
+    // Windows PuTTYgen is a GUI program: `puttygen -V` below opens a window
+    // and waits for someone to close it. On CI's Windows runner nobody did,
+    // and the job hung until GitHub killed it after 6 hours -- every run
+    // from 07:32 on 2026-09-26. The fixture needs Unix sshd and command-line
+    // puttygen anyway.
+    if cfg!(windows) {
+        eprintln!("skipping: needs Unix sshd and command-line puttygen");
+        return;
+    }
     if !tool("psftp", "-V") || !tool("puttygen", "-V") || !tool("ssh-keygen", "-?") {
         eprintln!("skipping: PuTTY tools or ssh-keygen missing");
         return;
