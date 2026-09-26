@@ -174,7 +174,7 @@ describe('NewSessionModal Component', () => {
         name: 'Internal-DB',
         hostname: '10.0.1.50',
         extra: expect.objectContaining({
-          ProxyMethod: '5',
+          ProxyMethod: '6', // PuTTY's SSH proxy; '5' (local command) never logged in
           ProxyHost: 'jump.corp.com',
           ProxyPort: '22',
           ProxyUsername: 'sec_admin',
@@ -182,6 +182,7 @@ describe('NewSessionModal Component', () => {
         }),
       })
     );
+    expect(onSave.mock.calls[0][0].extra.ProxyTelnetCommand).toBeUndefined();
   });
   // An existing serial session as the owner has it: saved by PuTTY, line in
   // extra, the adapter possibly unplugged.
@@ -421,5 +422,36 @@ describe('NewSessionModal Component', () => {
     await waitFor(() => expect(onSave2).toHaveBeenCalled());
     expect(onSave2.mock.calls[0][0].extra.PlinkyAutoLogin).toBe('1');
     expect(onSave2.mock.calls[0][0].extra.PlinkyAutoEnable).toBeUndefined();
+  });
+
+  it('stores a saved bastion session by name, so its own key and user apply', async () => {
+    const onSave = vi.fn();
+    const bastion = { name: 'Bastion-1', hostname: '203.0.113.5', port: 2222, protocol: 'SSH' as const, username: 'jumper' };
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} savedSessions={[bastion]} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Inner' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.9' } });
+    fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
+    fireEvent.change(screen.getByDisplayValue(/Select a saved bastion host/i), { target: { value: 'Bastion-1' } });
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const extra = onSave.mock.calls[0][0].extra;
+    expect(extra.ProxyMethod).toBe('6');
+    expect(extra.ProxyHost).toBe('Bastion-1');
+    expect(extra.ProxyUsername).toBeUndefined();
+  });
+
+  it("leaves a PuTTY HTTP proxy alone: it isn't a jump host and isn't wiped on save", async () => {
+    // Any ProxyHost used to count as a jump host, and saving without one
+    // deleted every Proxy* key -- a proxy set up in real PuTTY was lost.
+    const onSave = vi.fn();
+    const viaHttpProxy = {
+      name: 'Behind-Proxy', hostname: '198.51.100.7', port: 22, protocol: 'SSH' as const,
+      extra: { ProxyMethod: '3', ProxyHost: 'proxy.corp', ProxyPort: '3128', ProxyUsername: 'me' },
+    };
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} editingSession={viaHttpProxy} />);
+    expect((screen.getByLabelText(/Connect through SSH Jump Host/i) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].extra).toMatchObject({ ProxyMethod: '3', ProxyHost: 'proxy.corp', ProxyPort: '3128', ProxyUsername: 'me' });
   });
 });

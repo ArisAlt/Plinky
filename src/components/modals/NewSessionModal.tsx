@@ -65,6 +65,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [jumpHost, setJumpHost] = useState('');
   const [jumpPort, setJumpPort] = useState('22');
   const [jumpUsername, setJumpUsername] = useState('');
+  // A saved session picked as the bastion: stored by name, so plink uses
+  // that session's own host, port, username and key file (tested against a
+  // real bastion/target pair with no agent running).
+  const [jumpPreset, setJumpPreset] = useState<string | null>(null);
 
   const refreshPorts = async () => {
     setIsRefreshingPorts(true);
@@ -110,11 +114,16 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setSerialFlowControl(extra.SerialFlowControl || '1');
 
       // Load jump host settings
-      const hasJumpHost = extra.ProxyMethod === '5' || extra.PlinkyJumpHost === '1' || !!extra.ProxyHost;
+      // Only Plinky's own jump host (or PuTTY's SSH proxy type) counts. Any
+      // ProxyHost used to, so an HTTP/SOCKS proxy set up in real PuTTY showed
+      // up here and was rewritten as a jump host on save.
+      const hasJumpHost = extra.PlinkyJumpHost === '1' || extra.ProxyMethod === '6';
+      const preset = hasJumpHost ? savedSessions.find(s => s.name === extra.ProxyHost) : undefined;
       setEnableJumpHost(hasJumpHost);
-      setJumpHost(extra.ProxyHost || '');
-      setJumpPort(extra.ProxyPort || '22');
-      setJumpUsername(extra.ProxyUsername || '');
+      setJumpPreset(preset ? preset.name : null);
+      setJumpHost(hasJumpHost ? (preset ? preset.hostname : extra.ProxyHost || '') : '');
+      setJumpPort(hasJumpHost ? (preset ? String(preset.port || 22) : extra.ProxyPort || '22') : '22');
+      setJumpUsername(hasJumpHost ? (preset ? preset.username || '' : extra.ProxyUsername || '') : '');
 
       // Load vault credentials key
       if (extra.PlinkyVaultKey) {
@@ -154,6 +163,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setJumpHost('');
       setJumpPort('22');
       setJumpUsername('');
+      setJumpPreset(null);
       setUseVault(false);
       setVaultMode('new');
       setSelectedVaultKey('');
@@ -218,14 +228,22 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       delete extra.SerialParity;
       delete extra.SerialFlowControl;
 
-      if (protocol === 'SSH' && enableJumpHost && jumpHost.trim()) {
-        extra.ProxyMethod = '5';
-        extra.ProxyHost = jumpHost.trim();
+      // PuTTY's own SSH proxy (ProxyMethod 6): plink connects to the bastion
+      // itself and forwards to the target, asking about each host key in
+      // turn. The previous local-command proxy (5) never worked: it used
+      // "%proxyuser", which PuTTY doesn't substitute (it's %user), so every
+      // bastion login was as the literal user "%proxyuser".
+      const wasJumpHost = editingSession?.extra?.PlinkyJumpHost === '1' || editingSession?.extra?.ProxyMethod === '6';
+      if (protocol === 'SSH' && enableJumpHost && (jumpPreset || jumpHost.trim())) {
+        extra.ProxyMethod = '6';
+        extra.ProxyHost = jumpPreset ?? jumpHost.trim();
         extra.ProxyPort = jumpPort.trim() || '22';
-        extra.ProxyUsername = jumpUsername.trim() || '';
-        extra.ProxyTelnetCommand = 'plink -agent -P %proxyport %proxyuser@%proxyhost -nc %host:%port';
+        if (jumpPreset) delete extra.ProxyUsername; // the saved session's own user applies
+        else extra.ProxyUsername = jumpUsername.trim();
+        delete extra.ProxyTelnetCommand;
         extra.PlinkyJumpHost = '1';
-      } else {
+      } else if (wasJumpHost) {
+        // Only undo Plinky's own jump host; a PuTTY proxy stays as it was.
         delete extra.ProxyMethod;
         delete extra.ProxyHost;
         delete extra.ProxyPort;
@@ -641,12 +659,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         onChange={e => {
                           const sess = savedSessions.find(s => s.name === e.target.value);
                           if (sess) {
+                            setJumpPreset(sess.name);
                             setJumpHost(sess.hostname);
                             setJumpPort(String(sess.port || 22));
-                            if (sess.username) setJumpUsername(sess.username);
+                            setJumpUsername(sess.username || '');
                           }
                         }}
-                        defaultValue=""
+                        value={jumpPreset ?? ''}
                         className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-sky-500"
                       >
                         <option value="" disabled>-- Select a saved bastion host --</option>
@@ -667,7 +686,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         required={enableJumpHost}
                         placeholder="bastion.internal or jump.corp.com"
                         value={jumpHost}
-                        onChange={e => setJumpHost(e.target.value)}
+                        onChange={e => { setJumpPreset(null); setJumpHost(e.target.value); }}
                         className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
                       />
                     </div>
@@ -676,7 +695,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       <input
                         type="number"
                         value={jumpPort}
-                        onChange={e => setJumpPort(e.target.value)}
+                        onChange={e => { setJumpPreset(null); setJumpPort(e.target.value); }}
                         className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
                       />
                     </div>
@@ -688,7 +707,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       type="text"
                       placeholder="bastion_user (or leave blank if same)"
                       value={jumpUsername}
-                      onChange={e => setJumpUsername(e.target.value)}
+                      onChange={e => { setJumpPreset(null); setJumpUsername(e.target.value); }}
                       className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500"
                     />
                   </div>
