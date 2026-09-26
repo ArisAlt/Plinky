@@ -12,6 +12,9 @@ import { VaultManager } from './components/vault/VaultManager';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
+import { TabLauncher } from './components/layout/TabLauncher';
+import { TabTitle } from './components/layout/TabTitle';
+import { getRecentSessions, recordRecentSession } from './services/recentSessions';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
@@ -34,6 +37,11 @@ export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
+  // Tab bar (T-011): the "+" launcher, renaming, and a tab's right-click menu.
+  const [launcherAnchor, setLauncherAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [recentNames, setRecentNames] = useState<string[]>(() => getRecentSessions());
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const [tabMenu, setTabMenu] = useState<{ tabId: string; x: number; y: number } | null>(null);
   const [editingSession, setEditingSession] = useState<PuttySession | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
@@ -156,6 +164,8 @@ export const App: React.FC = () => {
     const title = existingMatches.length > 0
       ? `${session.name} (${existingMatches.length + 1})`
       : session.name;
+    recordRecentSession(session.name);
+    setRecentNames(getRecentSessions());
 
     const newTab: TerminalTab = {
       id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -172,6 +182,24 @@ export const App: React.FC = () => {
       vaultKey: session.extra?.PlinkyVaultKey,
     };
 
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    setActiveView('sessions');
+  };
+
+  const handleOpenLocalShell = () => {
+    const open = tabs.filter(t => t.sessionName === 'Local Shell').length;
+    const newTab: TerminalTab = {
+      id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      title: open > 0 ? `Local Shell (${open + 1})` : 'Local Shell',
+      sessionName: 'Local Shell',
+      syncChannel: 'none',
+      status: 'connecting',
+      freeTypeMode: false,
+      activeHighlighting: true,
+      hostname: '',
+      port: 0,
+    };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
     setActiveView('sessions');
@@ -214,8 +242,8 @@ export const App: React.FC = () => {
     setActiveView(view);
   };
 
-  const handleCloseTab = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCloseTab = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     // Closing a tab is the only thing that ends its backend session --
     // TerminalView unmounting (tab switch, split re-render) just detaches.
     closeTerminalSession(id);
@@ -375,6 +403,11 @@ export const App: React.FC = () => {
                       <div
                         key={tab.id}
                         onClick={() => setActiveTabId(tab.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setTabMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
+                        }}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${
                           isActive
                             ? 'bg-plinky-950 border-plinky-800 text-sky-300 font-medium shadow-xs'
@@ -382,7 +415,13 @@ export const App: React.FC = () => {
                         }`}
                       >
                         {renderTabStatusIcon(tab, isActive)}
-                        <span className="truncate flex-1">{tab.title}</span>
+                        <TabTitle
+                          title={tab.title}
+                          editing={renamingTabId === tab.id}
+                          onStartEdit={() => setRenamingTabId(tab.id)}
+                          onCommit={(title) => { handleUpdateTab(tab.id, { title }); setRenamingTabId(null); }}
+                          onCancel={() => setRenamingTabId(null)}
+                        />
 
                         {/* Channel Badge Indicator */}
                         {tab.syncChannel !== 'none' && (
@@ -402,16 +441,53 @@ export const App: React.FC = () => {
                     );
                   })}
 
-                  {/* Add New Quick Tab Button */}
+                  {/* "+": open a tab from a menu. It used to open the first
+                      saved session in the list, whichever that was. */}
                   <button
-                    onClick={() => {
-                      if (sessions.length > 0) handleConnectSession(sessions[0]);
+                    onClick={(e) => {
+                      if (launcherAnchor) { setLauncherAnchor(null); return; }
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setLauncherAnchor({ top: r.bottom + 4, left: r.left });
                     }}
-                    title="Open Another Session Tab"
+                    title="Open a tab: local shell, recent or saved session, or a new one"
+                    aria-label="Open a tab"
+                    aria-expanded={!!launcherAnchor}
                     className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-plinky-800 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
+                  {launcherAnchor && (
+                    <TabLauncher
+                      anchor={launcherAnchor}
+                      sessions={sessions}
+                      recentNames={recentNames}
+                      onOpenSession={(s) => handleConnectSession(s, true)}
+                      onOpenLocalShell={handleOpenLocalShell}
+                      onNewSession={() => setIsNewSessionOpen(true)}
+                      onClose={() => setLauncherAnchor(null)}
+                    />
+                  )}
+                  {tabMenu && (() => {
+                    const menuTab = tabs.find(t => t.id === tabMenu.tabId);
+                    if (!menuTab) return null;
+                    const item = 'w-full text-left px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 transition';
+                    return (
+                      <div className="fixed inset-0 z-50" onMouseDown={() => setTabMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTabMenu(null); }}>
+                        <div
+                          role="menu"
+                          aria-label={`Tab ${menuTab.title}`}
+                          style={{ top: tabMenu.y, left: Math.min(tabMenu.x, window.innerWidth - 170) }}
+                          className="fixed w-40 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl py-1 text-xs text-slate-300"
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <button role="menuitem" className={item} onClick={() => { setTabMenu(null); setRenamingTabId(menuTab.id); }}>Rename</button>
+                          <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleDuplicateTab(menuTab); }}>Duplicate</button>
+                          <div className="border-t border-plinky-800 my-1" />
+                          <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleCloseTab(menuTab.id); }}>Close</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Right Tab Controls: Split & Multi-Pane Layout Selector */}
