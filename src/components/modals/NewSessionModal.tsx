@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, Protocol } from '../../types/session';
 import { 
   Terminal, X, Save, Key, Folder, Tag, Cpu, RefreshCw, 
-  Shield, Server, Laptop, ArrowRight, Lock 
+  Shield, Server, Laptop, ArrowRight, Lock, Trash2
 } from 'lucide-react';
 import { 
   listSerialPorts, DetectedSerialPort, 
@@ -102,6 +102,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // PuTTY session. Blank on edit: blank keeps the stored one.
   const [jumpPassword, setJumpPassword] = useState('');
   const [jumpVaultKey, setJumpVaultKey] = useState<string | null>(null);
+  const pressedOnBackdrop = useRef(false);
+  // The session being edited already goes through a jump host: offer to
+  // remove it, and say what saving will do once it's off.
+  const hadJumpHost = editingSession?.extra?.PlinkyJumpHost === '1' || editingSession?.extra?.ProxyMethod === '6';
 
   const refreshPorts = async () => {
     setIsRefreshingPorts(true);
@@ -445,9 +449,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const tab: SessionTab = visibleTabs.some(t => t.id === pickedTab) ? pickedTab : 'general';
 
   return (
-    <div 
+    <div
+      // Only a click that starts AND ends on the backdrop closes the dialog.
+      // A drag that ends outside (selecting text in a field) used to close it,
+      // losing every edit.
+      onMouseDown={(e) => { pressedOnBackdrop.current = e.target === e.currentTarget; }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && pressedOnBackdrop.current) onClose();
+        pressedOnBackdrop.current = false;
       }}
       className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
     >
@@ -501,7 +510,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           }}
           className="flex-1 flex flex-col overflow-hidden"
         >
-          <div className="p-4 overflow-y-auto flex-1">
+          {/* A fixed floor under the body: unticking the jump host shrank the
+              dialog from ~460 to ~210 px and re-centred it, so the next click
+              aimed at Save landed on the backdrop and closed the dialog
+              without saving (owner report). 330 px is the General tab. */}
+          <div className="p-4 overflow-y-auto flex-1 min-h-[330px]">
             <div data-tab="general" hidden={tab !== 'general'} className="space-y-3">
               {/* Session Name */}
               <div className="space-y-1">
@@ -918,7 +931,29 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         <span>Connect through SSH Jump Host (Gateway / Bastion)</span>
                       </span>
                     </label>
+                    {hadJumpHost && enableJumpHost && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEnableJumpHost(false);
+                          setJumpPreset(null);
+                          setJumpHost('');
+                          setJumpPort('22');
+                          setJumpUsername('');
+                          setJumpPassword('');
+                        }}
+                        className="flex items-center space-x-1 px-2 py-0.5 rounded border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 text-[11px] shrink-0"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Jump Host</span>
+                      </button>
+                    )}
                   </div>
+                  {hadJumpHost && !enableJumpHost && (
+                    <p role="status" className="text-amber-300/90 text-[11px]">
+                      The jump host will be removed when you save. This session will then connect directly.
+                    </p>
+                  )}
 
                   {enableJumpHost && (
                     <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">

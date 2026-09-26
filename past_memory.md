@@ -626,3 +626,8 @@
 * rc.1 (4c6235c): grey-window fix + jump host login. Verified: published as pre-release, 7 assets, AppImage has 0 libwayland-* files.
 * CI broke on 6e781fc (logging): test used bash `$((6*7))`; Windows local shell is cmd.exe. Fixed in 83708d8 (`%COMSPEC:~0,0%` on Windows). Same CI log showed printable logs joining lines under ConPTY (it moves the cursor, CSI H/f/E, instead of CR LF) -> filter now ends the line on a cursor move after text. CI green on 83708d8.
 * rc.2 dispatched from master at 83708d8: + live disk logging, + user-facing README.
+
+### 49. REMOVING A JUMP HOST CLOSED THE EDIT DIALOG (owner report, 2026-09-26)
+* Repro (GUI): edit a session whose jump host is a saved bastion, untick the jump host -> the dialog shrank ~460 -> ~210 px and re-centred; the click meant for Save hit the backdrop -> dialog closed, nothing saved (ProxyHost=Bastion still in the file).
+* Fix (NewSessionModal): body `min-h-[330px]` (General tab height) so the dialog keeps its size; backdrop closes only if the press also started on it (a drag out of a field closed it too); "Remove Jump Host" button when editing a session that has one, plus a notice that saving removes it. Saving clears ProxyMethod/Host/Port/Username, PlinkyJumpHost, PlinkyJumpVaultKey.
+* Verified in the GUI: button -> notice, dialog same size -> Save -> Router file has no Proxy*/PlinkyJump* keys. 2 tests. The vault entry jump:<session> is left in the vault (deletable from the Vault view).
