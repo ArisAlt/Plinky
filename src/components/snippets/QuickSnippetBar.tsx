@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { SnippetItem } from '../../types/session';
+import { loadSnippets, saveSnippets, snippetParams, SnippetParam } from '../../services/snippets';
+import { SnippetParamsDialog } from './SnippetParamsDialog';
 import { 
   Play, 
   Plus, 
@@ -14,23 +16,13 @@ interface QuickSnippetBarProps {
   activeSessionName?: string;
 }
 
-const DEFAULT_SNIPPETS: SnippetItem[] = [
-  { id: '1', name: 'Docker PS', command: 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"\n', category: 'Docker' },
-  { id: '2', name: 'Docker Stats', command: 'docker stats --no-stream\n', category: 'Docker' },
-  { id: '3', name: 'Disk Usage', command: 'df -h\n', category: 'System' },
-  { id: '4', name: 'Memory', command: 'free -h\n', category: 'System' },
-  { id: '5', name: 'System Load', command: 'uptime\n', category: 'System' },
-  { id: '6', name: 'Open Ports', command: 'ss -tulpn\n', category: 'Network' },
-  { id: '7', name: 'Recent Logs', command: 'journalctl -xe --no-pager -n 50\n', category: 'Logs' },
-  { id: '8', name: 'Tail Syslog', command: 'tail -f /var/log/syslog\n', category: 'Logs' },
-  { id: '9', name: 'Git Status', command: 'git status -sb\n', category: 'Custom' },
-];
-
 export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({ 
   onExecuteSnippet,
   activeSessionName
 }) => {
-  const [snippets, setSnippets] = useState<SnippetItem[]>(DEFAULT_SNIPPETS);
+  // Kept across restarts (T-013); they used to reset every launch.
+  const [snippets, setSnippets] = useState<SnippetItem[]>(loadSnippets);
+  const [pending, setPending] = useState<{ snippet: SnippetItem; params: SnippetParam[] } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -39,6 +31,23 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
   const [newCategory, setNewCategory] = useState<SnippetItem['category']>('Custom');
 
   const categories = ['All', 'System', 'Docker', 'Network', 'Logs', 'Custom'];
+
+  // Saved only when the user changes the list, so a first run doesn't pin
+  // today's defaults into storage.
+  const updateSnippets = (update: (prev: SnippetItem[]) => SnippetItem[]) => {
+    setSnippets(prev => {
+      const next = update(prev);
+      saveSnippets(next);
+      return next;
+    });
+  };
+
+  // A snippet with ${PARAM}s asks for them first.
+  const runSnippet = (snippet: SnippetItem) => {
+    const params = snippetParams(snippet.command);
+    if (params.length === 0) onExecuteSnippet(snippet.command);
+    else setPending({ snippet, params });
+  };
 
   const filteredSnippets = selectedCategory === 'All'
     ? snippets
@@ -56,7 +65,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
       category: newCategory,
     };
 
-    setSnippets(prev => [...prev, newSnippet]);
+    updateSnippets(prev => [...prev, newSnippet]);
     setNewName('');
     setNewCommand('');
     setIsAddModalOpen(false);
@@ -64,7 +73,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
 
   const handleDeleteSnippet = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSnippets(prev => prev.filter(s => s.id !== id));
+    updateSnippets(prev => prev.filter(s => s.id !== id));
   };
 
   const getCategoryColor = (cat: SnippetItem['category']) => {
@@ -96,7 +105,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             {snippets.slice(0, 5).map(snippet => (
               <button
                 key={snippet.id}
-                onClick={() => onExecuteSnippet(snippet.command)}
+                onClick={() => runSnippet(snippet)}
                 title={`Run: ${snippet.command.trim()} on ${activeSessionName || 'active terminal'}`}
                 className="group flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-850 hover:bg-sky-600/30 border border-plinky-750 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-200 transition font-mono whitespace-nowrap"
               >
@@ -145,7 +154,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             {filteredSnippets.map(snippet => (
               <div
                 key={snippet.id}
-                onClick={() => onExecuteSnippet(snippet.command)}
+                onClick={() => runSnippet(snippet)}
                 title={`Execute: ${snippet.command.trim()}`}
                 className="group relative flex flex-col p-2 rounded-lg bg-plinky-900 border border-plinky-800 hover:border-sky-500/50 hover:bg-plinky-850 cursor-pointer transition shadow-xs"
               >
@@ -171,6 +180,16 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {pending && (
+        <SnippetParamsDialog
+          snippet={pending.snippet}
+          params={pending.params}
+          target={activeSessionName}
+          onRun={(command) => { setPending(null); onExecuteSnippet(command); }}
+          onCancel={() => setPending(null)}
+        />
       )}
 
       {/* Add Custom Snippet Modal */}
@@ -222,12 +241,17 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                 <label className="block text-[11px] text-slate-400 mb-1">Command String</label>
                 <textarea
                   rows={3}
-                  placeholder="e.g. sudo systemctl restart nginx"
+                  placeholder="e.g. sudo systemctl restart ${SERVICE:nginx}"
                   value={newCommand}
                   onChange={(e) => setNewCommand(e.target.value)}
                   className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden focus:border-sky-500"
                   required
                 />
+                <p className="mt-1 text-[10px] text-slate-500 leading-relaxed">
+                  <code className="text-slate-400">{'${NAME}'}</code> asks for a value each time it runs,{' '}
+                  <code className="text-slate-400">{'${NAME:default}'}</code> pre-fills it. Values aren't saved.
+                  For a shell variable write <code className="text-slate-400">{'$${HOME}'}</code>.
+                </p>
               </div>
 
               <div className="flex justify-end space-x-2 pt-2 border-t border-plinky-800">
