@@ -7,6 +7,8 @@ const mockVaultListEntriesMeta = vi.fn().mockResolvedValue([
   { id: 'router-cisco-core', has_enable_secret: true },
 ]);
 const mockVaultSetEntry = vi.fn().mockResolvedValue(true);
+const mockVaultIsInitialized = vi.fn().mockResolvedValue(true);
+const mockVaultIsUnlocked = vi.fn().mockResolvedValue(true);
 
 vi.mock('../services/tauriBridge', () => ({
   VAULT_CHANGED_EVENT: 'plinky:vault-changed',
@@ -33,6 +35,8 @@ vi.mock('../services/tauriBridge', () => ({
   ]),
   vaultListEntriesMeta: (...args: any[]) => mockVaultListEntriesMeta(...args),
   vaultSetEntry: (...args: any[]) => mockVaultSetEntry(...args),
+  vaultIsInitialized: (...args: any[]) => mockVaultIsInitialized(...args),
+  vaultIsUnlocked: (...args: any[]) => mockVaultIsUnlocked(...args),
 }));
 
 describe('NewSessionModal Component', () => {
@@ -602,3 +606,51 @@ describe('a new session from a folder (T-010)', () => {
     expect((screen.getByPlaceholderText('e.g. Staging or Network') as HTMLInputElement).value).toBe('Saved Sessions');
   });
 });
+
+describe('saving a password when there is no vault yet', () => {
+  const fillSession = () => {
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'core-sw1' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.5' } });
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
+    fireEvent.click(screen.getByLabelText(/Save credentials in Encrypted Vault/i));
+  };
+
+  it('says to create a vault first, up front and on save, and saves nothing', async () => {
+    // First run: the owner ticked the box, typed a password, pressed Save --
+    // and got "Vault is locked ... unlock the vault" for a vault that didn't exist.
+    mockVaultIsInitialized.mockResolvedValue(false);
+    mockVaultIsUnlocked.mockResolvedValue(false);
+    mockVaultSetEntry.mockClear();
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fillSession();
+    expect((await screen.findByRole('status')).textContent).toMatch(/No vault yet\. Create one first/);
+
+    fireEvent.change(screen.getByPlaceholderText('Session login password...'), { target: { value: 's3cret' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }));
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/There is no vault yet/);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(mockVaultSetEntry).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab', { name: /Credentials & Vault/i }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('says to unlock a vault that exists but is locked', async () => {
+    mockVaultIsInitialized.mockResolvedValue(true);
+    mockVaultIsUnlocked.mockResolvedValue(false);
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fillSession();
+    expect((await screen.findByRole('status')).textContent).toMatch(/The vault is locked/);
+  });
+
+  it('says nothing when the vault is ready', async () => {
+    mockVaultIsInitialized.mockResolvedValue(true);
+    mockVaultIsUnlocked.mockResolvedValue(true);
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fillSession();
+    await waitFor(() => expect(mockVaultIsUnlocked).toHaveBeenCalled());
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+

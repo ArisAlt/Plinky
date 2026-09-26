@@ -7,11 +7,15 @@ import {
 import { 
   listSerialPorts, DetectedSerialPort, 
   vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry,
+  vaultIsInitialized, vaultIsUnlocked,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
 
 type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
+
+const NO_VAULT_MESSAGE =
+  'There is no vault yet, so the password was not saved. Create one first: Vault in the top bar, set a master password, then save this session again.';
 
 interface NewSessionModalProps {
   isOpen: boolean;
@@ -50,6 +54,18 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [isNetworkDevice, setIsNetworkDevice] = useState(false);
   const [vaultEnablePassword, setVaultEnablePassword] = useState('');
   const [vaultSaveError, setVaultSaveError] = useState<string | null>(null);
+  // Whether there is a vault to save into. On a first run there is none:
+  // saving a password failed with "Vault is locked ... unlock the vault",
+  // pointing at something that didn't exist yet.
+  const [vaultState, setVaultState] = useState<'unknown' | 'none' | 'locked' | 'ready'>('unknown');
+  const checkVault = async () => {
+    try {
+      if (!(await vaultIsInitialized())) setVaultState('none');
+      else setVaultState((await vaultIsUnlocked()) ? 'ready' : 'locked');
+    } catch {
+      setVaultState('unknown');
+    }
+  };
   // Automatic answers from the vault (owner decision: opt-in per session).
   const [autoEnable, setAutoEnable] = useState(false);
   const [autoLogin, setAutoLogin] = useState(false);
@@ -106,6 +122,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     refreshPorts();
     setVaultSaveError(null);
     vaultListEntriesMeta().then(setVaultEntries).catch(() => {});
+    void checkVault();
     if (editingSession) {
       setName(editingSession.name);
       setHostname(editingSession.hostname);
@@ -201,7 +218,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // Unlocking the vault with this dialog open fills "Link to existing".
   useEffect(() => {
     if (!isOpen) return;
-    const reload = () => { vaultListEntriesMeta().then(setVaultEntries).catch(() => setVaultEntries([])); };
+    const reload = () => {
+      vaultListEntriesMeta().then(setVaultEntries).catch(() => setVaultEntries([]));
+      void checkVault();
+    };
     window.addEventListener(VAULT_CHANGED_EVENT, reload);
     return () => window.removeEventListener(VAULT_CHANGED_EVENT, reload);
   }, [isOpen]);
@@ -281,6 +301,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         extra.PlinkyVaultKey = selectedVaultKey;
       } else if (vaultMode === 'new') {
         const finalKeyId = vaultKeyId.trim() || `session:${name.trim()}`;
+        if (vaultPassword && vaultState === 'none') {
+          setVaultSaveError(NO_VAULT_MESSAGE);
+          setTab('credentials');
+          return;
+        }
         if (vaultPassword) {
           const now = Math.floor(Date.now() / 1000);
           const entry: VaultEntry = {
@@ -300,7 +325,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           try {
             await vaultSetEntry(entry);
           } catch (err) {
-            setVaultSaveError(`The password wasn't saved: ${String(err)}. Unlock the vault (Vault in the top bar), then save again.`);
+            const noVault = !(await vaultIsInitialized().catch(() => true));
+            setVaultSaveError(noVault
+              ? NO_VAULT_MESSAGE
+              : `The password wasn't saved: ${String(err)}. Unlock the vault (Vault in the top bar), then save again.`);
+            setTab('credentials');
             return;
           }
           extra.PlinkyVaultKey = finalKeyId;
@@ -309,6 +338,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         } else {
           // Linking to an entry that doesn't exist left a dangling key.
           setVaultSaveError('Enter the password to save in the vault, or untick "Save Credentials in Encrypted Vault".');
+          setTab('credentials');
           return;
         }
       }
@@ -669,6 +699,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                     </span>
                   )}
                 </div>
+                {useVault && (vaultState === 'none' || vaultState === 'locked') && (
+                  <p role="status" className="p-2 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 text-[11px]">
+                    {vaultState === 'none'
+                      ? 'No vault yet. Create one first: Vault in the top bar, then set a master password. Until then a password here can\'t be saved.'
+                      : 'The vault is locked. Unlock it (Vault in the top bar) to save or link a password here.'}
+                  </p>
+                )}
 
                 {useVault && (
                   <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
