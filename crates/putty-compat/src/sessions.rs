@@ -50,11 +50,17 @@ impl Default for PuttySession {
     }
 }
 
+/// The file name PuTTY for Unix saves session `name` under
+/// (`make_session_filename`, PuTTY 0.85 `unix/storage.c`): letters, digits
+/// and `+ - . @ _` stay literal, every other byte becomes `%XX`, and an
+/// empty name is "Default Settings". It has to match byte for byte --
+/// `plink -load` only opens the file under exactly this name.
 pub fn escape_session_name(name: &str) -> String {
+    let name = if name.is_empty() { "Default Settings" } else { name };
     let mut out = String::with_capacity(name.len() * 3);
     for b in name.as_bytes() {
         match *b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' => {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'-' | b'.' | b'@' | b'_' => {
                 out.push(*b as char);
             }
             byte => {
@@ -63,6 +69,37 @@ pub fn escape_session_name(name: &str) -> String {
         }
     }
     out
+}
+
+/// The file name Plinky used before it matched PuTTY: `+` and `@` were
+/// escaped as well. Only looked for, so those sessions aren't lost.
+fn legacy_session_filename(name: &str) -> String {
+    escape_session_name(name)
+        .replace('+', "%2B")
+        .replace('@', "%40")
+}
+
+/// The file session `name` is saved in, or None if it isn't saved.
+///
+/// A session only found under its legacy file name is moved to PuTTY's
+/// here: Plinky would otherwise list it and hand `plink -load` a name plink
+/// can't open, a terminal connected to nothing. The move is a hard link
+/// then an unlink, so it never replaces a file PuTTY saved meanwhile; where
+/// it can't be made, the legacy file is read as it is.
+fn find_session_file(dir: &Path, name: &str) -> Option<PathBuf> {
+    let path = dir.join(escape_session_name(name));
+    if path.is_file() {
+        return Some(path);
+    }
+    let legacy = dir.join(legacy_session_filename(name));
+    if legacy == path || !legacy.is_file() {
+        return None;
+    }
+    if fs::hard_link(&legacy, &path).is_ok() {
+        let _ = fs::remove_file(&legacy);
+        return Some(path);
+    }
+    Some(legacy)
 }
 
 pub fn unescape_session_name(filename: &str) -> String {
@@ -145,7 +182,20 @@ pub fn list_sessions_in(dir: &Path) -> Result<Vec<SessionRef>> {
         }
     }
 
-    sessions.sort_by(|a, b| a.name.cmp(&b.name));
+    // Different files can decode to the same name: a legacy file next to
+    // PuTTY's own for that session, say. List each name once, and point it
+    // at the file read_session_in opens.
+    let preference = |s: &SessionRef| {
+        if s.filename == escape_session_name(&s.name) {
+            0
+        } else if s.filename == legacy_session_filename(&s.name) {
+            1
+        } else {
+            2
+        }
+    };
+    sessions.sort_by_cached_key(|s| (s.name.clone(), preference(s), s.filename.clone()));
+    sessions.dedup_by(|later, kept| later.name == kept.name);
     Ok(sessions)
 }
 
@@ -154,11 +204,8 @@ pub fn read_session(name: &str) -> Result<PuttySession> {
 }
 
 pub fn read_session_in(dir: &Path, name: &str) -> Result<PuttySession> {
-    let filename = escape_session_name(name);
-    let path = dir.join(&filename);
-    if !path.exists() {
-        return Err(PuttyCompatError::SessionNotFound(name.to_string()));
-    }
+    let path = find_session_file(dir, name)
+        .ok_or_else(|| PuttyCompatError::SessionNotFound(name.to_string()))?;
     parse_session_file(&path, name)
 }
 
@@ -222,10 +269,13 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
 
     let filename = escape_session_name(&session.name);
     let target_path = dir.join(&filename);
+    // Normally target_path, but a legacy file that couldn't be moved yet is
+    // replaced here too.
+    let previous = find_session_file(dir, &session.name);
 
-    if target_path.exists() {
+    if let Some(previous) = &previous {
         let bak_path = dir.join(format!("{}.bak", filename));
-        let _ = fs::copy(&target_path, &bak_path);
+        let _ = fs::copy(previous, &bak_path);
     }
 
     let temp_file = tempfile::Builder::new()
@@ -292,6 +342,11 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
         path: target_path.clone(),
         source: e.error,
     })?;
+
+    // Only once the new file is in place, so a failed save loses nothing.
+    if let Some(legacy) = previous.filter(|p| *p != target_path) {
+        let _ = fs::remove_file(legacy);
+    }
 
     Ok(())
 }

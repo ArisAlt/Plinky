@@ -14,12 +14,98 @@ fn test_session_name_escaping() {
         ("COM USB0", "COM%20USB0"),
         ("myserver/prod:22", "myserver%2Fprod%3A22"),
         ("normal-name_123.test", "normal-name_123.test"),
+        // PuTTY for Unix keeps + and @ literal too.
+        ("admin@router", "admin@router"),
+        ("g++@build+1", "g++@build+1"),
+        ("root@host:2222", "root@host%3A2222"),
+        ("50%,a=b~c", "50%25%2Ca%3Db%7Ec"),
+        ("café", "caf%C3%A9"),
     ];
 
     for (raw, escaped) in cases {
         assert_eq!(escape_session_name(raw), escaped);
         assert_eq!(unescape_session_name(escaped), raw);
     }
+
+    // PuTTY saves an empty session name as Default Settings.
+    assert_eq!(escape_session_name(""), "Default%20Settings");
+}
+
+fn write_raw_session(dir: &std::path::Path, filename: &str, host: &str) {
+    fs::write(dir.join(filename), format!("HostName={host}\nPortNumber=22\n")).unwrap();
+}
+
+#[test]
+fn test_session_saved_by_putty_with_at_sign() {
+    let dir = tempdir().unwrap();
+    // As PuTTY for Unix saves "admin@router".
+    write_raw_session(dir.path(), "admin@router", "10.0.0.1");
+
+    let list = list_sessions_in(dir.path()).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, "admin@router");
+    let loaded = read_session_in(dir.path(), "admin@router").unwrap();
+    assert_eq!(loaded.host_name, "10.0.0.1");
+
+    // Plinky's save goes to the same file, the one plink -load opens.
+    write_session_in(dir.path(), &PuttySession { port_number: 2222, ..loaded }).unwrap();
+    assert!(dir.path().join("admin@router").is_file());
+    assert!(!dir.path().join("admin%40router").exists());
+}
+
+#[test]
+fn test_legacy_session_filename_moves_to_putty_name_on_read() {
+    let dir = tempdir().unwrap();
+    // As Plinky saved "admin@router" before it matched PuTTY.
+    write_raw_session(dir.path(), "admin%40router", "10.0.0.1");
+
+    let list = list_sessions_in(dir.path()).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, "admin@router");
+
+    let loaded = read_session_in(dir.path(), "admin@router").unwrap();
+    assert_eq!(loaded.name, "admin@router");
+    assert_eq!(loaded.host_name, "10.0.0.1");
+    assert!(dir.path().join("admin@router").is_file());
+    assert!(!dir.path().join("admin%40router").exists());
+}
+
+#[test]
+fn test_legacy_session_filename_replaced_on_save() {
+    let dir = tempdir().unwrap();
+    write_raw_session(dir.path(), "db%2Bcache%40prod", "10.0.0.2");
+
+    let session = PuttySession {
+        name: "db+cache@prod".to_string(),
+        host_name: "10.0.0.3".to_string(),
+        ..Default::default()
+    };
+    write_session_in(dir.path(), &session).unwrap();
+
+    assert!(!dir.path().join("db%2Bcache%40prod").exists());
+    let backup = fs::read_to_string(dir.path().join("db+cache@prod.bak")).unwrap();
+    assert!(backup.contains("HostName=10.0.0.2"));
+    let list = list_sessions_in(dir.path()).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].filename, "db+cache@prod");
+    let loaded = read_session_in(dir.path(), "db+cache@prod").unwrap();
+    assert_eq!(loaded.host_name, "10.0.0.3");
+}
+
+#[test]
+fn test_session_listed_once_when_legacy_and_putty_files_both_exist() {
+    let dir = tempdir().unwrap();
+    write_raw_session(dir.path(), "admin%40router", "old.example");
+    write_raw_session(dir.path(), "admin@router", "putty.example");
+    write_raw_session(dir.path(), "zeta", "zeta.example");
+
+    let list = list_sessions_in(dir.path()).unwrap();
+    let names: Vec<_> = list.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["admin@router", "zeta"]);
+    // PuTTY's file wins, in the listing and when read.
+    assert_eq!(list[0].filename, "admin@router");
+    let loaded = read_session_in(dir.path(), "admin@router").unwrap();
+    assert_eq!(loaded.host_name, "putty.example");
 }
 
 #[test]
