@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::fs;
 use putty_compat::{
-    escape_session_name, list_host_keys_from, list_sessions_in, looks_like_ppk, read_header,
-    read_session_in, unescape_session_name, write_session_in, PuttySession,
+    delete_session_in, escape_session_name, list_host_keys_from, list_sessions_in,
+    looks_like_ppk, read_header, read_session_in, unescape_session_name, write_session_in,
+    PuttyCompatError, PuttySession,
 };
 use tempfile::tempdir;
 
@@ -189,6 +190,24 @@ fn test_list_sessions_in_directory() {
     assert_eq!(list.len(), 2);
     assert_eq!(list[0].name, "Alpha Server");
     assert_eq!(list[1].name, "Beta Server");
+}
+
+#[test]
+fn test_delete_session_in_directory() {
+    let dir = tempdir().unwrap();
+    let session = PuttySession {
+        name: "Gamma Server".to_string(),
+        host_name: "gamma.test".to_string(),
+        ..Default::default()
+    };
+    write_session_in(dir.path(), &session).unwrap();
+
+    delete_session_in(dir.path(), "Gamma Server").unwrap();
+    assert!(list_sessions_in(dir.path()).unwrap().is_empty());
+    assert!(matches!(
+        delete_session_in(dir.path(), "Gamma Server"),
+        Err(PuttyCompatError::SessionNotFound(_))
+    ));
 }
 
 #[test]
