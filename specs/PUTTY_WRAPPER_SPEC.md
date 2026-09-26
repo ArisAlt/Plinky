@@ -40,7 +40,7 @@ The encoding has to match PuTTY's byte for byte: `plink -load <name>` and PuTTY'
 * `"myserver/prod:22"` $\rightarrow$ `~/.putty/sessions/myserver%2Fprod%3A22`
 * `"café"` $\rightarrow$ `~/.putty/sessions/caf%C3%A9`
 
-**Legacy Plinky filenames.** Earlier Plinky builds also escaped `+` and `@` (`admin%40router`). Such a file is still found. The first time it's read it is moved to PuTTY's name, by hard link then unlink so a file PuTTY has saved is never replaced. If the move can't be made, it is moved on the next save instead. When both files exist, the session is listed once and PuTTY's file is the one used.
+**Legacy Plinky filenames.** Earlier Plinky builds also escaped `+` and `@` (`admin%40router`). Such a file is still found. The first time it's read it is moved to PuTTY's name, by hard link then unlink so a file PuTTY has saved is never replaced. If the move can't be made, it is moved on the next save instead. When both files exist, the session is listed once and PuTTY's file is the one used; deleting the session removes both.
 
 #### Linux Session File Format
 Each file is a key-value format parsed line-by-line:

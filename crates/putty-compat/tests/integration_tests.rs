@@ -211,6 +211,25 @@ fn test_delete_session_in_directory() {
 }
 
 #[test]
+fn test_delete_session_with_legacy_filename() {
+    let dir = tempdir().unwrap();
+    // Only under the name older Plinky builds used.
+    write_raw_session(dir.path(), "admin%40router", "10.0.0.1");
+    delete_session_in(dir.path(), "admin@router").unwrap();
+    assert!(list_sessions_in(dir.path()).unwrap().is_empty());
+
+    // Under both names: the legacy file mustn't bring the session back.
+    write_raw_session(dir.path(), "admin%40router", "old.example");
+    write_raw_session(dir.path(), "admin@router", "putty.example");
+    delete_session_in(dir.path(), "admin@router").unwrap();
+    assert!(list_sessions_in(dir.path()).unwrap().is_empty());
+    assert!(matches!(
+        delete_session_in(dir.path(), "admin@router"),
+        Err(PuttyCompatError::SessionNotFound(_))
+    ));
+}
+
+#[test]
 fn test_ppk_parsing_v3() {
     let dir = tempdir().unwrap();
     let ppk_path = dir.path().join("test_v3.ppk");

@@ -359,12 +359,23 @@ pub fn delete_session(name: &str) -> Result<()> {
     return delete_session_in(&session_dir(), name);
 }
 
-/// Removes the session file, as PuTTY's own delete does. A `.bak` from an
-/// earlier save is left behind.
+/// Removes the session file, as PuTTY's own delete does, and a legacy-named
+/// file for the same name too: left behind, it would list the session again
+/// with its old settings. A `.bak` from an earlier save is left behind.
 pub fn delete_session_in(dir: &Path, name: &str) -> Result<()> {
-    let path = dir.join(escape_session_name(name));
-    fs::remove_file(&path).map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => PuttyCompatError::SessionNotFound(name.to_string()),
-        _ => PuttyCompatError::Io { path, source: e },
-    })
+    let mut filenames = vec![escape_session_name(name), legacy_session_filename(name)];
+    filenames.dedup();
+    let mut deleted = false;
+    for filename in filenames {
+        let path = dir.join(filename);
+        match fs::remove_file(&path) {
+            Ok(()) => deleted = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(PuttyCompatError::Io { path, source: e }),
+        }
+    }
+    if !deleted {
+        return Err(PuttyCompatError::SessionNotFound(name.to_string()));
+    }
+    Ok(())
 }
