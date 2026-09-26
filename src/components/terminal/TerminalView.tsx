@@ -21,6 +21,7 @@ import {
   vaultIsInitialized,
   vaultLookup,
   vaultSendSecret,
+  sendBreak,
   VaultLookup,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
@@ -1517,6 +1518,27 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <Search className="w-3.5 h-3.5 text-amber-400" />
               <span>Find in Terminal...</span>
             </button>
+            {tab.protocol === 'Serial' && (
+              <>
+                <div className="border-t border-plinky-800 my-1" />
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    // A serial Break (held ~400 ms): Cisco ROMMON and similar
+                    // password recovery need it during boot. Only a serial
+                    // line can send one (ADR-005).
+                    sendBreak(tab.id)
+                      .then(() => addEventLog('Sent a serial Break', 'info'))
+                      .catch(e => addEventLog(`Send Break failed: ${String(e)}`, 'error'));
+                  }}
+                  title="Hold a Break condition on the line for 400 ms (ROMMON / password recovery)"
+                  className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Send Break</span>
+                </button>
+              </>
+            )}
             {supportsShellHooks && (
               <>
                 <div className="border-t border-plinky-800 my-1" />
