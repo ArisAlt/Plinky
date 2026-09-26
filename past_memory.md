@@ -589,3 +589,10 @@
 * `specs/ARCHITECTURE_REVIEW_2026-09-26.md`: code drifted from SYSTEM_DESIGN in 5 places without an ADR. F1 (high): `vault_send_secret(session, key, field)` types ANY vault entry into ANY session; link enforced only in React -> bind key in core at spawn. F2: no `CREATE_NO_WINDOW` -> console flash per psftp/`where` spawn on Windows [verify]. F3: psftp = new SSH login per SFTP op (design: coprocess). F4: `Plinky*` keys in PuTTY files, dropped when PuTTY (Unix) re-saves; contradicts D4. F5: config in localStorage, not app dir; R2 violated. F6: f64 version compare rejects 0.100; Windows finder misses per-user/Scoop.
 * Plan P0 docs -> P1 security -> P2 Windows parity -> P3 Windows measurements -> P4 store -> P5 SFTP coprocess -> P6 split lib.rs/TerminalView -> P7 features. macOS on hold (owner).
 * ADR-005 native serial kept: settings still from PuTTY keys; plink has no Break. Owner decisions open: F1 gate strictness, F7 pwfile ACL vs core-answered prompt, ADR-005.
+
+### 44. APPIMAGE GREY WINDOW (libwayland) — 2026-09-26
+* Symptom: v0.1.3 AppImage from Releases, double-clicked on owner's KDE Wayland / AMD box: window opens, stays grey. Owner read it as "moved the app, terminal blank"; the working copy before was not this AppImage.
+* Terminal output: `Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...` (WebKitWebProcess). `WEBKIT_DISABLE_DMABUF_RENDERER=1` did NOT help (hypothesis dropped, commit discarded).
+* Cause: AppImage bundles Ubuntu 24.04 `libwayland-{client,cursor,egl,server}`; host Mesa loads against them. Owner-verified: extract, `rm usr/lib/libwayland-*`, run AppRun -> UI works.
+* Fix: `scripts/appimage-drop-wayland.sh` repacks the AppImage without those 4 files (appimagetool continuous); release.yml runs it after `tauri build`. Verified here: repacked AppImage starts, local shell works (Xvfb). .deb/.rpm unaffected (system libs).
+* Harmless noise on KDE: `Failed to load module "colorreload-gtk-module"` / `"window-decorations-gtk-module"` — GTK_PATH points into the AppImage.
