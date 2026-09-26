@@ -773,6 +773,18 @@ export async function vaultExportKdbx(masterPassword: string): Promise<{ path: s
   return invoke<{ path: string; entries: number } | null>('vault_export_kdbx', { masterPassword });
 }
 
+/**
+ * Deletes the vault file permanently (Settings -> Delete vault). Resolves
+ * false when there was no vault to delete.
+ */
+export async function vaultDestroy(): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  const { invoke } = await import('@tauri-apps/api/core');
+  const deleted = await invoke<boolean>('vault_destroy');
+  notifyVaultChanged();
+  return deleted;
+}
+
 export async function vaultIsInitialized(): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {

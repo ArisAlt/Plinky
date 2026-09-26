@@ -636,6 +636,22 @@ fn vault_is_initialized(app: tauri::AppHandle, state: State<'_, VaultState>) -> 
     Ok(path.exists())
 }
 
+/// Deletes the vault for good -- the Settings screen's "Delete vault",
+/// after its two warnings. No master password is asked: a forgotten one is
+/// the usual reason to start over. The vault is locked first, so no secret
+/// stays in memory (entries zeroize on drop) for a vault that's gone.
+/// Ok(false) means there was no vault file to delete.
+#[tauri::command]
+async fn vault_destroy(app: tauri::AppHandle, state: State<'_, VaultState>) -> Result<bool, String> {
+    let path = resolve_vault_path(&app, &state);
+    *state.inner.lock().await = None;
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(format!("Couldn't delete the vault ({}): {e}", path.display())),
+    }
+}
+
 #[tauri::command]
 async fn vault_is_unlocked(state: State<'_, VaultState>) -> Result<bool, String> {
     let guard = state.inner.lock().await;
@@ -1015,6 +1031,7 @@ pub fn run() {
             vault_get_entry,
             vault_send_secret,
             vault_export_kdbx,
+            vault_destroy,
             vault_lookup,
             vault_set_entry,
             vault_delete,
