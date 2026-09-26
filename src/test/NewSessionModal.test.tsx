@@ -188,6 +188,52 @@ describe('NewSessionModal Component', () => {
     );
     expect(onSave.mock.calls[0][0].extra.ProxyTelnetCommand).toBeUndefined();
   });
+
+  it('stores the gateway password in the vault, never in the PuTTY session', async () => {
+    // Owner request: log in to the jump host with a stored user/password,
+    // then to the target with the session's own vault login.
+    mockVaultSetEntry.mockClear();
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    await waitFor(() => expect(mockVaultIsUnlocked).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Core-Router' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.1.50' } });
+    fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
+    fireEvent.change(screen.getByPlaceholderText(/bastion\.internal/i), { target: { value: 'jump.corp.com' } });
+    fireEvent.change(screen.getByPlaceholderText(/bastion_user/i), { target: { value: 'sec_admin' } });
+    fireEvent.change(screen.getByLabelText('Gateway Password'), { target: { value: ' gw pass ' } });
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(mockVaultSetEntry).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'jump:Core-Router',
+      username: 'sec_admin',
+      secret: ' gw pass ', // never trimmed
+    }));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.extra.PlinkyJumpVaultKey).toBe('jump:Core-Router');
+    expect(JSON.stringify(saved)).not.toContain('gw pass');
+  });
+
+  it('refuses a gateway password with no gateway username', async () => {
+    // Without a user plink asks "login as:", and the password is only ever
+    // sent at <user>@<host>'s password prompt -- it would never be used.
+    mockVaultSetEntry.mockClear();
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    await waitFor(() => expect(mockVaultIsUnlocked).toHaveBeenCalled());
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Core-Router' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.1.50' } });
+    fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
+    fireEvent.change(screen.getByPlaceholderText(/bastion\.internal/i), { target: { value: 'jump.corp.com' } });
+    fireEvent.change(screen.getByLabelText('Gateway Password'), { target: { value: 'pw' } });
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/gateway username/i);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(mockVaultSetEntry).not.toHaveBeenCalled();
+  });
   // An existing serial session as the owner has it: saved by PuTTY, line in
   // extra, the adapter possibly unplugged.
   const savedSerial = (line: string) => ({

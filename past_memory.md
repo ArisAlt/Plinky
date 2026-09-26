@@ -596,3 +596,13 @@
 * Cause: AppImage bundles Ubuntu 24.04 `libwayland-{client,cursor,egl,server}`; host Mesa loads against them. Owner-verified: extract, `rm usr/lib/libwayland-*`, run AppRun -> UI works.
 * Fix: `scripts/appimage-drop-wayland.sh` repacks the AppImage without those 4 files (appimagetool continuous); release.yml runs it after `tauri build`. Verified here: repacked AppImage starts, local shell works (Xvfb). .deb/.rpm unaffected (system libs).
 * Harmless noise on KDE: `Failed to load module "colorreload-gtk-module"` / `"window-decorations-gtk-module"` — GTK_PATH points into the AppImage.
+
+### 45. JUMP HOST VAULT LOGIN (owner request, 2026-09-26)
+* Bug found first: a saved session with a jump host (ProxyMethod=6) AND a vault password used `-pwfile`. plink 0.81 offers that password to the JUMP host first -> "Configured password was not accepted", connection dead, final host's password sent to the bastion. Reproduced against OpenSSH 9.6 (two password users, ProxyLocalhost=1 needed for a localhost proxy).
+* Fix/feature: jump sessions never get `-pwfile`. `session/jump_login.rs` answers plink's verbatim prompts: `<jumpuser>@<jumphost>'s password: ` (jump vault entry), then only after plink's `-- Making primary SSH connection to <host> port <port> ` line, `<user>@<host>'s password: ` (session's own entry). Once each; a repeated prompt stops all auto-typing (a wrong jump password must not pull the final one into the jump's second prompt). Pre-auth only; dropped at Live.
+* Jump entry lookup (`jump_credentials_for`): ProxyHost naming a saved session -> that session's host/port/user and its vault entry; else `PlinkyJumpVaultKey`, `jump:<session>`, `<user>@<host>`, `<host>`. No user name -> that login left to the user (plink asks "login as:").
+* Locked vault on a jump session: still no `-pwfile` (empty credentials), user types both.
+* UI: Jump Host tab has "Gateway Password (saved in the vault)" -> vault entry `jump:<session>` + `PlinkyJumpVaultKey`; username required with a password. With a saved-session preset, that session's own entry is used.
+* Verified end to end through SessionRegistry with real plink 0.81 + sshd: jumpu -> finalu, `whoami` = finalu, neither password in the output; wrong jump password -> second jump prompt left to the user, no primary connection.
+* Residual risk (documented in the module): a jump server's pre-auth banner could imitate plink's lines; the final password is still only typed after the jump prompt was answered. Banners were not shown by plink 0.81 in this setup.
+* Not changed: the terminal's manual "Send password" (F1 in the review) can still type the session's password at the jump prompt if the user clicks it there.

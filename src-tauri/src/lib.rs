@@ -184,6 +184,26 @@ async fn start_terminal_session(
             Some(s) => !s.user_name.is_empty(),
             None => username.as_deref().is_some_and(|u| !u.is_empty()),
         };
+        // Through a jump host, plink would offer a -pwfile password to the
+        // jump host first; answer each host's prompt instead.
+        if is_ssh {
+            let guard = vault_state.inner.lock().await;
+            let jump = match (guard.as_ref(), saved.as_ref()) {
+                (Some(v), Some(s)) => jump_credentials_for(v, s, |n| putty_compat::sessions::read_session(n).ok()),
+                (None, Some(s)) if s.extra.get("ProxyMethod").is_some_and(|m| m == "6") => {
+                    // Locked vault: no -pwfile either, or the final host's
+                    // password could still reach the jump host.
+                    Some(plinky_core::session::jump_login::JumpCredentials { jump: None, target: None })
+                }
+                _ => None,
+            };
+            drop(guard);
+            if let Some(credentials) = jump {
+                return registry
+                    .create_plink_session_with_jump_login(&session_id, &session_name, credentials, log_file_name, cols, rows, tx)
+                    .map_err(|e| format!("Failed to create plink session: {e}"));
+            }
+        }
         let login = if is_ssh {
             let guard = vault_state.inner.lock().await;
             guard
@@ -400,6 +420,66 @@ fn find_session_entry_for<'v>(
     vault_key_candidates(session_name, explicit, host, user)
         .iter()
         .find_map(|k| vault.get_entry(k))
+}
+
+/// For a saved session through PuTTY's SSH proxy (`ProxyMethod=6`): the
+/// vault logins for the jump host and the final host, answered at their
+/// prompts by `plinky_core::session::jump_login`. `None` when the session
+/// has no such jump host.
+///
+/// The jump host is `ProxyHost`, which PuTTY also accepts as the name of a
+/// saved session: then that session's host, port and user apply (unless
+/// `ProxyUsername` overrides the user), and so does its vault entry.
+/// Otherwise the jump entry is `PlinkyJumpVaultKey`, then `jump:<session>`,
+/// `<user>@<host>`, `<host>`.
+///
+/// A login needs a user name: without one plink asks "login as:", which
+/// this doesn't answer, so that side is left to the user.
+fn jump_credentials_for(
+    vault: &Vault,
+    saved: &putty_compat::sessions::PuttySession,
+    read: impl Fn(&str) -> Option<putty_compat::sessions::PuttySession>,
+) -> Option<plinky_core::session::jump_login::JumpCredentials> {
+    use plinky_core::session::jump_login::{JumpCredentials, Login};
+    let extra = |k: &str| saved.extra.get(k).map(String::as_str).unwrap_or("");
+    if extra("ProxyMethod") != "6" || extra("ProxyHost").is_empty() {
+        return None;
+    }
+    let proxy_host = extra("ProxyHost");
+    let proxy_user = extra("ProxyUsername");
+
+    let (host, port, user, entry) = match read(proxy_host) {
+        Some(preset) => {
+            let user = if proxy_user.is_empty() { preset.user_name.clone() } else { proxy_user.to_string() };
+            let entry = find_session_entry_for(vault, Some(&preset), &preset.name, None, None);
+            (preset.host_name.clone(), preset.port_number, user, entry)
+        }
+        None => {
+            let explicit = Some(extra("PlinkyJumpVaultKey")).filter(|k| !k.is_empty());
+            let keys = vault_key_candidates(&format!("jump:{}", saved.name), explicit, Some(proxy_host), Some(proxy_user));
+            // vault_key_candidates adds "session:jump:<name>" and the bare
+            // name too; harmless, nothing else is stored under them.
+            let entry = keys.iter().find_map(|k| vault.get_entry(k));
+            let port = extra("ProxyPort").parse().unwrap_or(22);
+            (proxy_host.to_string(), port, proxy_user.to_string(), entry)
+        }
+    };
+    let jump = entry.filter(|_| !user.is_empty()).map(|e| Login {
+        user,
+        host,
+        port,
+        password: e.secret.clone(),
+    });
+
+    let target = find_session_entry_for(vault, Some(saved), &saved.name, None, None)
+        .filter(|_| !saved.user_name.is_empty())
+        .map(|e| Login {
+            user: saved.user_name.clone(),
+            host: saved.host_name.clone(),
+            port: saved.port_number,
+            password: e.secret.clone(),
+        });
+    Some(JumpCredentials { jump, target })
 }
 
 /// What the terminal needs to offer the vault: which entry (never its
@@ -1220,6 +1300,56 @@ mod tests {
         assert_eq!(session_url_for_entry_with("session:Server 2", saved).as_deref(), Some("ssh://citizenzero@10.10.10.10:22"));
         assert_eq!(session_url_for_entry_with("10.10.10.10", saved), None);
         assert_eq!(session_url_for_entry_with("session:No Such Session", saved), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_jump_session_gets_a_login_for_each_host_from_the_vault() {
+        use super::jump_credentials_for;
+        let session = |name: &str, host: &str, user: &str, extra: &[(&str, &str)]| putty_compat::sessions::PuttySession {
+            name: name.into(),
+            host_name: host.into(),
+            port_number: 22,
+            user_name: user.into(),
+            protocol: "ssh".into(),
+            extra: extra.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join(format!("plinky-jump-lookup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut vault = Vault::create_fast(dir.join("vault.bin"), "pw").unwrap();
+        vault.set_entry(VaultEntry::new("session:Router", "final-pw"));
+        vault.set_entry(VaultEntry::new("jump:Router", "jump-pw"));
+        vault.set_entry(VaultEntry::new("session:Bastion", "preset-pw"));
+        let none = |_: &str| None;
+
+        // Typed-in jump host: its entry is jump:<session>.
+        let router = session("Router", "192.168.1.5", "admin", &[
+            ("ProxyMethod", "6"), ("ProxyHost", "10.0.0.1"), ("ProxyPort", "2200"), ("ProxyUsername", "ops"),
+        ]);
+        let c = jump_credentials_for(&vault, &router, none).unwrap();
+        let j = c.jump.unwrap();
+        assert_eq!((j.user.as_str(), j.host.as_str(), j.port, j.password.expose_secret()), ("ops", "10.0.0.1", 2200, "jump-pw"));
+        let t = c.target.unwrap();
+        assert_eq!((t.user.as_str(), t.host.as_str(), t.password.expose_secret()), ("admin", "192.168.1.5", "final-pw"));
+
+        // A saved session as the jump host brings its own host, user and entry.
+        let bastion = session("Bastion", "bastion.example", "jumper", &[]);
+        let via_preset = session("Router", "192.168.1.5", "admin", &[("ProxyMethod", "6"), ("ProxyHost", "Bastion")]);
+        let c = jump_credentials_for(&vault, &via_preset, |n| (n == "Bastion").then(|| bastion.clone())).unwrap();
+        let j = c.jump.unwrap();
+        assert_eq!((j.user.as_str(), j.host.as_str(), j.password.expose_secret()), ("jumper", "bastion.example", "preset-pw"));
+
+        // No user name for the jump host: plink asks "login as:"; not ours.
+        let no_user = session("Router", "192.168.1.5", "admin", &[("ProxyMethod", "6"), ("ProxyHost", "10.0.0.1")]);
+        let c = jump_credentials_for(&vault, &no_user, none).unwrap();
+        assert!(c.jump.is_none() && c.target.is_some());
+
+        // Not a jump session (or another proxy type): the -pwfile path applies.
+        assert!(jump_credentials_for(&vault, &session("Router", "h", "u", &[]), none).is_none());
+        assert!(jump_credentials_for(&vault, &session("Router", "h", "u", &[("ProxyMethod", "5"), ("ProxyHost", "x")]), none).is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

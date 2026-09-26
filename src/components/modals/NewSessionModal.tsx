@@ -97,6 +97,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // that session's own host, port, username and key file (tested against a
   // real bastion/target pair with no agent running).
   const [jumpPreset, setJumpPreset] = useState<string | null>(null);
+  // The jump host's password, typed here and stored only in the vault (as
+  // "jump:<session>", linked by PlinkyJumpVaultKey). Never kept in the
+  // PuTTY session. Blank on edit: blank keeps the stored one.
+  const [jumpPassword, setJumpPassword] = useState('');
+  const [jumpVaultKey, setJumpVaultKey] = useState<string | null>(null);
 
   const refreshPorts = async () => {
     setIsRefreshingPorts(true);
@@ -154,6 +159,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setJumpHost(hasJumpHost ? (preset ? preset.hostname : extra.ProxyHost || '') : '');
       setJumpPort(hasJumpHost ? (preset ? String(preset.port || 22) : extra.ProxyPort || '22') : '22');
       setJumpUsername(hasJumpHost ? (preset ? preset.username || '' : extra.ProxyUsername || '') : '');
+      setJumpPassword('');
+      setJumpVaultKey(hasJumpHost && extra.PlinkyJumpVaultKey ? extra.PlinkyJumpVaultKey : null);
 
       // Load vault credentials key
       if (extra.PlinkyVaultKey) {
@@ -203,6 +210,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultMode('new');
       setSelectedVaultKey('');
       setVaultKeyId('');
+      setJumpPassword('');
+      setJumpVaultKey(null);
       setVaultPassword('');
       setIsNetworkDevice(false);
       setVaultEnablePassword('');
@@ -292,7 +301,46 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         delete extra.ProxyUsername;
         delete extra.ProxyTelnetCommand;
         delete extra.PlinkyJumpHost;
+        delete extra.PlinkyJumpVaultKey;
       }
+    }
+
+    // The jump host's own vault login. A saved session picked as the jump
+    // host brings its own vault entry, so nothing is stored for it here.
+    const jumpInUse = protocol === 'SSH' && enableJumpHost && !jumpPreset && !!jumpHost.trim();
+    if (jumpInUse && jumpPassword) {
+      if (vaultState === 'none') {
+        setVaultSaveError(NO_VAULT_MESSAGE);
+        setTab('jump');
+        return;
+      }
+      if (!jumpUsername.trim()) {
+        setVaultSaveError('Enter the gateway username: the stored password is only sent at that user\'s password prompt.');
+        setTab('jump');
+        return;
+      }
+      const key = `jump:${name.trim()}`;
+      const now = Math.floor(Date.now() / 1000);
+      try {
+        await vaultSetEntry({
+          id: key,
+          username: jumpUsername.trim(),
+          secret: jumpPassword,
+          notes: `Jump host ${jumpUsername.trim()}@${jumpHost.trim()} for session "${name.trim()}"`,
+          created_at: now,
+          updated_at: now,
+        });
+      } catch (err) {
+        const noVault = !(await vaultIsInitialized().catch(() => true));
+        setVaultSaveError(noVault
+          ? NO_VAULT_MESSAGE
+          : `The gateway password wasn't saved: ${String(err)}. Unlock the vault (Vault in the top bar), then save again.`);
+        setTab('jump');
+        return;
+      }
+      extra.PlinkyJumpVaultKey = key;
+    } else if (!jumpInUse) {
+      delete extra.PlinkyJumpVaultKey;
     }
 
     // Encrypted Vault Credential Binding
@@ -958,12 +1006,35 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         <label className="text-slate-300 text-[11px]">Gateway Username</label>
                         <input
                           type="text"
-                          placeholder="bastion_user (or leave blank if same)"
+                          placeholder="bastion_user"
                           value={jumpUsername}
                           onChange={e => { setJumpPreset(null); setJumpUsername(e.target.value); }}
                           className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500"
                         />
                       </div>
+
+                      {jumpPreset ? (
+                        <p className="text-slate-500 text-[10px]">
+                          Logs in to the gateway with the vault password saved for "{jumpPreset}", if it has one.
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          <label className="text-slate-300 text-[11px]">Gateway Password (saved in the vault)</label>
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            aria-label="Gateway Password"
+                            placeholder={jumpVaultKey ? '(stored in the vault; blank keeps it)' : 'optional: leave blank to type it at connect'}
+                            value={jumpPassword}
+                            onChange={e => setJumpPassword(e.target.value)}
+                            className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500"
+                          />
+                          <p className="text-slate-500 text-[10px]">
+                            Sent only at {jumpUsername.trim() || '<user>'}@{jumpHost.trim() || '<gateway>'}'s password prompt, once.
+                            The target then logs in with this session's own vault password (Credentials &amp; Vault).
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

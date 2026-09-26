@@ -78,6 +78,7 @@ This document tracks the directory architecture, file structure, component relat
 │               ├── manager.rs            # Active session registry, attach_session reattach, answer_prompt, prompt events
 │               ├── state_machine.rs      # PreAuth state machine (HostKeyPromptInfo, verbatim prompts, 8 KiB default-deny, D9 marker)
 │               ├── ring_buffer.rs        # Scrollback ring buffer with monotonic sequence tracking & get_since replay
+│               ├── jump_login.rs         # Jump host (ProxyMethod 6) logins: answers the jump and final password prompts from the vault, in order, once each
 │               └── shell_integration.rs  # Shell integration bootstrap (OSC 133 prompt markers + OSC 7 CWD reporting)
 │
 ├── src-tauri/                            # Tauri v2 Application Shell & IPC Bindings (IMPLEMENTED)
