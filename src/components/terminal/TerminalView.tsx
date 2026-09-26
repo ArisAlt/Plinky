@@ -36,6 +36,7 @@ import {
   classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
 } from '../../services/promptDetect';
 import { KeywordHighlighter } from '../../services/keywordHighlight';
+import { shouldTakeHoverFocus } from '../../services/hoverFocus';
 import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import {
@@ -86,6 +87,8 @@ interface TerminalViewProps {
   cursorStyle?: 'block' | 'bar' | 'underline';
   copyOnSelect?: boolean;
   rightClickAction?: 'paste' | 'contextMenu';
+  /** The mouse moved into this terminal and it took the keyboard focus. */
+  onHoverFocus?: () => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
@@ -100,6 +103,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   cursorStyle,
   copyOnSelect = true,
   rightClickAction = 'contextMenu',
+  onHoverFocus,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -1007,6 +1011,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   }, [fontFamily, fontSize, cursorStyle]);
 
   // WindTerm Free Type Mode: Arbitrary cursor placement and delta computation
+  // Focus follows the mouse into a terminal, so a split or grid pane can be
+  // typed into without clicking it first. Never while something else is
+  // being typed into (broadcast bar, search, a dialog field) or while a
+  // button is held (a text selection dragged across panes).
+  const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!shouldTakeHoverFocus(e.buttons, document.activeElement, !!pendingPrompt)) return;
+    terminalRef.current?.focus();
+    onHoverFocus?.();
+  };
+
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     // Close context menu on left click
     if (contextMenu) {
@@ -1549,6 +1563,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
+        onMouseEnter={handleMouseEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

@@ -562,6 +562,7 @@ export const App: React.FC = () => {
                     <TerminalView
                       key={activeTab.id}
                       tab={activeTab}
+                      onHoverFocus={() => setActiveTabId(activeTab.id)}
                       onUpdateTab={handleUpdateTab}
                       onSplitPane={handleSplitPane}
                       onCwdChange={cwd => handleCwdChange(activeTab.id, cwd)}
@@ -580,6 +581,7 @@ export const App: React.FC = () => {
                       <TerminalView
                         key={activeTab.id}
                         tab={activeTab}
+                        onHoverFocus={() => setActiveTabId(activeTab.id)}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={cwd => handleCwdChange(activeTab.id, cwd)}
@@ -611,6 +613,7 @@ export const App: React.FC = () => {
                       <TerminalView
                         key={splitTabs[0].id}
                         tab={splitTabs[0]}
+                        onHoverFocus={() => setActiveTabId(splitTabs[0].id)}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
@@ -631,6 +634,7 @@ export const App: React.FC = () => {
                         <TerminalView
                           key={splitTabs[1].id}
                           tab={splitTabs[1]}
+                          onHoverFocus={() => setActiveTabId(splitTabs[1].id)}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
@@ -665,6 +669,7 @@ export const App: React.FC = () => {
                       <TerminalView
                         key={splitTabs[0].id}
                         tab={splitTabs[0]}
+                        onHoverFocus={() => setActiveTabId(splitTabs[0].id)}
                         onUpdateTab={handleUpdateTab}
                         onSplitPane={handleSplitPane}
                         onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
@@ -685,6 +690,7 @@ export const App: React.FC = () => {
                         <TerminalView
                           key={splitTabs[1].id}
                           tab={splitTabs[1]}
+                          onHoverFocus={() => setActiveTabId(splitTabs[1].id)}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
@@ -721,6 +727,7 @@ export const App: React.FC = () => {
                       >
                         <TerminalView
                           tab={tab}
+                          onHoverFocus={() => setActiveTabId(tab.id)}
                           onUpdateTab={handleUpdateTab}
                           onSplitPane={handleSplitPane}
                           onCwdChange={cwd => handleCwdChange(tab.id, cwd)}
