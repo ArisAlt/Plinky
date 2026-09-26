@@ -124,3 +124,42 @@ describe('SftpDualPane', () => {
     expect(await screen.findByText('report.pdf')).toBeTruthy();
   });
 });
+
+describe('the transfer queue drawer (T-014)', () => {
+  const queue = () => document.getElementById('sftp-transfer-queue');
+  const header = () => screen.getByRole('button', { name: /Transfers \(/ });
+
+  it('starts folded, with the hint in its header', async () => {
+    render(<SftpDualPane sessionName="web" hostname="10.0.0.5" />);
+    await screen.findByText('report.pdf');
+    expect(queue()).toBeNull();
+    expect(header().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByText(/drag it to the other pane/)).toBeTruthy();
+  });
+
+  it('opens when a transfer starts, and folded still counts what finished', async () => {
+    bridge.sftpDownload.mockResolvedValue(undefined);
+    render(<SftpDualPane sessionName="web" hostname="10.0.0.5" />);
+    fireEvent.doubleClick(await screen.findByText('report.pdf'));
+    await waitFor(() => expect(queue()).toBeTruthy());
+    expect(await screen.findByText('Done')).toBeTruthy();
+    fireEvent.click(header());
+    expect(queue()).toBeNull();
+    expect(screen.getByText('1 done')).toBeTruthy();
+    expect(header().textContent).toContain('Transfers (1)');
+  });
+
+  it('opens again when a transfer fails, even if it was folded meanwhile', async () => {
+    let fail: (reason: string) => void = () => {};
+    bridge.sftpDownload.mockImplementation(() => new Promise((_, reject) => { fail = reject; }));
+    render(<SftpDualPane sessionName="web" hostname="10.0.0.5" />);
+    fireEvent.doubleClick(await screen.findByText('report.pdf'));
+    await waitFor(() => expect(queue()).toBeTruthy());
+    fireEvent.click(header()); // fold it while the transfer runs
+    expect(screen.getByText('1 running')).toBeTruthy();
+    fail('/home/remote/report.pdf: open for read: permission denied');
+    expect(await screen.findByText(/permission denied/)).toBeTruthy();
+    expect(queue()).toBeTruthy();
+    expect(screen.getByText('1 failed')).toBeTruthy();
+  });
+});

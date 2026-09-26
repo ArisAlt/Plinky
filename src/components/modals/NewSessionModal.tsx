@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PuttySession, Protocol } from '../../types/session';
 import { 
   Terminal, X, Save, Key, Folder, Tag, Cpu, RefreshCw, 
-  Shield, Server, Laptop, ArrowRight, ChevronDown, ChevronRight, Lock 
+  Shield, Server, Laptop, ArrowRight, Lock 
 } from 'lucide-react';
 import { 
   listSerialPorts, DetectedSerialPort, 
@@ -10,6 +10,8 @@ import {
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
+
+type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
 
 interface NewSessionModalProps {
   isOpen: boolean;
@@ -58,6 +60,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
   const [isRefreshingPorts, setIsRefreshingPorts] = useState(false);
+  const [pickedTab, setTab] = useState<SessionTab>('general');
   const [serialLine, setSerialLine] = useState('');
   const [isCustomSerialLine, setIsCustomSerialLine] = useState(false);
   const [serialSpeed, setSerialSpeed] = useState('9600');
@@ -65,7 +68,6 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [serialStopBits, setSerialStopBits] = useState('2'); // 2 = 1 stop bit
   const [serialParity, setSerialParity] = useState('0'); // 0 = None
   const [serialFlowControl, setSerialFlowControl] = useState('1'); // 1 = XON/XOFF
-  const [showAdvancedSerial, setShowAdvancedSerial] = useState(false);
 
   // Jump Host (MobaXterm style) state
   const [enableJumpHost, setEnableJumpHost] = useState(false);
@@ -97,6 +99,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    setTab('general');
     refreshPorts();
     setVaultSaveError(null);
     vaultListEntriesMeta().then(setVaultEntries).catch(() => {});
@@ -171,7 +174,6 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setSerialStopBits('2');
       setSerialParity('0');
       setSerialFlowControl('1');
-      setShowAdvancedSerial(false);
       setEnableJumpHost(false);
       setJumpHost('');
       setJumpPort('22');
@@ -350,6 +352,17 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
   const isSerial = protocol === 'Serial';
 
+  // The tabs this protocol has. A dot marks one holding non-default settings.
+  const visibleTabs: { id: SessionTab; label: string; on?: boolean }[] = [
+    { id: 'general', label: 'General' },
+    { id: 'credentials', label: 'Credentials & Vault', on: useVault || (protocol === 'SSH' && !!publicKeyFile.trim()) },
+    ...(protocol === 'SSH' ? [{ id: 'jump' as const, label: 'Jump Host', on: enableJumpHost }] : []),
+    ...(isSerial ? [{ id: 'serial' as const, label: 'Serial' }] : []),
+    { id: 'advanced', label: 'Advanced', on: (!isSerial && (parseInt(keepalive, 10) > 0 || autoReconnect)) || parseInt(pasteDelay, 10) > 0 },
+  ];
+  // Switching protocol can take away the tab that was open (Jump Host).
+  const tab: SessionTab = visibleTabs.some(t => t.id === pickedTab) ? pickedTab : 'general';
+
   return (
     <div 
       onClick={(e) => {
@@ -374,644 +387,684 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto flex-1">
-          {/* Session Name */}
-          <div className="space-y-1">
-            <label className="text-slate-300 font-medium">Session Name *</label>
-            <input
-              type="text"
-              required
-              placeholder={isSerial ? 'e.g. Cisco Console Cable' : 'e.g. Production Web Server'}
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-            />
-            {editingSession && name.trim() !== editingSession.name && (
-              <p className="text-amber-400 text-[11px]">
-                Changing the name saves this as a new session -- "{editingSession.name}" will still exist separately.
-              </p>
-            )}
-          </div>
-
-          {/* Protocol Selection */}
-          <div className="space-y-1">
-            <label className="text-slate-300 font-medium">Connection Protocol</label>
-            <select
-              value={protocol}
-              onChange={e => {
-                const nextProto = e.target.value as Protocol;
-                setProtocol(nextProto);
-                if (nextProto === 'Serial') {
-                  if (serialPorts.length > 0 && !serialLine) {
-                    const firstUsb = serialPorts.find(p => p.is_usb);
-                    setSerialLine(firstUsb ? firstUsb.port_name : serialPorts[0].port_name);
-                  }
-                }
-              }}
-              className="w-full bg-plinky-950 border border-plinky-700 rounded px-2 py-1.5 text-slate-100 focus:outline-none focus:border-sky-500"
+        {/* Tabs (T-014). Every panel stays mounted, hidden when not
+            shown, so switching tabs never loses what was typed. */}
+        <div role="tablist" aria-label="Session settings" className="flex items-end px-2 pt-1.5 bg-plinky-950 border-b border-plinky-800 shrink-0 overflow-x-auto overflow-y-hidden">
+          {visibleTabs.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`relative px-3 py-1.5 -mb-px rounded-t border text-[11px] font-medium whitespace-nowrap transition ${
+                tab === t.id
+                  ? 'bg-plinky-900 border-plinky-800 border-b-plinky-900 text-sky-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <option value="SSH">SSH (Secure Shell)</option>
-              <option value="Serial">Serial (USB / COM Port)</option>
-              <option value="Telnet">Telnet</option>
-              <option value="Rlogin">Rlogin</option>
-              <option value="RAW">RAW</option>
-            </select>
-          </div>
+              {t.label}
+              {t.on && <span aria-hidden className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-sky-400" />}
+            </button>
+          ))}
+        </div>
 
-          {/* SERIAL PROTOCOL FIELDS */}
-          {isSerial ? (
-            <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-3">
-              <div className="flex items-center space-x-2 text-slate-300 font-medium pb-1 border-b border-plinky-800">
-                <Cpu className="w-3.5 h-3.5 text-amber-400" />
-                <span>Serial Port & Hardware Line Settings</span>
+        {/* Form Body */}
+        <form
+          onSubmit={handleSubmit}
+          // A required field on a hidden tab would block Save with nothing
+          // on screen to say why: show the tab that holds it.
+          onInvalidCapture={e => {
+            const owner = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab as SessionTab | undefined;
+            if (owner && owner !== tab) setTab(owner);
+          }}
+          className="flex-1 flex flex-col overflow-hidden"
+        >
+          <div className="p-4 overflow-y-auto flex-1">
+            <div data-tab="general" hidden={tab !== 'general'} className="space-y-3">
+              {/* Session Name */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">Session Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder={isSerial ? 'e.g. Cisco Console Cable' : 'e.g. Production Web Server'}
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                />
+                {editingSession && name.trim() !== editingSession.name && (
+                  <p className="text-amber-400 text-[11px]">
+                    Changing the name saves this as a new session -- "{editingSession.name}" will still exist separately.
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-slate-300 text-[11px]">Serial Line (COM / USB Port) *</label>
-                    <button
-                      type="button"
-                      onClick={refreshPorts}
-                      title="Scan for plugged-in USB and serial devices"
-                      className="text-slate-400 hover:text-sky-400 flex items-center space-x-1 text-[10px] transition"
-                    >
-                      <RefreshCw className={`w-2.5 h-2.5 ${isRefreshingPorts ? 'animate-spin text-sky-400' : ''}`} />
-                      <span>Refresh</span>
-                    </button>
+              {/* Protocol Selection */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">Connection Protocol</label>
+                <select
+                  value={protocol}
+                  onChange={e => {
+                    const nextProto = e.target.value as Protocol;
+                    setProtocol(nextProto);
+                    if (nextProto === 'Serial') {
+                      if (serialPorts.length > 0 && !serialLine) {
+                        const firstUsb = serialPorts.find(p => p.is_usb);
+                        setSerialLine(firstUsb ? firstUsb.port_name : serialPorts[0].port_name);
+                      }
+                    }
+                  }}
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2 py-1.5 text-slate-100 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="SSH">SSH (Secure Shell)</option>
+                  <option value="Serial">Serial (USB / COM Port)</option>
+                  <option value="Telnet">Telnet</option>
+                  <option value="Rlogin">Rlogin</option>
+                  <option value="RAW">RAW</option>
+                </select>
+              </div>
+
+              {/* SERIAL PROTOCOL FIELDS */}
+              {isSerial ? (
+                <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-3">
+                  <div className="flex items-center space-x-2 text-slate-300 font-medium pb-1 border-b border-plinky-800">
+                    <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Serial Port & Hardware Line Settings</span>
                   </div>
-                  {isCustomSerialLine ? (
-                    <div className="flex items-center space-x-1">
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-300 text-[11px]">Serial Line (COM / USB Port) *</label>
+                        <button
+                          type="button"
+                          onClick={refreshPorts}
+                          title="Scan for plugged-in USB and serial devices"
+                          className="text-slate-400 hover:text-sky-400 flex items-center space-x-1 text-[10px] transition"
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 ${isRefreshingPorts ? 'animate-spin text-sky-400' : ''}`} />
+                          <span>Refresh</span>
+                        </button>
+                      </div>
+                      {isCustomSerialLine ? (
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="text"
+                            required
+                            placeholder="/dev/ttyUSB0 or COM3"
+                            value={serialLine}
+                            onChange={e => setSerialLine(e.target.value)}
+                            className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIsCustomSerialLine(false)}
+                            className="px-2 py-1 rounded bg-plinky-800 text-slate-300 hover:bg-plinky-700 text-[10px]"
+                          >
+                            List
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          value={serialLine}
+                          onChange={e => {
+                            if (e.target.value === '__custom__') {
+                              setIsCustomSerialLine(true);
+                            } else {
+                              setSerialLine(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                        >
+                          {/* Every detected port is plugged in right now (●). A
+                              saved port that isn't gets its own entry (○): with
+                              no matching option the select showed some other
+                              port while still saving this one. */}
+                          {serialLine && !serialPorts.some(p => p.port_name === serialLine) && (
+                            <option value={serialLine}>{`○ ${serialLine} (not connected)`}</option>
+                          )}
+                          {serialPorts.length === 0 ? (
+                            <option value="" disabled>No serial devices detected</option>
+                          ) : (
+                            serialPorts.map(p => (
+                              <option key={p.port_name} value={p.port_name}>
+                                {`● ${p.display_name}`}
+                              </option>
+                            ))
+                          )}
+                          <option value="__custom__">Manual path / Custom COM port...</option>
+                        </select>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-slate-300 text-[11px]">Speed (Baud)</label>
+                      <select
+                        value={serialSpeed}
+                        onChange={e => setSerialSpeed(e.target.value)}
+                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                      >
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200 (Network)</option>
+                        <option value="230400">230400</option>
+                        <option value="921600">921600</option>
+                      </select>
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                /* NETWORK PROTOCOL FIELDS (SSH / Telnet / RAW / Rlogin) */
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-slate-300 font-medium">Host Name or IP Address *</label>
                       <input
                         type="text"
                         required
-                        placeholder="/dev/ttyUSB0 or COM3"
-                        value={serialLine}
-                        onChange={e => setSerialLine(e.target.value)}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                        placeholder="192.0.2.10 or router.internal"
+                        value={hostname}
+                        onChange={e => setHostname(e.target.value)}
+                        className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomSerialLine(false)}
-                        className="px-2 py-1 rounded bg-plinky-800 text-slate-300 hover:bg-plinky-700 text-[10px]"
-                      >
-                        List
-                      </button>
                     </div>
-                  ) : (
-                    <select
-                      value={serialLine}
-                      onChange={e => {
-                        if (e.target.value === '__custom__') {
-                          setIsCustomSerialLine(true);
-                        } else {
-                          setSerialLine(e.target.value);
-                        }
-                      }}
-                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-                    >
-                      {/* Every detected port is plugged in right now (●). A
-                          saved port that isn't gets its own entry (○): with
-                          no matching option the select showed some other
-                          port while still saving this one. */}
-                      {serialLine && !serialPorts.some(p => p.port_name === serialLine) && (
-                        <option value={serialLine}>{`○ ${serialLine} (not connected)`}</option>
-                      )}
-                      {serialPorts.length === 0 ? (
-                        <option value="" disabled>No serial devices detected</option>
-                      ) : (
-                        serialPorts.map(p => (
-                          <option key={p.port_name} value={p.port_name}>
-                            {`● ${p.display_name}`}
-                          </option>
-                        ))
-                      )}
-                      <option value="__custom__">Manual path / Custom COM port...</option>
-                    </select>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-300 text-[11px]">Speed (Baud)</label>
-                  <select
-                    value={serialSpeed}
-                    onChange={e => setSerialSpeed(e.target.value)}
-                    className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-                  >
-                    <option value="9600">9600</option>
-                    <option value="19200">19200</option>
-                    <option value="38400">38400</option>
-                    <option value="57600">57600</option>
-                    <option value="115200">115200 (Network)</option>
-                    <option value="230400">230400</option>
-                    <option value="921600">921600</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Collapsible Advanced Serial */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedSerial(v => !v)}
-                  className="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-200 transition"
-                >
-                  {showAdvancedSerial ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                  <span>Advanced Serial Parameters (Data/Stop bits, Parity, Flow Control)</span>
-                </button>
-
-                {showAdvancedSerial && (
-                  <div className="grid grid-cols-4 gap-2 pt-2 animate-in fade-in duration-100">
                     <div className="space-y-1">
-                      <label className="text-slate-400 text-[10px]">Data Bits</label>
-                      <select
-                        value={serialDataBits}
-                        onChange={e => setSerialDataBits(e.target.value)}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
-                      >
-                        <option value="8">8</option>
-                        <option value="7">7</option>
-                        <option value="6">6</option>
-                        <option value="5">5</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-400 text-[10px]">Stop Bits</label>
-                      <select
-                        value={serialStopBits}
-                        onChange={e => setSerialStopBits(e.target.value)}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
-                      >
-                        <option value="2">1</option>
-                        <option value="4">2</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-400 text-[10px]">Parity</label>
-                      <select
-                        value={serialParity}
-                        onChange={e => setSerialParity(e.target.value)}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
-                      >
-                        <option value="0">None</option>
-                        <option value="1">Odd</option>
-                        <option value="2">Even</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-400 text-[10px]">Flow Control</label>
-                      <select
-                        value={serialFlowControl}
-                        onChange={e => setSerialFlowControl(e.target.value)}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
-                      >
-                        <option value="0">None</option>
-                        <option value="1">XON/XOFF</option>
-                        <option value="2">RTS/CTS</option>
-                      </select>
+                      <label className="text-slate-300 font-medium">Port</label>
+                      <input
+                        type="number"
+                        value={port}
+                        onChange={e => setPort(e.target.value)}
+                        className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 font-mono focus:outline-none focus:border-sky-500"
+                      />
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* NETWORK PROTOCOL FIELDS (SSH / Telnet / RAW / Rlogin) */
-            <>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2 space-y-1">
-                  <label className="text-slate-300 font-medium">Host Name or IP Address *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="192.0.2.10 or router.internal"
-                    value={hostname}
-                    onChange={e => setHostname(e.target.value)}
-                    className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">Port</label>
-                  <input
-                    type="number"
-                    value={port}
-                    onChange={e => setPort(e.target.value)}
-                    className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 font-mono focus:outline-none focus:border-sky-500"
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Default Username</label>
-                <input
-                  type="text"
-                  placeholder="e.g. root, admin, or deploy"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-                />
-              </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-medium">Default Username</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. root, admin, or deploy"
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </>
+              )}
 
-              {protocol === 'SSH' && (
+              {/* Organization & Tags */}
+              <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-slate-300 font-medium flex items-center space-x-1">
-                    <Key className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Private Key File (.ppk)</span>
+                    <Folder className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Folder Category</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="/path/to/key.ppk (or Pageant/agent will handle auth)"
-                    value={publicKeyFile}
-                    onChange={e => setPublicKeyFile(e.target.value)}
-                    className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500"
+                    placeholder="e.g. Staging or Network"
+                    value={folder}
+                    onChange={e => setFolder(e.target.value)}
+                    className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
                   />
                 </div>
-              )}
-            </>
-          )}
 
-          {/* MOBAXTERM-STYLE JUMP HOST / SSH GATEWAY (SSH Only) */}
-          {protocol === 'SSH' && (
-            <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2 cursor-pointer">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium flex items-center space-x-1">
+                    <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Tags (comma-separated)</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={enableJumpHost}
-                    onChange={e => setEnableJumpHost(e.target.checked)}
-                    className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
+                    type="text"
+                    placeholder="cisco, core, serial, lab"
+                    value={tags}
+                    onChange={e => setTags(e.target.value)}
+                    className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
                   />
-                  <span className="text-slate-200 font-medium flex items-center space-x-1.5">
-                    <Shield className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Connect through SSH Jump Host (Gateway / Bastion)</span>
+                </div>
+              </div>
+
+            </div>
+
+            <div data-tab="credentials" hidden={tab !== 'credentials'} className="space-y-3">
+                  {protocol === 'SSH' && (
+                    <div className="space-y-1">
+                      <label className="text-slate-300 font-medium flex items-center space-x-1">
+                        <Key className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Private Key File (.ppk)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="/path/to/key.ppk (or Pageant/agent will handle auth)"
+                        value={publicKeyFile}
+                        onChange={e => setPublicKeyFile(e.target.value)}
+                        className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                  )}
+              {/* ENCRYPTED VAULT CREDENTIALS SECTION */}
+              <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useVault}
+                      onChange={e => setUseVault(e.target.checked)}
+                      className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
+                    />
+                    <span className="text-slate-200 font-medium flex items-center space-x-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Save Credentials in Encrypted Vault</span>
+                    </span>
+                  </label>
+                  {useVault && (
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Argon2id + AES-256-GCM
+                    </span>
+                  )}
+                </div>
+
+                {useVault && (
+                  <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
+                    {/* Mode toggle: Create New vs Link Existing */}
+                    <div className="flex items-center space-x-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setVaultMode('new')}
+                        className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
+                          vaultMode === 'new'
+                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                            : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
+                        }`}
+                      >
+                        Create New Vault Entry
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVaultMode('link')}
+                        className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
+                          vaultMode === 'link'
+                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                            : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
+                        }`}
+                      >
+                        Link to Existing Vault Entry
+                      </button>
+                    </div>
+
+                    {vaultMode === 'link' ? (
+                      <div className="space-y-1">
+                        <label className="text-slate-300 text-[11px]">Select Vault Credential *</label>
+                        <select
+                          value={selectedVaultKey}
+                          onChange={e => setSelectedVaultKey(e.target.value)}
+                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500 font-mono"
+                        >
+                          <option value="" disabled>-- Select a vault credential --</option>
+                          {vaultEntries.map(e => (
+                            <option key={e.id} value={e.id}>
+                              {e.id} {e.username ? `(${e.username})` : ''} {e.has_enable_secret ? '[+ Enable Pwd]' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {vaultEntries.length === 0 && (
+                          <p className="text-amber-400 text-[11px]">
+                            No credentials found in vault (or vault is locked). You can switch to "Create New Vault Entry".
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-slate-300 text-[11px]">Vault Key ID</label>
+                            <input
+                              type="text"
+                              value={vaultKeyId}
+                              onChange={e => setVaultKeyId(e.target.value)}
+                              placeholder={name.trim() ? `session:${name.trim()}` : 'session:device-name'}
+                              className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-slate-300 text-[11px]">Login Password *</label>
+                            <input
+                              type="password"
+                              value={vaultPassword}
+                              onChange={e => setVaultPassword(e.target.value)}
+                              placeholder="Session login password..."
+                              className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Network Device Enable Password Toggle */}
+                        <div className="pt-0.5">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isNetworkDevice}
+                              onChange={e => setIsNetworkDevice(e.target.checked)}
+                              className="rounded border-plinky-700 text-amber-500 focus:ring-0 bg-plinky-900"
+                            />
+                            <span className="text-slate-300 text-xs font-medium">
+                              Network Device (requires Enable Password / Privileged Exec)
+                            </span>
+                          </label>
+                        </div>
+
+                        {isNetworkDevice && (
+                          <div className="p-2 bg-amber-950/20 border border-amber-500/30 rounded space-y-1 animate-in fade-in duration-100">
+                            <label className="block text-[11px] text-amber-300 font-medium">
+                              Enable Password (Cisco / Arista / Huawei Privileged EXEC)
+                            </label>
+                            <input
+                              type="password"
+                              value={vaultEnablePassword}
+                              onChange={e => setVaultEnablePassword(e.target.value)}
+                              placeholder="e.g. Cisco enable secret..."
+                              className="w-full bg-plinky-900 border border-amber-500/40 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-400 italic">
+                      🔒 Credentials are encrypted with Argon2id and never saved in plaintext PuTTY session files.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Automatic answers from the vault. SSH needs no switch: plink
+                  logs in by itself. The others answer prompts the device prints,
+                  so they're opt-in per session. */}
+              <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-[11px]">
+                <div className="text-slate-300 font-medium">Automatic login from the vault</div>
+                {protocol === 'SSH' && (
+                  <p className="text-slate-500">
+                    SSH logs in by itself when the vault is unlocked and holds this session's password
+                    (linked above, or an entry named "session:{name.trim() || 'name'}" or after the host).
+                  </p>
+                )}
+                {(protocol === 'Telnet' || protocol === 'Serial') && (
+                  <label className="flex items-start space-x-2 cursor-pointer">
+                    <input type="checkbox" checked={autoLogin} onChange={e => setAutoLogin(e.target.checked)} className="mt-0.5" />
+                    <span className="text-slate-300">
+                      Log in automatically
+                      <span className="block text-slate-500">Types the vault username and password at the device's Username:/Password: prompts, once per connection.</span>
+                    </span>
+                  </label>
+                )}
+                <label className="flex items-start space-x-2 cursor-pointer">
+                  <input type="checkbox" checked={autoEnable} onChange={e => setAutoEnable(e.target.checked)} className="mt-0.5" />
+                  <span className="text-slate-300">
+                    Send enable password automatically
+                    <span className="block text-slate-500">
+                      After you type enable / en / super and the device asks for a password. Leave off if you hop from this device to others: they would get this device's enable password.
+                    </span>
                   </span>
                 </label>
               </div>
 
-              {enableJumpHost && (
-                <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
-                  {/* Visual Topology Route Banner (MobaXterm Style) */}
-                  <div className="p-2 rounded bg-plinky-900/90 border border-sky-500/30 flex items-center justify-between text-[11px]">
-                    <div className="flex items-center space-x-1">
-                      <Laptop className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                      <span className="text-slate-400 font-mono">Client</span>
-                    </div>
-                    <div className="flex items-center space-x-1 text-slate-500">
-                      <div className="h-px w-4 bg-sky-500/50" />
-                      <span className="text-[9px] text-sky-400 uppercase font-semibold">SSH</span>
-                      <ArrowRight className="w-3 h-3 text-sky-400" />
-                    </div>
-                    <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/50">
-                      <Shield className="w-3 h-3 text-amber-400 shrink-0" />
-                      <span className="text-amber-300 font-mono font-medium truncate max-w-[120px]" title={jumpHost || 'Jump Host'}>
-                        {jumpHost.trim() ? (jumpUsername ? `${jumpUsername}@${jumpHost}` : jumpHost) : 'Bastion'}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-1 text-slate-500">
-                      <div className="h-px w-4 bg-emerald-500/50" />
-                      <span className="text-[9px] text-emerald-400 uppercase font-semibold">SSH</span>
-                      <ArrowRight className="w-3 h-3 text-emerald-400" />
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Server className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span className="text-emerald-300 font-mono font-medium truncate max-w-[110px]" title={hostname || 'Target'}>
-                        {hostname.trim() || 'Target'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Preset from existing saved sessions */}
-                  {savedSessions.length > 0 && (
-                    <div className="space-y-1">
-                      <label className="text-slate-400 text-[10px]">Populate from Saved Session</label>
-                      <select
-                        onChange={e => {
-                          const sess = savedSessions.find(s => s.name === e.target.value);
-                          if (sess) {
-                            setJumpPreset(sess.name);
-                            setJumpHost(sess.hostname);
-                            setJumpPort(String(sess.port || 22));
-                            setJumpUsername(sess.username || '');
-                          }
-                        }}
-                        value={jumpPreset ?? ''}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-sky-500"
-                      >
-                        <option value="" disabled>-- Select a saved bastion host --</option>
-                        {savedSessions.filter(s => s.protocol === 'SSH' && s.name !== name).map(s => (
-                          <option key={s.name} value={s.name}>
-                            {s.name} ({s.hostname}:{s.port})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-2 space-y-1">
-                      <label className="text-slate-300 text-[11px]">Jump Host / Gateway IP *</label>
-                      <input
-                        type="text"
-                        required={enableJumpHost}
-                        placeholder="bastion.internal or jump.corp.com"
-                        value={jumpHost}
-                        onChange={e => { setJumpPreset(null); setJumpHost(e.target.value); }}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-300 text-[11px]">Port</label>
-                      <input
-                        type="number"
-                        value={jumpPort}
-                        onChange={e => { setJumpPreset(null); setJumpPort(e.target.value); }}
-                        className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-slate-300 text-[11px]">Gateway Username</label>
-                    <input
-                      type="text"
-                      placeholder="bastion_user (or leave blank if same)"
-                      value={jumpUsername}
-                      onChange={e => { setJumpPreset(null); setJumpUsername(e.target.value); }}
-                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ENCRYPTED VAULT CREDENTIALS SECTION */}
-          <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={useVault}
-                  onChange={e => setUseVault(e.target.checked)}
-                  className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
-                />
-                <span className="text-slate-200 font-medium flex items-center space-x-1.5">
-                  <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Save Credentials in Encrypted Vault</span>
-                </span>
-              </label>
-              {useVault && (
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Argon2id + AES-256-GCM
-                </span>
-              )}
             </div>
 
-            {useVault && (
-              <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
-                {/* Mode toggle: Create New vs Link Existing */}
-                <div className="flex items-center space-x-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setVaultMode('new')}
-                    className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
-                      vaultMode === 'new'
-                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                        : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
-                    }`}
-                  >
-                    Create New Vault Entry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVaultMode('link')}
-                    className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
-                      vaultMode === 'link'
-                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                        : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
-                    }`}
-                  >
-                    Link to Existing Vault Entry
-                  </button>
-                </div>
-
-                {vaultMode === 'link' ? (
-                  <div className="space-y-1">
-                    <label className="text-slate-300 text-[11px]">Select Vault Credential *</label>
-                    <select
-                      value={selectedVaultKey}
-                      onChange={e => setSelectedVaultKey(e.target.value)}
-                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500 font-mono"
-                    >
-                      <option value="" disabled>-- Select a vault credential --</option>
-                      {vaultEntries.map(e => (
-                        <option key={e.id} value={e.id}>
-                          {e.id} {e.username ? `(${e.username})` : ''} {e.has_enable_secret ? '[+ Enable Pwd]' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {vaultEntries.length === 0 && (
-                      <p className="text-amber-400 text-[11px]">
-                        No credentials found in vault (or vault is locked). You can switch to "Create New Vault Entry".
-                      </p>
-                    )}
+            <div data-tab="jump" hidden={tab !== 'jump'} className="space-y-3">
+              {/* MOBAXTERM-STYLE JUMP HOST / SSH GATEWAY (SSH Only) */}
+              {protocol === 'SSH' && (
+                <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enableJumpHost}
+                        onChange={e => setEnableJumpHost(e.target.checked)}
+                        className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
+                      />
+                      <span className="text-slate-200 font-medium flex items-center space-x-1.5">
+                        <Shield className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Connect through SSH Jump Host (Gateway / Bastion)</span>
+                      </span>
+                    </label>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+
+                  {enableJumpHost && (
+                    <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
+                      {/* Visual Topology Route Banner (MobaXterm Style) */}
+                      <div className="p-2 rounded bg-plinky-900/90 border border-sky-500/30 flex items-center justify-between text-[11px]">
+                        <div className="flex items-center space-x-1">
+                          <Laptop className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          <span className="text-slate-400 font-mono">Client</span>
+                        </div>
+                        <div className="flex items-center space-x-1 text-slate-500">
+                          <div className="h-px w-4 bg-sky-500/50" />
+                          <span className="text-[9px] text-sky-400 uppercase font-semibold">SSH</span>
+                          <ArrowRight className="w-3 h-3 text-sky-400" />
+                        </div>
+                        <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/50">
+                          <Shield className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span className="text-amber-300 font-mono font-medium truncate max-w-[120px]" title={jumpHost || 'Jump Host'}>
+                            {jumpHost.trim() ? (jumpUsername ? `${jumpUsername}@${jumpHost}` : jumpHost) : 'Bastion'}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-1 text-slate-500">
+                          <div className="h-px w-4 bg-emerald-500/50" />
+                          <span className="text-[9px] text-emerald-400 uppercase font-semibold">SSH</span>
+                          <ArrowRight className="w-3 h-3 text-emerald-400" />
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Server className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="text-emerald-300 font-mono font-medium truncate max-w-[110px]" title={hostname || 'Target'}>
+                            {hostname.trim() || 'Target'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Preset from existing saved sessions */}
+                      {savedSessions.length > 0 && (
+                        <div className="space-y-1">
+                          <label className="text-slate-400 text-[10px]">Populate from Saved Session</label>
+                          <select
+                            onChange={e => {
+                              const sess = savedSessions.find(s => s.name === e.target.value);
+                              if (sess) {
+                                setJumpPreset(sess.name);
+                                setJumpHost(sess.hostname);
+                                setJumpPort(String(sess.port || 22));
+                                setJumpUsername(sess.username || '');
+                              }
+                            }}
+                            value={jumpPreset ?? ''}
+                            className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-sky-500"
+                          >
+                            <option value="" disabled>-- Select a saved bastion host --</option>
+                            {savedSessions.filter(s => s.protocol === 'SSH' && s.name !== name).map(s => (
+                              <option key={s.name} value={s.name}>
+                                {s.name} ({s.hostname}:{s.port})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2 space-y-1">
+                          <label className="text-slate-300 text-[11px]">Jump Host / Gateway IP *</label>
+                          <input
+                            type="text"
+                            required={enableJumpHost}
+                            placeholder="bastion.internal or jump.corp.com"
+                            value={jumpHost}
+                            onChange={e => { setJumpPreset(null); setJumpHost(e.target.value); }}
+                            className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-slate-300 text-[11px]">Port</label>
+                          <input
+                            type="number"
+                            value={jumpPort}
+                            onChange={e => { setJumpPreset(null); setJumpPort(e.target.value); }}
+                            className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                          />
+                        </div>
+                      </div>
+
                       <div className="space-y-1">
-                        <label className="text-slate-300 text-[11px]">Vault Key ID</label>
+                        <label className="text-slate-300 text-[11px]">Gateway Username</label>
                         <input
                           type="text"
-                          value={vaultKeyId}
-                          onChange={e => setVaultKeyId(e.target.value)}
-                          placeholder={name.trim() ? `session:${name.trim()}` : 'session:device-name'}
-                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-slate-300 text-[11px]">Login Password *</label>
-                        <input
-                          type="password"
-                          value={vaultPassword}
-                          onChange={e => setVaultPassword(e.target.value)}
-                          placeholder="Session login password..."
-                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                          placeholder="bastion_user (or leave blank if same)"
+                          value={jumpUsername}
+                          onChange={e => { setJumpPreset(null); setJumpUsername(e.target.value); }}
+                          className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500"
                         />
                       </div>
                     </div>
+                  )}
+                </div>
+              )}
 
-                    {/* Network Device Enable Password Toggle */}
-                    <div className="pt-0.5">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isNetworkDevice}
-                          onChange={e => setIsNetworkDevice(e.target.checked)}
-                          className="rounded border-plinky-700 text-amber-500 focus:ring-0 bg-plinky-900"
-                        />
-                        <span className="text-slate-300 text-xs font-medium">
-                          Network Device (requires Enable Password / Privileged Exec)
-                        </span>
-                      </label>
-                    </div>
+            </div>
 
-                    {isNetworkDevice && (
-                      <div className="p-2 bg-amber-950/20 border border-amber-500/30 rounded space-y-1 animate-in fade-in duration-100">
-                        <label className="block text-[11px] text-amber-300 font-medium">
-                          Enable Password (Cisco / Arista / Huawei Privileged EXEC)
-                        </label>
-                        <input
-                          type="password"
-                          value={vaultEnablePassword}
-                          onChange={e => setVaultEnablePassword(e.target.value)}
-                          placeholder="e.g. Cisco enable secret..."
-                          className="w-full bg-plinky-900 border border-amber-500/40 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-                    )}
+            <div data-tab="serial" hidden={tab !== 'serial'} className="space-y-3">
+              <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2">
+                <div className="flex items-center space-x-2 text-slate-300 font-medium pb-1 border-b border-plinky-800">
+                  <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Line settings</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Data Bits</label>
+                    <select
+                      value={serialDataBits}
+                      onChange={e => setSerialDataBits(e.target.value)}
+                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
+                    >
+                      <option value="8">8</option>
+                      <option value="7">7</option>
+                      <option value="6">6</option>
+                      <option value="5">5</option>
+                    </select>
                   </div>
-                )}
 
-                <p className="text-[10px] text-slate-400 italic">
-                  🔒 Credentials are encrypted with Argon2id and never saved in plaintext PuTTY session files.
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Stop Bits</label>
+                    <select
+                      value={serialStopBits}
+                      onChange={e => setSerialStopBits(e.target.value)}
+                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
+                    >
+                      <option value="2">1</option>
+                      <option value="4">2</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Parity</label>
+                    <select
+                      value={serialParity}
+                      onChange={e => setSerialParity(e.target.value)}
+                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
+                    >
+                      <option value="0">None</option>
+                      <option value="1">Odd</option>
+                      <option value="2">Even</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Flow Control</label>
+                    <select
+                      value={serialFlowControl}
+                      onChange={e => setSerialFlowControl(e.target.value)}
+                      className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
+                    >
+                      <option value="0">None</option>
+                      <option value="1">XON/XOFF</option>
+                      <option value="2">RTS/CTS</option>
+                    </select>
+                  </div>
+                </div>
+                  </div>
+            </div>
+
+            <div data-tab="advanced" hidden={tab !== 'advanced'} className="space-y-3">
+              {/* Connection (T-016): keepalives + auto-reconnect */}
+              {!isSerial && (
+                <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-[11px]">
+                  <div className="text-slate-300 font-medium">Connection</div>
+                  <label className="flex items-center justify-between space-x-2">
+                    <span className="text-slate-300">Send keepalives every</span>
+                    <span className="flex items-center space-x-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        step={5}
+                        value={keepalive}
+                        onChange={e => setKeepalive(e.target.value)}
+                        placeholder="0"
+                        aria-label="Keepalive interval in seconds"
+                        className="w-20 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs text-right focus:outline-none focus:border-sky-500"
+                      />
+                      <span className="text-slate-500">s (0 = off)</span>
+                    </span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" checked={tcpKeepalives} onChange={e => setTcpKeepalives(e.target.checked)} />
+                    <span className="text-slate-300">TCP keepalives</span>
+                  </label>
+                  <label className="flex items-start space-x-2 cursor-pointer">
+                    <input type="checkbox" checked={autoReconnect} onChange={e => setAutoReconnect(e.target.checked)} className="mt-0.5" />
+                    <span className="text-slate-300">
+                      Reconnect automatically if the connection drops
+                      <span className="block text-slate-500">Not after you type exit or a login fails. Tries 5 times, waiting longer each time.</span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Paste line delay (T-015) */}
+              <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1 text-[11px]">
+                <label className="flex items-center justify-between space-x-2">
+                  <span className="text-slate-300 font-medium">Paste line delay</span>
+                  <span className="flex items-center space-x-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      max={MAX_PASTE_LINE_DELAY_MS}
+                      step={50}
+                      value={pasteDelay}
+                      onChange={e => setPasteDelay(e.target.value)}
+                      placeholder="0"
+                      aria-label="Paste line delay in milliseconds"
+                      className="w-20 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs text-right focus:outline-none focus:border-sky-500"
+                    />
+                    <span className="text-slate-500">ms</span>
+                  </span>
+                </label>
+                <p className="text-slate-500">
+                  Sends a multi-line paste one line at a time, this far apart, for console ports and network gear that
+                  drop characters. 0 pastes normally. Up to {MAX_PASTE_LINE_DELAY_MS} ms.
                 </p>
               </div>
+
+            </div>
+
+            {vaultSaveError && (
+              <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">
+                {vaultSaveError}
+              </div>
             )}
+
           </div>
-
-          {/* Connection (T-016): keepalives + auto-reconnect */}
-          {!isSerial && (
-            <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-[11px]">
-              <div className="text-slate-300 font-medium">Connection</div>
-              <label className="flex items-center justify-between space-x-2">
-                <span className="text-slate-300">Send keepalives every</span>
-                <span className="flex items-center space-x-1.5">
-                  <input
-                    type="number"
-                    min={0}
-                    step={5}
-                    value={keepalive}
-                    onChange={e => setKeepalive(e.target.value)}
-                    placeholder="0"
-                    aria-label="Keepalive interval in seconds"
-                    className="w-20 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs text-right focus:outline-none focus:border-sky-500"
-                  />
-                  <span className="text-slate-500">s (0 = off)</span>
-                </span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input type="checkbox" checked={tcpKeepalives} onChange={e => setTcpKeepalives(e.target.checked)} />
-                <span className="text-slate-300">TCP keepalives</span>
-              </label>
-              <label className="flex items-start space-x-2 cursor-pointer">
-                <input type="checkbox" checked={autoReconnect} onChange={e => setAutoReconnect(e.target.checked)} className="mt-0.5" />
-                <span className="text-slate-300">
-                  Reconnect automatically if the connection drops
-                  <span className="block text-slate-500">Not after you type exit or a login fails. Tries 5 times, waiting longer each time.</span>
-                </span>
-              </label>
-            </div>
-          )}
-
-          {/* Paste line delay (T-015) */}
-          <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1 text-[11px]">
-            <label className="flex items-center justify-between space-x-2">
-              <span className="text-slate-300 font-medium">Paste line delay</span>
-              <span className="flex items-center space-x-1.5">
-                <input
-                  type="number"
-                  min={0}
-                  max={MAX_PASTE_LINE_DELAY_MS}
-                  step={50}
-                  value={pasteDelay}
-                  onChange={e => setPasteDelay(e.target.value)}
-                  placeholder="0"
-                  aria-label="Paste line delay in milliseconds"
-                  className="w-20 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs text-right focus:outline-none focus:border-sky-500"
-                />
-                <span className="text-slate-500">ms</span>
-              </span>
-            </label>
-            <p className="text-slate-500">
-              Sends a multi-line paste one line at a time, this far apart, for console ports and network gear that
-              drop characters. 0 pastes normally. Up to {MAX_PASTE_LINE_DELAY_MS} ms.
-            </p>
-          </div>
-
-          {/* Automatic answers from the vault. SSH needs no switch: plink
-              logs in by itself. The others answer prompts the device prints,
-              so they're opt-in per session. */}
-          <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-[11px]">
-            <div className="text-slate-300 font-medium">Automatic login from the vault</div>
-            {protocol === 'SSH' && (
-              <p className="text-slate-500">
-                SSH logs in by itself when the vault is unlocked and holds this session's password
-                (linked above, or an entry named "session:{name.trim() || 'name'}" or after the host).
-              </p>
-            )}
-            {(protocol === 'Telnet' || protocol === 'Serial') && (
-              <label className="flex items-start space-x-2 cursor-pointer">
-                <input type="checkbox" checked={autoLogin} onChange={e => setAutoLogin(e.target.checked)} className="mt-0.5" />
-                <span className="text-slate-300">
-                  Log in automatically
-                  <span className="block text-slate-500">Types the vault username and password at the device's Username:/Password: prompts, once per connection.</span>
-                </span>
-              </label>
-            )}
-            <label className="flex items-start space-x-2 cursor-pointer">
-              <input type="checkbox" checked={autoEnable} onChange={e => setAutoEnable(e.target.checked)} className="mt-0.5" />
-              <span className="text-slate-300">
-                Send enable password automatically
-                <span className="block text-slate-500">
-                  After you type enable / en / super and the device asks for a password. Leave off if you hop from this device to others: they would get this device's enable password.
-                </span>
-              </span>
-            </label>
-          </div>
-
-          {/* Organization & Tags */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-slate-300 font-medium flex items-center space-x-1">
-                <Folder className="w-3.5 h-3.5 text-sky-400" />
-                <span>Folder Category</span>
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Staging or Network"
-                value={folder}
-                onChange={e => setFolder(e.target.value)}
-                className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-slate-300 font-medium flex items-center space-x-1">
-                <Tag className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Tags (comma-separated)</span>
-              </label>
-              <input
-                type="text"
-                placeholder="cisco, core, serial, lab"
-                value={tags}
-                onChange={e => setTags(e.target.value)}
-                className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-              />
-            </div>
-          </div>
-
-          {vaultSaveError && (
-            <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">
-              {vaultSaveError}
-            </div>
-          )}
 
           {/* Action Buttons */}
-          <div className="flex justify-end space-x-2 pt-3 border-t border-plinky-800 shrink-0">
+          <div className="flex justify-end space-x-2 px-4 py-3 border-t border-plinky-800 shrink-0">
             <button
               type="button"
               onClick={onClose}

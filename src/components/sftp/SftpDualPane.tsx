@@ -32,6 +32,8 @@ import {
   Trash2,
   X,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   KeyRound,
 } from 'lucide-react';
 
@@ -148,6 +150,12 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
   const [selectedRemote, setSelectedRemote] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<'local' | 'remote' | null>(null);
   const [transfers, setTransfers] = useState<SftpTransferItem[]>([]);
+  // The transfer queue folds away (T-014). It opens by itself when a
+  // transfer starts, and again if one fails.
+  const [queueOpen, setQueueOpen] = useState(false);
+  const runningCount = transfers.filter(t => t.status === 'transferring').length;
+  const failedCount = transfers.filter(t => t.status === 'failed').length;
+  const doneCount = transfers.length - runningCount - failedCount;
 
   // Each psftp call is a fresh connection taking ~0.5 s; navigating quickly
   // could let an older listing land after a newer one. Only the latest wins.
@@ -250,12 +258,14 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
     // psftp reports no progress in batch mode, so a transfer is shown as
     // running until it really finishes -- never an invented percentage.
     setTransfers(prev => [{ id, filename: entry.name, direction, size: entry.size, transferred: 0, status: 'transferring' }, ...prev]);
+    setQueueOpen(true);
     try {
       await work();
       setTransfers(prev => prev.map(t => (t.id === id ? { ...t, status: 'completed', transferred: t.size } : t)));
       await after();
     } catch (e) {
       setTransfers(prev => prev.map(t => (t.id === id ? { ...t, status: 'failed', error: displayError(e) } : t)));
+      setQueueOpen(true);
     }
   };
 
@@ -610,36 +620,61 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
         )}
       </div>
 
-      {/* Transfers */}
-      <div className="h-28 bg-plinky-900 border-t border-plinky-800 flex flex-col">
-        <div className="px-3 py-1 bg-plinky-950/60 border-b border-plinky-800 flex items-center justify-between text-[11px] text-slate-400">
-          <span className="font-semibold text-slate-300">Transfers ({transfers.length})</span>
-          {transfers.some(t => t.status !== 'transferring') && (
-            <button onClick={() => setTransfers(prev => prev.filter(t => t.status === 'transferring'))} className="text-[10px] hover:text-slate-200">
-              Clear finished
-            </button>
-          )}
-        </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-          {transfers.length === 0 && (
-            <div className="text-slate-600 text-[11px] text-center pt-3">
-              Double-click a file, use the arrows, or drag it to the other pane.
-            </div>
-          )}
-          {transfers.map(item => (
-            <div key={item.id} className="flex items-center space-x-2 text-xs bg-plinky-950 p-1.5 rounded border border-plinky-800/60">
-              {item.direction === 'upload' ? <Upload className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" /> : <Download className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
-              <span className="font-medium text-slate-200 truncate w-40 flex-shrink-0">{item.filename}</span>
-              <span className="font-mono text-[11px] text-slate-500 w-16 flex-shrink-0">{formatSize(item.size)}</span>
-              <span className={`flex-1 truncate text-[11px] ${item.status === 'failed' ? 'text-red-400 select-text' : 'text-slate-400'}`} title={item.error}>
-                {item.status === 'transferring' ? 'Transferring…' : item.status === 'completed' ? 'Done' : item.error}
+      {/* Transfers: a drawer (T-014). Folded, it gives the file panes the
+          room and still says what is running and what failed. */}
+      <div className={`${queueOpen ? 'h-32' : ''} bg-plinky-900 border-t border-plinky-800 flex flex-col shrink-0`}>
+        <div className={`px-3 py-1 bg-plinky-950/60 flex items-center justify-between text-[11px] text-slate-400 ${queueOpen ? 'border-b border-plinky-800' : ''}`}>
+          <button
+            type="button"
+            onClick={() => setQueueOpen(o => !o)}
+            aria-expanded={queueOpen}
+            aria-controls="sftp-transfer-queue"
+            className="flex items-center space-x-1 font-semibold text-slate-300 hover:text-white"
+          >
+            {queueOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+            <span>Transfers ({transfers.length})</span>
+          </button>
+          <span className="flex items-center space-x-3">
+            {runningCount > 0 && (
+              <span className="flex items-center space-x-1 text-sky-400">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>{runningCount} running</span>
               </span>
-              {item.status === 'completed' && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
-              {item.status === 'transferring' && <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin flex-shrink-0" />}
-              {item.status === 'failed' && <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
-            </div>
-          ))}
+            )}
+            {failedCount > 0 && <span className="text-red-400">{failedCount} failed</span>}
+            {!queueOpen && doneCount > 0 && <span>{doneCount} done</span>}
+            {!queueOpen && transfers.length === 0 && (
+              <span className="text-slate-600">Double-click a file, use the arrows, or drag it to the other pane.</span>
+            )}
+            {queueOpen && transfers.some(t => t.status !== 'transferring') && (
+              <button onClick={() => setTransfers(prev => prev.filter(t => t.status === 'transferring'))} className="text-[10px] hover:text-slate-200">
+                Clear finished
+              </button>
+            )}
+          </span>
         </div>
+        {queueOpen && (
+          <div id="sftp-transfer-queue" className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {transfers.length === 0 && (
+              <div className="text-slate-600 text-[11px] text-center pt-3">
+                Double-click a file, use the arrows, or drag it to the other pane.
+              </div>
+            )}
+            {transfers.map(item => (
+              <div key={item.id} className="flex items-center space-x-2 text-xs bg-plinky-950 p-1.5 rounded border border-plinky-800/60">
+                {item.direction === 'upload' ? <Upload className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" /> : <Download className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
+                <span className="font-medium text-slate-200 truncate w-40 flex-shrink-0">{item.filename}</span>
+                <span className="font-mono text-[11px] text-slate-500 w-16 flex-shrink-0">{formatSize(item.size)}</span>
+                <span className={`flex-1 truncate text-[11px] ${item.status === 'failed' ? 'text-red-400 select-text' : 'text-slate-400'}`} title={item.error}>
+                  {item.status === 'transferring' ? 'Transferring…' : item.status === 'completed' ? 'Done' : item.error}
+                </span>
+                {item.status === 'completed' && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
+                {item.status === 'transferring' && <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin flex-shrink-0" />}
+                {item.status === 'failed' && <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

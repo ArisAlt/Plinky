@@ -365,7 +365,8 @@ describe('NewSessionModal Component', () => {
       target: { value: '192.168.1.2' },
     });
 
-    // Check "Save credentials in Encrypted Vault"
+    // Check "Save credentials in Encrypted Vault" (on its own tab since T-014)
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
     const vaultCheckbox = screen.getByLabelText(/Save credentials in Encrypted Vault/i);
     fireEvent.click(vaultCheckbox);
 
@@ -511,5 +512,70 @@ describe('NewSessionModal Component', () => {
     const serial = { name: 'Con', hostname: '', port: 0, protocol: 'Serial' as const, extra: { SerialLine: '/dev/ttyUSB0' } };
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={serial} />);
     expect(screen.queryByLabelText('Keepalive interval in seconds')).toBeNull();
+  });
+});
+
+describe('the session editor tabs (T-014)', () => {
+  const tabs = () => screen.getAllByRole('tab').map(t => t.textContent);
+  const panel = (id: string) => document.querySelector(`[data-tab="${id}"]`) as HTMLElement;
+
+  it('shows the tabs the protocol has', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Jump Host', 'Advanced']);
+    const protocol = screen.getByDisplayValue(/SSH/i);
+    fireEvent.change(protocol, { target: { value: 'Serial' } });
+    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Serial', 'Advanced']);
+    fireEvent.change(protocol, { target: { value: 'Telnet' } });
+    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Advanced']);
+  });
+
+  it('keeps what was typed on every tab when switching between them', () => {
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'edge-01' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.44' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
+    expect(panel('general').hidden).toBe(true);
+    expect(panel('advanced').hidden).toBe(false);
+    fireEvent.change(screen.getByLabelText('Keepalive interval in seconds'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }));
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.name).toBe('edge-01');
+    expect(saved.hostname).toBe('192.0.2.44');
+    expect(saved.extra.PingIntervalSecs).toBe('30');
+  });
+
+  it('falls back to General when the open tab goes away', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Jump Host' }));
+    expect(panel('jump').hidden).toBe(false);
+    fireEvent.change(screen.getByDisplayValue(/SSH/i), { target: { value: 'Telnet' } });
+    expect(panel('general').hidden).toBe(false);
+    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('shows the tab holding a required field that is empty', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
+    // Save with no name: the browser flags the (hidden) name field invalid.
+    fireEvent.invalid(screen.getByPlaceholderText(/e\.g\. Production Web Server/i));
+    expect(panel('general').hidden).toBe(false);
+  });
+
+  it('marks a tab that holds settings', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    const jumpTab = screen.getByRole('tab', { name: 'Jump Host' });
+    expect(jumpTab.querySelector('span[aria-hidden]')).toBeNull();
+    fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
+    expect(jumpTab.querySelector('span[aria-hidden]')).toBeTruthy();
+  });
+
+  it('opens on General again', () => {
+    const { rerender } = render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
+    rerender(<NewSessionModal isOpen={false} onClose={vi.fn()} onSave={vi.fn()} />);
+    rerender(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(panel('general').hidden).toBe(false);
   });
 });
