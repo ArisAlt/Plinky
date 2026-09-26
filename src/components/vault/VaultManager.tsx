@@ -8,6 +8,7 @@ import {
   EyeOff, 
   Plus, 
   Trash2, 
+  Pencil,
   Copy, 
   Check, 
   RefreshCw, 
@@ -67,6 +68,8 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   const [isNetworkDevice, setIsNetworkDevice] = useState(false);
   const [newEnableSecret, setNewEnableSecret] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  // Set while the form edits an existing entry instead of adding one.
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     checkStatus();
@@ -209,33 +212,85 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
     }
   };
 
+  const resetForm = () => {
+    setShowAddForm(false);
+    setEditingId(null);
+    setNewId('');
+    setNewUsername('');
+    setNewSecret('');
+    setIsNetworkDevice(false);
+    setNewEnableSecret('');
+    setNewNotes('');
+  };
+
+  // Opens the form on an existing entry. Its secrets are not decrypted
+  // into the form: left empty, they stay as they are.
+  const startEdit = (entry: VaultEntryMeta) => {
+    setEditingId(entry.id);
+    setNewId(entry.id);
+    setNewUsername(entry.username || '');
+    setNewSecret('');
+    setIsNetworkDevice(!!entry.has_enable_secret);
+    setNewEnableSecret('');
+    setNewNotes(entry.notes || '');
+    setError(null);
+    setShowAddForm(true);
+  };
+
   const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newId.trim() || !newSecret) {
-      setError("Key name and secret are required");
-      return;
-    }
-
     const now = Math.floor(Date.now() / 1000);
-    const entry: VaultEntry = {
-      id: newId.trim(),
-      username: newUsername.trim() || undefined,
-      secret: newSecret,
-      enable_secret: isNetworkDevice && newEnableSecret.trim() ? newEnableSecret.trim() : undefined,
-      notes: newNotes.trim() || undefined,
-      created_at: now,
-      updated_at: now,
-    };
+    let entry: VaultEntry;
+
+    if (editingId) {
+      let current: VaultEntry | null;
+      try {
+        current = await vaultGetEntry(editingId);
+      } catch (err: any) {
+        setError(err.toString());
+        return;
+      }
+      if (!current) {
+        setError(`Credential '${editingId}' no longer exists`);
+        return;
+      }
+      entry = {
+        id: editingId,
+        username: newUsername.trim() || undefined,
+        secret: newSecret || current.secret,
+        // Unticking "Network Device" removes the enable password.
+        enable_secret: isNetworkDevice
+          ? (newEnableSecret.trim() || current.enable_secret || undefined)
+          : undefined,
+        notes: newNotes.trim() || undefined,
+        created_at: current.created_at,
+        updated_at: now,
+      };
+    } else {
+      if (!newId.trim() || !newSecret) {
+        setError("Key name and secret are required");
+        return;
+      }
+      entry = {
+        id: newId.trim(),
+        username: newUsername.trim() || undefined,
+        secret: newSecret,
+        enable_secret: isNetworkDevice && newEnableSecret.trim() ? newEnableSecret.trim() : undefined,
+        notes: newNotes.trim() || undefined,
+        created_at: now,
+        updated_at: now,
+      };
+    }
 
     try {
       await vaultSetEntry(entry);
-      setShowAddForm(false);
-      setNewId('');
-      setNewUsername('');
-      setNewSecret('');
-      setIsNetworkDevice(false);
-      setNewEnableSecret('');
-      setNewNotes('');
+      // An edited secret that was revealed must not keep showing the old one.
+      setRevealedSecrets(prev => {
+        const next = { ...prev };
+        delete next[entry.id];
+        return next;
+      });
+      resetForm();
       await loadEntries();
     } catch (e: any) {
       setError(e.toString());
@@ -542,7 +597,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
               </div>
 
               <button
-                onClick={() => setShowAddForm(!showAddForm)}
+                onClick={() => (showAddForm ? resetForm() : setShowAddForm(true))}
                 className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -553,7 +608,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
             {/* Add Credential Form */}
             {showAddForm && (
               <form onSubmit={handleAddEntry} className="bg-plinky-900 border border-plinky-800 rounded-lg p-4 space-y-3">
-                <h3 className="text-xs font-semibold text-white">Add New Credential</h3>
+                <h3 className="text-xs font-semibold text-white">{editingId ? `Edit Credential` : 'Add New Credential'}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">Key / Session Identifier</label>
@@ -561,8 +616,11 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                       type="text"
                       value={newId}
                       onChange={e => setNewId(e.target.value)}
+                      readOnly={!!editingId}
+                      aria-label="Key / Session Identifier"
+                      title={editingId ? "Sessions find their password by this key, so it can't be renamed here" : undefined}
                       placeholder="e.g. session:prod-web or server.internal"
-                      className="w-full px-2.5 py-1.5 bg-plinky-950 border border-plinky-700 rounded text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                      className={`w-full px-2.5 py-1.5 bg-plinky-950 border border-plinky-700 rounded text-xs focus:outline-none focus:border-sky-500 font-mono ${editingId ? 'text-slate-400' : 'text-white'}`}
                     />
                   </div>
 
@@ -584,7 +642,8 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                     type="password"
                     value={newSecret}
                     onChange={e => setNewSecret(e.target.value)}
-                    placeholder="Enter secret..."
+                    aria-label="Secret"
+                    placeholder={editingId ? 'Leave empty to keep the current password' : 'Enter secret...'}
                     className="w-full px-2.5 py-1.5 bg-plinky-950 border border-plinky-700 rounded text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
                   />
                 </div>
@@ -612,7 +671,8 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                       type="password"
                       value={newEnableSecret}
                       onChange={e => setNewEnableSecret(e.target.value)}
-                      placeholder="e.g. Cisco enable secret..."
+                      aria-label="Enable Password"
+                      placeholder={editingId ? 'Leave empty to keep the current enable password' : 'e.g. Cisco enable secret...'}
                       className="w-full px-2.5 py-1.5 bg-plinky-950 border border-amber-500/40 rounded text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
                     />
                     <p className="text-[10px] text-slate-400">
@@ -635,7 +695,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 <div className="flex justify-end space-x-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddForm(false)}
+                    onClick={resetForm}
                     className="px-3 py-1.5 rounded bg-plinky-800 text-slate-300 text-xs hover:bg-plinky-700 transition"
                   >
                     Cancel
@@ -644,7 +704,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                     type="submit"
                     className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition"
                   >
-                    Save Secret
+                    {editingId ? 'Save Changes' : 'Save Secret'}
                   </button>
                 </div>
               </form>
@@ -723,6 +783,15 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           className="p-1.5 rounded hover:bg-plinky-800 text-slate-400 hover:text-slate-200 transition"
                         >
                           {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <button
+                          onClick={() => startEdit(entry)}
+                          title="Edit Credential"
+                          aria-label={`Edit ${entry.id}`}
+                          className="p-1.5 rounded hover:bg-plinky-800 text-slate-400 hover:text-slate-200 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
                         </button>
 
                         <button
