@@ -33,6 +33,7 @@ import {
 import {
   classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
 } from '../../services/promptDetect';
+import { KeywordHighlighter } from '../../services/keywordHighlight';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import {
   Radio,
@@ -382,6 +383,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // restartSessionRef is filled in by the mount effect, which owns the
   // terminal and its output handler.
   const restartSessionRef = useRef<(() => Promise<void>) | null>(null);
+  // Network keyword highlighting (T-017), toggled per tab.
+  const highlighterRef = useRef<KeywordHighlighter | null>(null);
+  useEffect(() => {
+    highlighterRef.current?.setEnabled(tab.activeHighlighting !== false);
+  }, [tab.activeHighlighting]);
   const reachedLiveRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -534,6 +540,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
 
     term.open(containerRef.current);
+    const highlighter = new KeywordHighlighter(term, tab.activeHighlighting !== false);
+    highlighterRef.current = highlighter;
+    // Output arrives in many small chunks; decorate them in one pass a few
+    // ms later. (setTimeout, not requestAnimationFrame: rAF doesn't run
+    // while the window is hidden, and highlights would lag behind output.)
+    let scanQueued = false;
+    const scheduleHighlight = () => {
+      if (scanQueued) return;
+      scanQueued = true;
+      window.setTimeout(() => {
+        scanQueued = false;
+        if (!disposed) highlighter.scan();
+      }, 30);
+    };
     fitAddon.fit();
     // A freshly connected session needs keyboard focus immediately -- the
     // user is about to be looking at a host-key or password prompt and
@@ -630,7 +650,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handleIncomingChunk = (chunk: Uint8Array) => {
       if (disposed) return;
       isLivePtyRef.current = true;
-      term.write(chunk);
+      term.write(chunk, scheduleHighlight);
       const text = new TextDecoder().decode(chunk);
 
       // Status transitions
@@ -909,6 +929,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       osc133Disposable.dispose();
       osc7Disposable.dispose();
       disposed = true;
+      highlighter.dispose();
+      highlighterRef.current = null;
       term.dispose();
     };
   }, [tab.id, tab.sessionName, tab.hostname, tab.port, tab.username]);
@@ -1360,14 +1382,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             <span>Channel: {tab.syncChannel === 'none' ? 'Off' : tab.syncChannel}</span>
           </button>
 
-          {/* Regex Highlighting Indicator */}
-          <span
-            title="Active Regex Highlighting: IPs, UUIDs, Errors, Warnings, URLs (Clickable links enabled)"
-            className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 text-[11px]"
+          {/* Keyword highlighting toggle (T-017). This used to be a static
+              "Regex Hi" label claiming highlighting that didn't exist. */}
+          <button
+            onClick={() => onUpdateTab(tab.id, { activeHighlighting: tab.activeHighlighting === false })}
+            aria-pressed={tab.activeHighlighting !== false}
+            title={tab.activeHighlighting !== false
+              ? 'Keyword highlighting on: errors and down states red, warnings amber, up green, interfaces, IPs and MACs. Click to turn off.'
+              : 'Keyword highlighting off. Click to turn on.'}
+            className={`flex items-center space-x-1 px-1.5 py-0.5 rounded border text-[11px] transition ${
+              tab.activeHighlighting !== false
+                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/20'
+                : 'bg-slate-800/60 text-slate-500 border-slate-700 hover:text-slate-300'
+            }`}
           >
             <Sparkles className="w-3 h-3" />
-            <span>Regex Hi</span>
-          </span>
+            <span>Highlight</span>
+          </button>
 
           {/* PuTTY Session Logging Button */}
           <button
