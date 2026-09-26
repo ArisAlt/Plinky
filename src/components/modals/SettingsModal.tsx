@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer } from 'lucide-react';
-import { detectPutty, PuttyDetectInfo } from '../../services/tauriBridge';
+import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle } from 'lucide-react';
+import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -44,11 +44,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [puttyInfo, setPuttyInfo] = useState<PuttyDetectInfo | null>(null);
   const [resetDone, setResetDone] = useState(false);
+  // Delete vault: two warnings, then delete (owner request).
+  const [vaultExists, setVaultExists] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'warn1' | 'warn2' | 'deleting'>('idle');
+  const [deleteResult, setDeleteResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       detectPutty().then(setPuttyInfo);
       setResetDone(false);
+      setDeleteStep('idle');
+      setDeleteResult(null);
+      vaultIsInitialized().then(setVaultExists).catch(() => setVaultExists(false));
     }
   }, [isOpen]);
 
@@ -64,6 +71,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const handleDeleteVault = async () => {
+    setDeleteStep('deleting');
+    try {
+      const deleted = await vaultDestroy();
+      setDeleteResult(deleted ? 'Vault deleted. Open Vault to create a new one.' : 'There was no vault to delete.');
+      setVaultExists(false);
+    } catch (e) {
+      setDeleteResult(String(e));
+    } finally {
+      setDeleteStep('idle');
+    }
+  };
 
   const handleResetLayout = () => {
     onResetLayout();
@@ -264,6 +284,69 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* Section: Credential Vault */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span>Credential Vault</span>
+            </div>
+
+            <div className="p-2.5 bg-plinky-950 rounded border border-plinky-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-slate-200">Delete Vault</p>
+                  <p className="text-[11px] text-slate-500">Permanently deletes the vault and every password saved in it.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setDeleteResult(null); setDeleteStep('warn1'); }}
+                  disabled={!vaultExists || deleteStep !== 'idle'}
+                  title={vaultExists ? 'Delete the vault' : 'There is no vault'}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-red-950/40 border border-red-800/50 hover:bg-red-900/50 text-red-300 disabled:opacity-40 disabled:pointer-events-none transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Vault</span>
+                </button>
+              </div>
+
+              {deleteStep === 'warn1' && (
+                <div role="alertdialog" aria-label="First warning" className="p-2.5 rounded border border-amber-600/50 bg-amber-950/30 space-y-2">
+                  <p className="flex items-start space-x-1.5 text-amber-200">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                    <span>
+                      Delete the vault? Every saved password and enable password in it will be deleted from this
+                      computer. Your sessions stay, but they will ask for passwords again.
+                    </span>
+                  </p>
+                  <div className="flex justify-end space-x-2">
+                    <button type="button" onClick={() => setDeleteStep('idle')} className="px-3 py-1 rounded bg-plinky-800 hover:bg-plinky-700">Cancel</button>
+                    <button type="button" onClick={() => setDeleteStep('warn2')} className="px-3 py-1 rounded bg-amber-700 hover:bg-amber-600 text-white">Yes, continue</button>
+                  </div>
+                </div>
+              )}
+
+              {(deleteStep === 'warn2' || deleteStep === 'deleting') && (
+                <div role="alertdialog" aria-label="Final warning" className="p-2.5 rounded border border-red-600/60 bg-red-950/40 space-y-2">
+                  <p className="flex items-start space-x-1.5 text-red-200">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                    <span>
+                      Last warning: this can't be undone. If you might need these passwords, cancel and use
+                      Vault → Export to KeePass first.
+                    </span>
+                  </p>
+                  <div className="flex justify-end space-x-2">
+                    <button type="button" onClick={() => setDeleteStep('idle')} disabled={deleteStep === 'deleting'} className="px-3 py-1 rounded bg-plinky-800 hover:bg-plinky-700 disabled:opacity-40">Cancel</button>
+                    <button type="button" onClick={handleDeleteVault} disabled={deleteStep === 'deleting'} className="px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white font-medium disabled:opacity-40">
+                      {deleteStep === 'deleting' ? 'Deleting…' : 'Delete vault permanently'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {deleteResult && <p role="status" className="text-[11px] text-slate-300">{deleteResult}</p>}
             </div>
           </div>
         </div>
