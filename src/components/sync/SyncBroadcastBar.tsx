@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SyncChannel } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
 import { broadcastSyncInput, isTauriEnvironment } from '../../services/tauriBridge';
+import { announceBroadcast, broadcastHistory } from '../../services/broadcast';
 import { Radio, Send, Terminal, AlertTriangle, X } from 'lucide-react';
 
 interface SyncBroadcastBarProps {
@@ -12,17 +13,37 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
   const [broadcastTarget, setBroadcastTarget] = useState<SyncChannel | 'all'>('all');
   const [command, setCommand] = useState('');
   const [pendingConfirmation, setPendingConfirmation] = useState<{ command: string; lineCount: number } | null>(null);
+  // What the last broadcast did. It used to say nothing at all, even when
+  // no session was live on the channel and the command went nowhere.
+  const [result, setResult] = useState<{ text: string; ok: boolean } | null>(null);
+  const resultTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(resultTimer.current), []);
 
   const executeBroadcast = async (cmd: string) => {
     const formatted = cmd.endsWith('\n') ? cmd : `${cmd}\n`;
     const data = new TextEncoder().encode(formatted);
+    broadcastHistory.push(cmd);
 
-    if (isTauriEnvironment()) {
-      await broadcastSyncInput(broadcastTarget, data);
-    } else {
-      terminalManager.broadcastInput(broadcastTarget, cmd);
-    }
+    const ids = isTauriEnvironment()
+      ? await broadcastSyncInput(broadcastTarget, data)
+      : terminalManager.broadcastInput(broadcastTarget, cmd);
     setCommand('');
+    announceBroadcast(ids);
+
+    const n = ids.length;
+    setResult(n > 0
+      ? { ok: true, text: `Sent to ${n} session${n === 1 ? '' : 's'}` }
+      : { ok: false, text: `Not sent: no live session ${broadcastTarget === 'all' ? 'open' : `on CH-${broadcastTarget}`}` });
+    clearTimeout(resultTimer.current);
+    resultTimer.current = setTimeout(() => setResult(null), 4000);
+  };
+
+  const recall = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    const next = e.key === 'ArrowUp' ? broadcastHistory.up(command) : broadcastHistory.down();
+    if (next === null) return;
+    e.preventDefault();
+    setCommand(next);
   };
 
   const handleBroadcast = (e: React.FormEvent) => {
@@ -81,6 +102,9 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
             type="text"
             value={command}
             onChange={e => setCommand(e.target.value)}
+            onKeyDown={recall}
+            aria-label="Broadcast command"
+            title="Up / Down: commands sent before"
             placeholder={`Type command to simultaneously broadcast to ${broadcastTarget === 'all' ? 'ALL active sessions' : `Channel ${broadcastTarget}`}... (e.g. uptime, df -h, systemctl status)`}
             className="w-full pl-8 pr-3 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-sky-500 font-mono transition"
           />
@@ -94,6 +118,13 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
           <Send className="w-3 h-3" />
           <span>Broadcast</span>
         </button>
+        <span
+          role="status"
+          aria-live="polite"
+          className={`text-[11px] whitespace-nowrap ${result?.ok ? 'text-emerald-400' : 'text-amber-400'}`}
+        >
+          {result?.text}
+        </span>
       </form>
 
       {/* D6 Multi-Line Broadcast Confirmation Modal */}

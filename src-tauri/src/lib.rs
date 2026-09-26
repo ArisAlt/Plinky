@@ -258,7 +258,9 @@ fn broadcast_sync_input(
     registry: State<Arc<SessionRegistry>>,
     channel: String,
     data: Vec<u8>,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
+    // The recipients' ids, not a count: the UI lights up exactly the panes
+    // that received the command (T-012).
     if channel.eq_ignore_ascii_case("all") {
         registry
             .broadcast_sync_all(&data)

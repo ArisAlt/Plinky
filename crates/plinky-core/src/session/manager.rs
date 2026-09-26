@@ -607,13 +607,14 @@ impl SessionRegistry {
     }
 
     /// Broadcasts input data to all Live, unbuffered, and unprotected sessions in `channel`.
-    pub fn broadcast_sync_input(&self, channel: crate::sync::router::SyncChannelId, data: &[u8]) -> Result<usize> {
+    /// Returns the ids of the sessions that received the input.
+    pub fn broadcast_sync_input(&self, channel: crate::sync::router::SyncChannelId, data: &[u8]) -> Result<Vec<String>> {
         let router = self.sync_router.lock().unwrap();
         router.broadcast(self, channel, data)
     }
 
     /// Broadcasts input data to ALL Live, unbuffered, and unprotected sessions across the registry.
-    pub fn broadcast_sync_all(&self, data: &[u8]) -> Result<usize> {
+    pub fn broadcast_sync_all(&self, data: &[u8]) -> Result<Vec<String>> {
         let router = self.sync_router.lock().unwrap();
         router.broadcast_all(self, data)
     }
