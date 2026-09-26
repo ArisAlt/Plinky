@@ -64,6 +64,9 @@ pub struct ActiveSession {
     /// by id alone, a closed session's trailing output and EOF landed on its
     /// successor.
     pub instance: u64,
+    /// Answers the jump host's and the final host's password prompts, for a
+    /// session through a jump host (see `jump_login`). Dropped once Live.
+    pub jump_login: Option<super::jump_login::JumpLogin>,
 }
 
 static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
@@ -263,6 +266,7 @@ impl SessionRegistry {
             log_file,
             flow,
             instance,
+            jump_login: None,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -298,6 +302,40 @@ impl SessionRegistry {
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
+        self.spawn_plink(id, session_name, explicit_target, login, None, log_file_name, cols, rows, out_tx)
+    }
+
+    /// A saved session through a jump host, logging in to both hosts from
+    /// the vault. No `-pwfile`: plink would offer it to the jump host first
+    /// (see `jump_login`); the prompts are answered instead.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_plink_session_with_jump_login(
+        &self,
+        id: &str,
+        session_name: &str,
+        credentials: super::jump_login::JumpCredentials,
+        log_file_name: Option<String>,
+        cols: u16,
+        rows: u16,
+        out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) -> Result<()> {
+        let jump = super::jump_login::JumpLogin::new(credentials);
+        self.spawn_plink(id, session_name, None, None, Some(jump), log_file_name, cols, rows, out_tx)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_plink(
+        &self,
+        id: &str,
+        session_name: &str,
+        explicit_target: Option<crate::transport::plink::ExplicitTarget>,
+        login: Option<crate::transport::plink::PlinkLogin>,
+        jump_login: Option<super::jump_login::JumpLogin>,
+        log_file_name: Option<String>,
+        cols: u16,
+        rows: u16,
+        out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let flow = Arc::new(FlowGate::new(OUTPUT_WINDOW));
         let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx, flow.clone())?;
@@ -326,6 +364,13 @@ impl SessionRegistry {
                         session.scrollback.push(&chunk);
                         if let Some(f) = session.log_file.as_mut() {
                             let _ = f.write_all(&chunk);
+                        }
+                        // Pre-auth only: once Live, remote output can never
+                        // draw a stored password out of the vault.
+                        if session.state_machine.is_live() {
+                            session.jump_login = None;
+                        } else if let Some(answer) = session.jump_login.as_mut().and_then(|j| j.feed(&chunk)) {
+                            let _ = session.transport.write(&answer);
                         }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
@@ -443,6 +488,7 @@ impl SessionRegistry {
             log_file,
             flow,
             instance,
+            jump_login,
         };
 
         self.insert_new_session(id_owned, active)?;
