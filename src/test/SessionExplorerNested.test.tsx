@@ -5,6 +5,10 @@ import { SessionExplorer } from '../components/sidebar/SessionExplorer';
 import { PuttySession } from '../types/session';
 import { getUserFolders } from '../services/sessionMetadata';
 
+// Text as toHaveTextContent compares it (whitespace collapsed). The
+// jest-dom matchers aren't in tsc's types here, and `npm run build` runs tsc.
+const textOf = (el: Element | null) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
 const setSessionFolders = vi.fn();
 vi.mock('../services/tauriBridge', () => ({
   setSessionFolders: (...args: unknown[]) => setSessionFolders(...args),
@@ -59,10 +63,10 @@ describe('SessionExplorer nested folders', () => {
 
   it('shows Corp 1 -> Site 1 -> Site 1 Production as nested levels with recursive counts', () => {
     renderExplorer();
-    expect(folderHeader('Corp 1')).toHaveTextContent('(3)');
-    expect(folderHeader('Corp 1/Site 1')).toHaveTextContent('(3)');
-    expect(folderHeader('Corp 1/Site 1/Site 1 Production')).toHaveTextContent('Site 1 Production(2)');
-    expect(screen.getByText('db-prod')).toBeInTheDocument();
+    expect(textOf(folderHeader('Corp 1'))).toContain('(3)');
+    expect(textOf(folderHeader('Corp 1/Site 1'))).toContain('(3)');
+    expect(textOf(folderHeader('Corp 1/Site 1/Site 1 Production'))).toContain('Site 1 Production(2)');
+    expect(screen.getByText('db-prod')).toBeTruthy();
   });
 
   it('remembers a collapsed folder by its full path', () => {
@@ -78,7 +82,7 @@ describe('SessionExplorer nested folders', () => {
     fireEvent.click(screen.getByText('Connect All (3)...'));
 
     const dialog = screen.getByRole('dialog', { name: 'Connect all sessions' });
-    expect(dialog).toHaveTextContent('Open 3 sessions?');
+    expect(textOf(dialog)).toContain('Open 3 sessions?');
     fireEvent.click(screen.getByText('Cancel'));
     expect(props.onConnectSession).not.toHaveBeenCalled();
 
@@ -95,7 +99,7 @@ describe('SessionExplorer nested folders', () => {
     fireEvent.click(screen.getByText('New Subfolder...'));
     const input = screen.getByLabelText('New subfolder name');
     fireEvent.change(input, { target: { value: 'Lab/Rack 1' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('cannot contain "/"');
+    expect(textOf(screen.getByRole('alert'))).toContain('cannot contain "/"');
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(getUserFolders()).not.toContain('Home/Lab/Rack 1');
     expect(getUserFolders()).not.toContain('Home/Lab');
@@ -133,7 +137,7 @@ describe('SessionExplorer nested folders', () => {
     fireEvent.change(input, { target: { value: 'Site A' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(await screen.findByText(/Nothing was moved: disk full/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing was moved: disk full/)).toBeTruthy();
     expect(getUserFolders()).toEqual(before);
     expect(props.onFoldersChanged).not.toHaveBeenCalled();
   });
@@ -144,7 +148,7 @@ describe('SessionExplorer nested folders', () => {
     fireEvent.click(screen.getByText('Rename Folder...'));
     const input = screen.getByLabelText('Rename folder');
     fireEvent.change(input, { target: { value: 'Site 2' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('already exists');
+    expect(textOf(screen.getByRole('alert'))).toContain('already exists');
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(setSessionFolders).not.toHaveBeenCalled();
   });
