@@ -62,6 +62,10 @@ pub enum PreAuthAction {
     PassThrough(Vec<u8>),
     /// Host key confirmation prompt detected (requires user approval via native dialog).
     HostKeyPrompt(HostKeyPromptInfo),
+    /// Bytes arriving while a host-key prompt awaits the user's answer: the
+    /// tail of plink's prompt text. The dialog shows the prompt, so they're
+    /// neither displayed nor announced again.
+    Suppress,
     /// Authentication verified via D9 marker ("Access granted") — transitions to Live.
     TransitionToLive(Vec<u8>),
     /// Session closed (error, rejected, or auth failure).
@@ -109,6 +113,19 @@ impl PreAuthStateMachine {
 
         if let SessionState::Closed(ref reason) = self.state {
             return PreAuthAction::Closed(reason.clone());
+        }
+
+        // plink is blocked on the user's answer. Only a fatal error (the
+        // connection dropped while the dialog was open) changes anything.
+        if matches!(self.state, SessionState::HostKeyPending { .. }) {
+            let text = String::from_utf8_lossy(chunk);
+            if let Some(pos) = text.find("FATAL ERROR:") {
+                let reason = CloseReason::AuthFailed(text[pos..].to_string());
+                self.state = SessionState::Closed(reason.clone());
+                self.buffer.clear();
+                return PreAuthAction::Closed(reason);
+            }
+            return PreAuthAction::Suppress;
         }
 
         self.buffer.extend_from_slice(chunk);
@@ -166,6 +183,24 @@ impl PreAuthStateMachine {
 
         // Default-deny: hold unmatched pre-auth bytes until transition to Live or prompt
         PreAuthAction::Hold
+    }
+
+    /// The user answered the pending host-key prompt: back to PreAuth, with
+    /// the answered prompt dropped from the buffer.
+    ///
+    /// Nothing used to do this. The session stayed HostKeyPending until
+    /// "Access granted", every later chunk re-matched the old prompt still
+    /// in the buffer -- re-announcing it (92 events for one prompt, against
+    /// a real sshd) and hiding the text from the terminal -- and typing
+    /// stayed blocked. So a first connection to a password server showed
+    /// nothing after the key was accepted and wouldn't take the password;
+    /// and through a jump host, the target's host-key prompt was hidden and
+    /// re-announced with the bastion's fingerprint.
+    pub fn prompt_answered(&mut self) {
+        if matches!(self.state, SessionState::HostKeyPending { .. }) {
+            self.state = SessionState::PreAuth;
+            self.buffer.clear();
+        }
     }
 
     pub fn force_live(&mut self) {
