@@ -1,3 +1,4 @@
+pub mod keepass_export;
 pub mod storage;
 
 use std::collections::BTreeMap;
@@ -279,6 +280,11 @@ impl Vault {
     /// Retrieve entry for key `id`.
     pub fn get_entry(&self, id: &str) -> Option<&VaultEntry> {
         self.entries.get(id)
+    }
+
+    /// Every entry, in key order (for export).
+    pub fn entries(&self) -> impl Iterator<Item = &VaultEntry> {
+        self.entries.values()
     }
 
     /// Insert or update a secret with default metadata.

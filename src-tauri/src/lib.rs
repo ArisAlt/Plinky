@@ -737,6 +737,77 @@ async fn vault_send_secret(
     registry.type_secret(&session_id, secret).map_err(shown)
 }
 
+/// Where a vault entry points, for the KeePass URL field: an entry keyed
+/// "session:<name>" belongs to that saved session.
+fn session_url_for_entry(id: &str) -> Option<String> {
+    let name = id.strip_prefix("session:")?;
+    let s = putty_compat::sessions::read_session(name).ok()?;
+    if s.host_name.is_empty() {
+        return None;
+    }
+    let scheme = match s.protocol.to_ascii_lowercase().as_str() {
+        "" | "ssh" => "ssh",
+        "telnet" => "telnet",
+        "rlogin" => "rlogin",
+        _ => return None, // serial/raw: no meaningful URL
+    };
+    let user = if s.user_name.is_empty() { String::new() } else { format!("{}@", s.user_name) };
+    Some(format!("{scheme}://{user}{}:{}", s.host_name, s.port_number))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KdbxExport {
+    path: String,
+    entries: usize,
+}
+
+/// Exports the whole vault to a KeePass (KDBX 4) file chosen in a Save As
+/// dialog, protected by the vault's own master password (owner decision).
+/// The password is checked against the vault file itself -- an export
+/// hands every secret out in a new file, so it's asked for again even when
+/// the vault is already unlocked -- and that same check reads the entries,
+/// so a locked vault can be exported too. Ok(None) means the dialog was
+/// cancelled.
+#[tauri::command]
+async fn vault_export_kdbx(
+    app: tauri::AppHandle,
+    state: State<'_, VaultState>,
+    master_password: String,
+) -> Result<Option<KdbxExport>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let vault_path = resolve_vault_path(&app, &state);
+    if !vault_path.exists() {
+        return Err("There is no vault to export yet.".into());
+    }
+    let vault = Vault::load(&vault_path, &master_password)
+        .map_err(|_| "That isn't the vault's master password.".to_string())?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Export vault to KeePass")
+        .add_filter("KeePass database", &["kdbx"])
+        .set_file_name("plinky-vault.kdbx")
+        .save_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx.await.map_err(|_| "The save dialog closed unexpectedly".to_string())? else {
+        return Ok(None);
+    };
+    let mut dest = picked.into_path().map_err(|e| format!("Can't save there: {e}"))?;
+    // GTK's dialog doesn't add the filter's extension; KeePass clients
+    // recognise the file by it.
+    if dest.extension().is_none_or(|e| !e.eq_ignore_ascii_case("kdbx")) {
+        dest.set_extension("kdbx");
+    }
+
+    let entries = plinky_core::vault::keepass_export::export_kdbx(&vault, &dest, &master_password, session_url_for_entry)
+        .map_err(shown)?;
+    Ok(Some(KdbxExport { path: dest.display().to_string(), entries }))
+}
+
 #[tauri::command]
 async fn vault_set_entry(
     state: State<'_, VaultState>,
@@ -885,6 +956,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(registry)
         .manage(VaultState::new())
         .manage(PasteJobs::default())
@@ -942,6 +1014,7 @@ pub fn run() {
             vault_set,
             vault_get_entry,
             vault_send_secret,
+            vault_export_kdbx,
             vault_lookup,
             vault_set_entry,
             vault_delete,
@@ -958,7 +1031,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::migrate_identifier_dir;
-    use super::{find_session_entry, vault_key_candidates};
+    use super::{find_session_entry, session_url_for_entry, vault_key_candidates};
     use plinky_core::{Vault, VaultEntry};
 
     #[test]
@@ -980,7 +1053,7 @@ mod tests {
         std::env::set_var("PUTTYDIR", &dir);
         std::fs::write(
             dir.join("sessions").join("Server%202"),
-            "HostName=10.10.10.10\nUserName=citizenzero\nProtocol=ssh\n",
+            "HostName=10.10.10.10\nPortNumber=22\nUserName=citizenzero\nProtocol=ssh\n",
         )
         .unwrap();
         let mut vault = Vault::create_fast(dir.join("vault.bin"), "pw").unwrap();
@@ -996,6 +1069,11 @@ mod tests {
         vault.set_entry(VaultEntry::new("192.0.2.7", "quick"));
         assert_eq!(find_session_entry(&vault, "192.0.2.7:22", Some("192.0.2.7"), None).unwrap().id, "192.0.2.7");
         assert!(find_session_entry(&vault, "elsewhere", Some("198.51.100.1"), None).is_none());
+
+        // KeePass export: a session's entry gets that session's address.
+        assert_eq!(session_url_for_entry("session:Server 2").as_deref(), Some("ssh://citizenzero@10.10.10.10:22"));
+        assert_eq!(session_url_for_entry("10.10.10.10"), None);
+        assert_eq!(session_url_for_entry("session:No Such Session"), None);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

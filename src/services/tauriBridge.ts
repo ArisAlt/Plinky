@@ -762,6 +762,17 @@ export interface VaultEntryMeta {
   updated_at: number;
 }
 
+/**
+ * Exports the whole vault to a KeePass (.kdbx) file chosen in a Save As
+ * dialog, protected by the vault's master password -- which is checked
+ * against the vault file first. Resolves null if the dialog was cancelled.
+ */
+export async function vaultExportKdbx(masterPassword: string): Promise<{ path: string; entries: number } | null> {
+  if (!isTauriEnvironment()) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<{ path: string; entries: number } | null>('vault_export_kdbx', { masterPassword });
+}
+
 export async function vaultIsInitialized(): Promise<boolean> {
   if (isTauriEnvironment()) {
     try {
