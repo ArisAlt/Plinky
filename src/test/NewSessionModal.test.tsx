@@ -491,6 +491,46 @@ describe('NewSessionModal Component', () => {
     expect(extra.ProxyUsername).toBeUndefined();
   });
 
+  // Owner report: editing a session that went through a saved bastion and
+  // taking the jump host off closed the dialog without saving -- the dialog
+  // shrank, and the click meant for Save hit the backdrop.
+  const viaBastion = {
+    name: 'Router', hostname: '192.168.1.5', port: 22, protocol: 'SSH' as const, username: 'admin',
+    extra: { ProxyMethod: '6', ProxyHost: 'Bastion', ProxyPort: '22', PlinkyJumpHost: '1', PlinkyJumpVaultKey: 'jump:Router' },
+  };
+  const bastionPreset = { name: 'Bastion', hostname: '10.0.0.1', port: 22, protocol: 'SSH' as const, username: 'jumper' };
+
+  it('removes the jump host from an edited session with "Remove Jump Host"', async () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={onClose} onSave={onSave} editingSession={viaBastion} savedSessions={[bastionPreset]} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Jump Host' }));
+    fireEvent.click(screen.getByRole('button', { name: /remove jump host/i }));
+
+    expect(screen.getByRole('status').textContent).toMatch(/removed when you save/i);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const extra = onSave.mock.calls[0][0].extra;
+    for (const k of ['ProxyMethod', 'ProxyHost', 'ProxyPort', 'ProxyUsername', 'PlinkyJumpHost', 'PlinkyJumpVaultKey']) {
+      expect(extra[k], k).toBeUndefined();
+    }
+  });
+
+  it('only closes on a click that starts and ends on the backdrop', () => {
+    const onClose = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={onClose} onSave={vi.fn()} editingSession={viaBastion} />);
+    const backdrop = screen.getByRole('button', { name: /save changes/i }).closest('.fixed') as HTMLElement;
+    // Pressed in a field, released outside the dialog: a drag, not a dismiss.
+    fireEvent.mouseDown(screen.getByDisplayValue('192.168.1.5'));
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.mouseDown(backdrop);
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves a PuTTY HTTP proxy alone: it isn't a jump host and isn't wiped on save", async () => {
     // Any ProxyHost used to count as a jump host, and saving without one
     // deleted every Proxy* key -- a proxy set up in real PuTTY was lost.
