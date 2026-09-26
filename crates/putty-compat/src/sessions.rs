@@ -103,7 +103,13 @@ fn find_session_file(dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 pub fn unescape_session_name(filename: &str) -> String {
-    let bytes = filename.as_bytes();
+    String::from_utf8_lossy(&percent_decode(filename)).to_string()
+}
+
+/// Undoes %XX escaping, byte for byte. PuTTY's file and registry stores
+/// escape different characters but decode the same way.
+pub(crate) fn percent_decode(escaped: &str) -> Vec<u8> {
+    let bytes = escaped.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
@@ -120,9 +126,13 @@ pub fn unescape_session_name(filename: &str) -> String {
         out.push(bytes[i]);
         i += 1;
     }
-    String::from_utf8_lossy(&out).to_string()
+    out
 }
 
+/// Where PuTTY for Unix keeps saved sessions. PuTTY for Windows has no
+/// sessions directory (and ignores PUTTYDIR): there, [`list_sessions`] and
+/// friends use the registry, and this path is only for the `*_in` file
+/// functions.
 pub fn session_dir() -> PathBuf {
     // Real PuTTY always reads $PUTTYDIR/sessions/. Falling back to $PUTTYDIR
     // itself when that subdirectory didn't exist yet meant Plinky saved
@@ -146,8 +156,13 @@ pub fn session_dir() -> PathBuf {
     PathBuf::from(".putty/sessions")
 }
 
+/// The saved sessions plink -load can open: the registry on Windows, the
+/// sessions directory everywhere else.
 pub fn list_sessions() -> Result<Vec<SessionRef>> {
-    list_sessions_in(&session_dir())
+    #[cfg(windows)]
+    return crate::registry::list_sessions_in(crate::registry::SESSIONS_KEY);
+    #[cfg(not(windows))]
+    return list_sessions_in(&session_dir());
 }
 
 pub fn list_sessions_in(dir: &Path) -> Result<Vec<SessionRef>> {
@@ -200,7 +215,10 @@ pub fn list_sessions_in(dir: &Path) -> Result<Vec<SessionRef>> {
 }
 
 pub fn read_session(name: &str) -> Result<PuttySession> {
-    read_session_in(&session_dir(), name)
+    #[cfg(windows)]
+    return crate::registry::read_session_in(crate::registry::SESSIONS_KEY, name);
+    #[cfg(not(windows))]
+    return read_session_in(&session_dir(), name);
 }
 
 pub fn read_session_in(dir: &Path, name: &str) -> Result<PuttySession> {
@@ -232,33 +250,55 @@ pub fn parse_session_file(path: &Path, session_name: &str) -> Result<PuttySessio
         }
 
         if let Some((k, v)) = trimmed.split_once('=') {
-            let key = k.trim().to_string();
-            let val = v.trim().to_string();
-            match key.as_str() {
-                "HostName" => session.host_name = val,
-                "PortNumber" => {
-                    if let Ok(p) = val.parse::<u16>() {
-                        session.port_number = p;
-                    } else {
-                        session.extra.insert(key, val);
-                    }
-                }
-                "UserName" => session.user_name = val,
-                "Protocol" => session.protocol = val,
-                "PublicKeyFile" => session.public_key_file = val,
-                "LogFileName" => session.log_file_name = val,
-                _ => {
-                    session.extra.insert(key, val);
-                }
-            }
+            apply_setting(&mut session, k.trim().to_string(), v.trim().to_string());
         }
     }
 
     Ok(session)
 }
 
+/// Puts one saved `key=value` where it belongs: a first-class field, or
+/// `extra` for everything Plinky doesn't model (kept for the round trip).
+pub(crate) fn apply_setting(session: &mut PuttySession, key: String, val: String) {
+    match key.as_str() {
+        "HostName" => session.host_name = val,
+        "PortNumber" => {
+            if let Ok(p) = val.parse::<u16>() {
+                session.port_number = p;
+            } else {
+                session.extra.insert(key, val);
+            }
+        }
+        "UserName" => session.user_name = val,
+        "Protocol" => session.protocol = val,
+        "PublicKeyFile" => session.public_key_file = val,
+        "LogFileName" => session.log_file_name = val,
+        _ => {
+            session.extra.insert(key, val);
+        }
+    }
+}
+
+/// Everything a session is saved as, in order. Both stores write exactly
+/// this, so a session means the same thing whichever one it's in.
+pub(crate) fn saved_settings(session: &PuttySession) -> Vec<(&str, String)> {
+    let mut settings = vec![
+        ("HostName", session.host_name.clone()),
+        ("PortNumber", session.port_number.to_string()),
+        ("UserName", session.user_name.clone()),
+        ("Protocol", session.protocol.clone()),
+        ("PublicKeyFile", session.public_key_file.clone()),
+        ("LogFileName", session.log_file_name.clone()),
+    ];
+    settings.extend(session.extra.iter().map(|(k, v)| (k.as_str(), v.clone())));
+    settings
+}
+
 pub fn write_session(session: &PuttySession) -> Result<()> {
-    write_session_in(&session_dir(), session)
+    #[cfg(windows)]
+    return crate::registry::write_session_in(crate::registry::SESSIONS_KEY, session);
+    #[cfg(not(windows))]
+    return write_session_in(&session_dir(), session);
 }
 
 pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
@@ -287,56 +327,17 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
         })?;
 
     let mut writer = std::io::BufWriter::new(temp_file.as_file());
-
-    writeln!(writer, "HostName={}", session.host_name).map_err(|e| PuttyCompatError::Io {
+    let io_err = |source| PuttyCompatError::Io {
         path: target_path.clone(),
-        source: e,
-    })?;
-    writeln!(writer, "PortNumber={}", session.port_number).map_err(|e| PuttyCompatError::Io {
-        path: target_path.clone(),
-        source: e,
-    })?;
-    writeln!(writer, "UserName={}", session.user_name).map_err(|e| PuttyCompatError::Io {
-        path: target_path.clone(),
-        source: e,
-    })?;
-    writeln!(writer, "Protocol={}", session.protocol).map_err(|e| PuttyCompatError::Io {
-        path: target_path.clone(),
-        source: e,
-    })?;
-    writeln!(writer, "PublicKeyFile={}", session.public_key_file).map_err(|e| {
-        PuttyCompatError::Io {
-            path: target_path.clone(),
-            source: e,
-        }
-    })?;
-    writeln!(writer, "LogFileName={}", session.log_file_name).map_err(|e| {
-        PuttyCompatError::Io {
-            path: target_path.clone(),
-            source: e,
-        }
-    })?;
-
-    for (k, v) in &session.extra {
-        writeln!(writer, "{}={}", k, v).map_err(|e| PuttyCompatError::Io {
-            path: target_path.clone(),
-            source: e,
-        })?;
+        source,
+    };
+    for (key, value) in saved_settings(session) {
+        writeln!(writer, "{key}={value}").map_err(io_err)?;
     }
-
-    writer.flush().map_err(|e| PuttyCompatError::Io {
-        path: target_path.clone(),
-        source: e,
-    })?;
+    writer.flush().map_err(io_err)?;
     drop(writer);
 
-    temp_file
-        .as_file()
-        .sync_all()
-        .map_err(|e| PuttyCompatError::Io {
-            path: target_path.clone(),
-            source: e,
-        })?;
+    temp_file.as_file().sync_all().map_err(io_err)?;
 
     temp_file.persist(&target_path).map_err(|e| PuttyCompatError::Io {
         path: target_path.clone(),
@@ -349,4 +350,21 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn delete_session(name: &str) -> Result<()> {
+    #[cfg(windows)]
+    return crate::registry::delete_session_in(crate::registry::SESSIONS_KEY, name);
+    #[cfg(not(windows))]
+    return delete_session_in(&session_dir(), name);
+}
+
+/// Removes the session file, as PuTTY's own delete does. A `.bak` from an
+/// earlier save is left behind.
+pub fn delete_session_in(dir: &Path, name: &str) -> Result<()> {
+    let path = dir.join(escape_session_name(name));
+    fs::remove_file(&path).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => PuttyCompatError::SessionNotFound(name.to_string()),
+        _ => PuttyCompatError::Io { path, source: e },
+    })
 }

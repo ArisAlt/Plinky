@@ -2,7 +2,7 @@
 //! consoles, legacy gear). Those protocols have no SSH handshake, so plink
 //! never prints the D9 "Access granted" marker. These tests run real plink
 //! against a local TCP "device" through a saved PuTTY session. Separate test
-//! binary because it sets PUTTYDIR for the whole process.
+//! binary because on Unix it sets PUTTYDIR for the whole process.
 use std::io::Write;
 use std::net::TcpListener;
 use std::time::Duration;
@@ -17,9 +17,64 @@ fn plink_available() -> bool {
     std::process::Command::new("plink").arg("-V").output().is_ok()
 }
 
+/// PuTTY for Windows reads saved sessions only from
+/// HKCU\Software\SimonTatham\PuTTY\Sessions: no PUTTYDIR, and nothing can
+/// point a child plink at another key. So there the test session has to go
+/// in the user's real PuTTY key, which is only done on a GitHub Actions
+/// runner (its registry is thrown away with the VM). On anyone's own machine
+/// the test skips rather than touch their PuTTY sessions.
+#[cfg(windows)]
+fn can_save_where_plink_looks() -> bool {
+    std::env::var_os("GITHUB_ACTIONS").is_some()
+}
+
+#[cfg(not(windows))]
+fn can_save_where_plink_looks() -> bool {
+    true
+}
+
+/// A session saved where plink -load finds it, removed again on drop.
+struct SavedSession {
+    #[cfg(windows)]
+    name: String,
+    #[cfg(not(windows))]
+    _putty_dir: tempfile::TempDir,
+}
+
+impl SavedSession {
+    fn save(session: &PuttySession) -> Self {
+        // No sessions/ subdir created here on purpose: write_session must put
+        // the file where real PuTTY (plink -load) looks, $PUTTYDIR/sessions.
+        #[cfg(not(windows))]
+        let putty_dir = {
+            let dir = tempfile::TempDir::new().unwrap();
+            std::env::set_var("PUTTYDIR", dir.path());
+            dir
+        };
+        write_session(session).unwrap();
+        Self {
+            #[cfg(windows)]
+            name: session.name.clone(),
+            #[cfg(not(windows))]
+            _putty_dir: putty_dir,
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for SavedSession {
+    fn drop(&mut self) {
+        let _ = putty_compat::sessions::delete_session(&self.name);
+    }
+}
+
 async fn device_dump_survives(protocol: &str) {
     if !plink_available() {
         eprintln!("skipping: plink not installed");
+        return;
+    }
+    if !can_save_where_plink_looks() {
+        eprintln!("skipping: plink only loads sessions from your real PuTTY registry key; runs on CI only");
         return;
     }
     let _guard = PUTTYDIR_LOCK.lock().await;
@@ -39,12 +94,10 @@ async fn device_dump_survives(protocol: &str) {
         }
     });
 
-    // No sessions/ subdir created here on purpose: write_session must put
-    // the file where real PuTTY (plink -load) looks, $PUTTYDIR/sessions.
-    let dir = tempfile::TempDir::new().unwrap();
-    std::env::set_var("PUTTYDIR", dir.path());
-    let name = format!("switch01-{protocol}");
-    write_session(&PuttySession {
+    // Prefixed so a leftover is obviously a test's (and never a real
+    // session) on the one store that isn't a temp dir: Windows' registry.
+    let name = format!("plinky-test-switch01-{protocol}-{}", std::process::id());
+    let _saved = SavedSession::save(&PuttySession {
         name: name.clone(),
         host_name: "127.0.0.1".into(),
         port_number: port,
@@ -53,8 +106,7 @@ async fn device_dump_survives(protocol: &str) {
         public_key_file: String::new(),
         log_file_name: String::new(),
         extra: Default::default(),
-    })
-    .unwrap();
+    });
 
     let registry = SessionRegistry::new();
     let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();

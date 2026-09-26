@@ -10,6 +10,15 @@ pub enum PuttyCompatError {
         source: std::io::Error,
     },
 
+    /// Windows only: PuTTY keeps sessions and host keys under
+    /// HKEY_CURRENT_USER, `key` is the path below it.
+    #[error("Registry error at HKEY_CURRENT_USER\\{key}: {source}")]
+    Registry {
+        key: String,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("Session not found: {0}")]
     SessionNotFound(String),
 
