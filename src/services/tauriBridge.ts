@@ -319,6 +319,29 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
   return true;
 }
 
+/**
+ * Moves sessions between folders in one all-or-nothing save: a folder
+ * rename or move rewrites every session under it. Throws with the backend's
+ * message when nothing (or, if a rollback also failed, not everything) was
+ * saved. The sidecar mirror is only updated once PuTTY's store has changed.
+ */
+export async function setSessionFolders(changes: [string, string][]): Promise<void> {
+  if (changes.length === 0) return;
+  if (isTauriEnvironment()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('set_session_folders', { changes });
+  } else {
+    const missing = changes.find(([name]) => !DEMO_SESSIONS.some(s => s.name === name));
+    if (missing) throw new Error(`Session not found: ${missing[0]}`);
+    for (const [name, folder] of changes) {
+      const idx = DEMO_SESSIONS.findIndex(s => s.name === name);
+      const s = DEMO_SESSIONS[idx];
+      DEMO_SESSIONS[idx] = { ...s, folder, extra: { ...(s.extra || {}), PlinkyFolder: folder } };
+    }
+  }
+  for (const [name, folder] of changes) saveSessionFolder(name, folder);
+}
+
 export async function listPuttyHostKeys(): Promise<HostKeyEntry[]> {
   if (isTauriEnvironment()) {
     try {

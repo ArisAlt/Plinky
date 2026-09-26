@@ -22,6 +22,11 @@ pub enum PuttyCompatError {
     #[error("Session not found: {0}")]
     SessionNotFound(String),
 
+    /// A folder move failed and some sessions it had already saved could not
+    /// be put back. Named, so the user knows which ones sit at the new path.
+    #[error("Folder move failed ({cause}) and these sessions could not be restored: {}", unrestored.join(", "))]
+    PartialFolderMove { cause: String, unrestored: Vec<String> },
+
     #[error("Corrupt session file at {path:?}: {reason}")]
     CorruptSession { path: PathBuf, reason: String },
 

@@ -6,8 +6,11 @@
  * both into session.extra (PlinkyFolder, PlinkyTags) and in sidecar storage.
  */
 
+import { isSameOrDescendant, normalizeFolderPath, rebasePath } from './folderTree';
+
 const STORAGE_METADATA_KEY = 'plinky_session_metadata_v1';
 const STORAGE_FOLDERS_KEY = 'plinky_user_folders_v1';
+const STORAGE_COLLAPSED_KEY = 'plinky_collapsed_folders_v1';
 
 export interface SessionMetadata {
   folder?: string;
@@ -68,7 +71,7 @@ export function getUserFolders(): string[] {
 }
 
 export function addUserFolder(folder: string): void {
-  const clean = folder.trim();
+  const clean = normalizeFolderPath(folder);
   if (!clean) return;
   try {
     const current = getUserFolders();
@@ -81,30 +84,46 @@ export function addUserFolder(folder: string): void {
   }
 }
 
+export function setUserFolders(folders: string[]): void {
+  try {
+    const clean = Array.from(new Set(folders.map(normalizeFolderPath).filter(Boolean))).sort();
+    localStorage.setItem(STORAGE_FOLDERS_KEY, JSON.stringify(clean));
+  } catch (e) {
+    console.warn('Failed to save user folders:', e);
+  }
+}
+
+/** Removes the folder and every subfolder below it. */
 export function deleteUserFolder(folder: string): void {
   try {
     const current = getUserFolders();
-    const updated = current.filter(f => f !== folder);
+    const updated = current.filter(f => !isSameOrDescendant(f, folder));
     localStorage.setItem(STORAGE_FOLDERS_KEY, JSON.stringify(updated));
   } catch (e) {
     console.warn('Failed to delete user folder:', e);
   }
 }
 
+/**
+ * Renames a folder path in the sidecar, subfolders included: renaming
+ * "Corp/Site 1" moves "Corp/Site 1/Prod" too, and leaves "Corp/Site 10".
+ * This is only the local mirror -- PuTTY's own PlinkyFolder values are
+ * rewritten by setSessionFolders.
+ */
 export function renameUserFolder(oldName: string, newName: string): void {
-  const clean = newName.trim();
-  if (!clean || oldName === clean) return;
+  const from = normalizeFolderPath(oldName);
+  const to = normalizeFolderPath(newName);
+  if (!from || !to || from === to) return;
   try {
     const current = getUserFolders();
-    const updated = current.map(f => (f === oldName ? clean : f)).sort();
-    localStorage.setItem(STORAGE_FOLDERS_KEY, JSON.stringify(updated));
+    setUserFolders(current.map(f => rebasePath(f, from, to) ?? f));
 
-    // Update any sessions mapped to oldName
     const all = getAllSessionMetadata();
     let modified = false;
     for (const meta of Object.values(all)) {
-      if (meta.folder === oldName) {
-        meta.folder = clean;
+      const moved = meta.folder ? rebasePath(meta.folder, from, to) : null;
+      if (moved !== null) {
+        meta.folder = moved;
         modified = true;
       }
     }
@@ -113,5 +132,24 @@ export function renameUserFolder(oldName: string, newName: string): void {
     }
   } catch (e) {
     console.warn('Failed to rename user folder:', e);
+  }
+}
+
+/** Collapsed folders, keyed by full path. */
+export function getCollapsedFolders(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(STORAGE_COLLAPSED_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveCollapsedFolders(collapsed: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(STORAGE_COLLAPSED_KEY, JSON.stringify(collapsed));
+  } catch (e) {
+    console.warn('Failed to save collapsed folders:', e);
   }
 }

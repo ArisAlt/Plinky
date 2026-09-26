@@ -576,3 +576,11 @@
 
 
 
+### 42. NESTED SESSION FOLDERS (T-010)
+* Folder paths (`src/services/folderTree.ts`): a session's `PlinkyFolder` is now a '/'-joined path ("Corp 1/Site 1/Site 1 Production"). PuTTY's store stays flat; PuTTY never reads `PlinkyFolder`.
+  - '/' is **refused** in a folder name, not escaped: an escape would have to survive every tool that hand-edits a PuTTY file, and a name silently split into two levels is what this exists to prevent. A legacy name that already held '/' now reads as nested.
+  - Path logic is segment-wise, so renaming "Site 1" never touches "Site 10".
+* All-or-nothing folder rewrite (`putty_compat::set_session_folders`, Tauri `set_session_folders`): a rename or move rewrites one session file (or registry key) per session below the folder. It reads every session first (a missing one fails before anything is written) and, if a write fails, rewrites the ones already saved back to their originals. If a restore also fails the error names those sessions (`PartialFolderMove`). The sidecar folder list and the collapsed state only change after the backend succeeds.
+* Tree UI (`SessionExplorer.tsx`): recursive tree with recursive session counts; folder right-click menu: New Subfolder, Rename, Connect All (N) behind a confirmation that lists every session, Delete (empty folders only). Folders drag into other folders or to the top level; a drop into itself or its own subfolder is refused, and so is a rename or move onto an existing folder (no silent merge). Collapsed state is saved by full path (`plinky_collapsed_folders_v1`), moved with a renamed folder, and pruned when a folder disappears. "Saved Sessions" (sessions with no folder) cannot be renamed or moved.
+* Deferred: "New Session here..." needs `onCreateSession(folder)` through App.tsx and NewSessionModal.tsx, both being edited by other work at the time.
+* Tests: `folderTree.test.ts` (13), `SessionExplorerNested.test.tsx` (9), 3 Rust tests in `putty-compat/tests/integration_tests.rs`. The rollback test and the drop-into-descendant test were each checked to fail with their guard removed.

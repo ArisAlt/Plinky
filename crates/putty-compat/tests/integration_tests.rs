@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use putty_compat::{
     delete_session_in, escape_session_name, list_host_keys_from, list_sessions_in,
-    looks_like_ppk, read_header, read_session_in, unescape_session_name, write_session_in,
-    PuttyCompatError, PuttySession,
+    looks_like_ppk, read_header, read_session_in, set_session_folders_with, unescape_session_name,
+    write_session_in, PuttyCompatError, PuttySession, FOLDER_KEY,
 };
 use tempfile::tempdir;
 
@@ -296,4 +296,95 @@ fn test_parse_real_system_hostkeys_if_available() {
         assert_eq!(entries[0].host, "10.10.10.10");
         assert_eq!(entries[0].port, 22);
     }
+}
+
+fn session_in_folder(name: &str, folder: &str) -> PuttySession {
+    let mut extra = BTreeMap::new();
+    extra.insert(FOLDER_KEY.to_string(), folder.to_string());
+    extra.insert("TerminalType".to_string(), "xterm".to_string());
+    PuttySession {
+        name: name.to_string(),
+        host_name: format!("{}.example", name),
+        extra,
+        ..PuttySession::default()
+    }
+}
+
+fn folder_of(dir: &std::path::Path, name: &str) -> String {
+    read_session_in(dir, name).unwrap().extra[FOLDER_KEY].clone()
+}
+
+#[test]
+fn renaming_a_folder_rewrites_every_session_under_it_and_keeps_their_other_settings() {
+    let dir = tempdir().unwrap();
+    for (name, folder) in [("web1", "Corp/Site A"), ("db1", "Corp/Site A/Prod"), ("other", "Home")] {
+        write_session_in(dir.path(), &session_in_folder(name, folder)).unwrap();
+    }
+    let changes = vec![
+        ("web1".to_string(), "Corp/Site B".to_string()),
+        ("db1".to_string(), "Corp/Site B/Prod".to_string()),
+    ];
+    set_session_folders_with(
+        &changes,
+        |n| read_session_in(dir.path(), n),
+        |s| write_session_in(dir.path(), s),
+    )
+    .unwrap();
+
+    assert_eq!(folder_of(dir.path(), "web1"), "Corp/Site B");
+    assert_eq!(folder_of(dir.path(), "db1"), "Corp/Site B/Prod");
+    assert_eq!(folder_of(dir.path(), "other"), "Home");
+    let db1 = read_session_in(dir.path(), "db1").unwrap();
+    assert_eq!(db1.host_name, "db1.example");
+    assert_eq!(db1.extra["TerminalType"], "xterm");
+}
+
+#[test]
+fn a_folder_move_that_fails_partway_puts_back_the_sessions_it_already_saved() {
+    // Three sessions under the folder; the third write fails. Saved one at a
+    // time, the first two would sit under the new path and the third under
+    // the old one: the folder split in two in the sidebar.
+    let dir = tempdir().unwrap();
+    for name in ["a", "b", "c"] {
+        write_session_in(dir.path(), &session_in_folder(name, "Old")).unwrap();
+    }
+    let changes: Vec<_> = ["a", "b", "c"]
+        .iter()
+        .map(|n| (n.to_string(), "New".to_string()))
+        .collect();
+    let mut calls = 0;
+    let err = set_session_folders_with(
+        &changes,
+        |n| read_session_in(dir.path(), n),
+        |s| {
+            calls += 1;
+            if calls == 3 {
+                return Err(PuttyCompatError::SessionNotFound("simulated disk failure".into()));
+            }
+            write_session_in(dir.path(), s)
+        },
+    )
+    .unwrap_err();
+
+    assert!(err.to_string().contains("simulated disk failure"), "{err}");
+    for name in ["a", "b", "c"] {
+        assert_eq!(folder_of(dir.path(), name), "Old", "session {name} was left moved");
+    }
+}
+
+#[test]
+fn a_folder_move_naming_a_missing_session_changes_nothing() {
+    let dir = tempdir().unwrap();
+    write_session_in(dir.path(), &session_in_folder("a", "Old")).unwrap();
+    let changes = vec![
+        ("a".to_string(), "New".to_string()),
+        ("gone".to_string(), "New".to_string()),
+    ];
+    let result = set_session_folders_with(
+        &changes,
+        |n| read_session_in(dir.path(), n),
+        |s| write_session_in(dir.path(), s),
+    );
+    assert!(result.is_err());
+    assert_eq!(folder_of(dir.path(), "a"), "Old");
 }
