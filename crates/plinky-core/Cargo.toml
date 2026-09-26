@@ -22,5 +22,7 @@ rand = "0.8"
 # link (port enumeration), so no new system library for the AppImage.
 serialport = { version = "4.10", default-features = false }
 tempfile = "3.10"
+# Export the vault to a KeePass (KDBX4) database -- owner-approved dependency.
+keepass = { version = "0.15", features = ["save_kdbx4"] }
 
 [dev-dependencies]

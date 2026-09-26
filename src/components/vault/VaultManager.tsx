@@ -12,7 +12,8 @@ import {
   Check, 
   RefreshCw, 
   AlertCircle,
-  X
+  X,
+  Download,
 } from 'lucide-react';
 import {
   VaultEntry,
@@ -26,6 +27,7 @@ import {
   vaultGetEntry,
   vaultSetEntry,
   vaultDelete,
+  vaultExportKdbx,
 } from '../../services/tauriBridge';
 
 // How long a copied secret is allowed to sit on the OS clipboard before it's
@@ -158,6 +160,38 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
       setError("Failed to unlock vault. Incorrect master password or corrupted file.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Export to KeePass. The master password is asked for again even when
+  // unlocked: the export hands every secret out in a new file.
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportDone, setExportDone] = useState<string | null>(null);
+
+  const closeExport = () => {
+    setExportOpen(false);
+    setExportPassword('');
+    setExportError(null);
+  };
+
+  const handleExport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const result = await vaultExportKdbx(exportPassword);
+      if (result) {
+        setExportDone(`Exported ${result.entries} ${result.entries === 1 ? 'entry' : 'entries'} to ${result.path}`);
+        closeExport();
+      }
+    } catch (err) {
+      setExportError(String(err));
+    } finally {
+      setExportPassword('');
+      setExportBusy(false);
     }
   };
 
@@ -330,6 +364,16 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
+          {isInitialized && (
+            <button
+              onClick={() => { setExportDone(null); setExportOpen(true); }}
+              title="Export every entry to a KeePass (.kdbx) file"
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-plinky-900 border border-plinky-800 hover:border-plinky-700 text-slate-300 hover:text-white text-xs transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export to KeePass</span>
+            </button>
+          )}
           {isUnlocked && (
             <button
               onClick={handleLockVault}
@@ -698,6 +742,52 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
         )}
       </div>
     </div>
+
+    {exportDone && (
+      <div role="status" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3 py-2 rounded border border-emerald-600/50 bg-emerald-950/90 text-emerald-200 text-xs flex items-center space-x-2">
+        <Check className="w-3.5 h-3.5" />
+        <span className="select-text">{exportDone}</span>
+        <button onClick={() => setExportDone(null)} className="p-0.5 text-emerald-400 hover:text-white" title="Dismiss">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    )}
+
+    {exportOpen && (
+      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget && !exportBusy) closeExport(); }}>
+        <form onSubmit={handleExport} className="w-full max-w-sm bg-plinky-900 border border-plinky-700 rounded-lg p-4 space-y-3 text-xs text-slate-300">
+          <div className="flex items-center space-x-2 text-sm font-semibold text-slate-100">
+            <Download className="w-4 h-4 text-sky-400" />
+            <span>Export vault to KeePass</span>
+          </div>
+          <p className="text-slate-400">
+            Every entry goes into a KeePass (.kdbx) file that opens in KeePassXC or KeePass 2. It's locked with your
+            vault master password; enable passwords go in an "Enable password" field.
+          </p>
+          <label className="block space-y-1">
+            <span className="text-[11px] text-slate-400">Vault master password</span>
+            <input
+              type="password"
+              autoFocus
+              value={exportPassword}
+              onChange={e => setExportPassword(e.target.value)}
+              className="w-full bg-plinky-950 border border-plinky-700 rounded px-2 py-1.5 text-slate-100 focus:outline-none focus:border-sky-500"
+            />
+          </label>
+          {exportError && (
+            <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">{exportError}</div>
+          )}
+          <div className="flex justify-end space-x-2 pt-1">
+            <button type="button" onClick={closeExport} disabled={exportBusy} className="px-3 py-1.5 rounded bg-plinky-800 hover:bg-plinky-700 disabled:opacity-40">
+              Cancel
+            </button>
+            <button type="submit" disabled={!exportPassword || exportBusy} className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40">
+              {exportBusy ? 'Exporting…' : 'Choose file and export'}
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
   </div>
   );
 };
