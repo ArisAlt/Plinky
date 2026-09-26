@@ -92,6 +92,7 @@ export const App: React.FC = () => {
       port: targetTab.port,
       username: targetTab.username,
       protocol: targetTab.protocol,
+      vaultKey: targetTab.vaultKey,
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -295,13 +296,10 @@ export const App: React.FC = () => {
     }
 
     if (tabs.length === 1 && activeTab) {
-      // Automatically spawn a split session with the same session
-      handleConnectSession({
-        name: `${activeTab.sessionName} (Split)`,
-        hostname: activeTab.hostname,
-        port: activeTab.port,
-        protocol: 'SSH',
-      });
+      // Fill the second pane with a copy of the first. This used to open a
+      // made-up session "<name> (Split)" forced to SSH, so splitting a
+      // Telnet, serial or Local Shell tab opened a broken SSH connection.
+      handleDuplicateTab(activeTab);
     }
   };
 
@@ -520,18 +518,13 @@ export const App: React.FC = () => {
                     <Rows className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => {
-                      setLayoutMode('grid-4');
-                      while (tabs.length < 4 && sessions.length > 0) {
-                        const nextSession = sessions[tabs.length % sessions.length];
-                        handleConnectSession({
-                          name: `${nextSession.name} (${tabs.length + 1})`,
-                          hostname: nextSession.hostname,
-                          port: nextSession.port,
-                          protocol: nextSession.protocol,
-                        });
-                      }
-                    }}
+                    // It used to fill the grid with `while (tabs.length < 4)`,
+                    // but `tabs` never changes inside this handler: with
+                    // fewer than four tabs open it looped forever and froze
+                    // the window. It also connected to whichever saved
+                    // sessions came first, unasked. Empty cells now offer
+                    // the tab launcher instead.
+                    onClick={() => setLayoutMode('grid-4')}
                     title="4-Terminal Cluster Grid (2x2)"
                     className={`p-1.5 rounded transition ${layoutMode === 'grid-4' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
                   >
@@ -737,6 +730,24 @@ export const App: React.FC = () => {
                           copyOnSelect={copyOnSelect}
                           rightClickAction={rightClickAction}
                         />
+                      </div>
+                    ))}
+                    {Array.from({ length: Math.max(0, 4 - paneTabs(4).length) }, (_, i) => (
+                      <div
+                        key={`empty-${i}`}
+                        className="w-full h-full flex flex-col items-center justify-center bg-plinky-950 text-slate-500 text-xs space-y-2"
+                      >
+                        <LayoutGrid className="w-6 h-6 text-slate-600" />
+                        <span>Empty pane</span>
+                        <button
+                          onClick={(e) => {
+                            const r = e.currentTarget.getBoundingClientRect();
+                            setLauncherAnchor({ top: r.bottom + 4, left: r.left });
+                          }}
+                          className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
+                        >
+                          + Open a tab
+                        </button>
                       </div>
                     ))}
                   </div>
