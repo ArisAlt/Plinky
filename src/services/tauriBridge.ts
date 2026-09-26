@@ -755,23 +755,24 @@ export async function setSyncArmed(armed: boolean): Promise<void> {
   }
 }
 
+/** Sends to a channel ('all' or A-D). Returns the ids of the sessions that received it. */
 export async function broadcastSyncInput(
   channel: string,
   data: Uint8Array
-): Promise<number> {
+): Promise<string[]> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<number>('broadcast_sync_input', {
+      return await invoke<string[]>('broadcast_sync_input', {
         channel,
         data: Array.from(data),
       });
     } catch (e) {
       console.warn("Failed to broadcast sync input via Tauri:", e);
-      return 0;
+      return [];
     }
   }
-  return 0;
+  return [];
 }
 
 export interface VaultEntry {

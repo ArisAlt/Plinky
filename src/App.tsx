@@ -15,6 +15,7 @@ import { NewSessionModal } from './components/modals/NewSessionModal';
 import { TabLauncher } from './components/layout/TabLauncher';
 import { TabTitle } from './components/layout/TabTitle';
 import { getRecentSessions, recordRecentSession } from './services/recentSessions';
+import { useBroadcastGlow, glowColor } from './services/broadcast';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
@@ -42,6 +43,9 @@ export const App: React.FC = () => {
   const [recentNames, setRecentNames] = useState<string[]>(() => getRecentSessions());
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const [tabMenu, setTabMenu] = useState<{ tabId: string; x: number; y: number } | null>(null);
+  // Tabs a sync broadcast just reached: in single-pane view the panes that
+  // light up are hidden, so the tabs light up too (T-012).
+  const broadcastLit = useBroadcastGlow();
   const [editingSession, setEditingSession] = useState<PuttySession | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
@@ -408,6 +412,8 @@ export const App: React.FC = () => {
                           e.stopPropagation();
                           setTabMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
                         }}
+                        data-broadcast-glow={broadcastLit.has(tab.id) ? 'on' : 'off'}
+                        style={broadcastLit.has(tab.id) ? { boxShadow: `0 0 0 1px ${glowColor(tab.syncChannel)}, 0 0 10px ${glowColor(tab.syncChannel)}` } : undefined}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${
                           isActive
                             ? 'bg-plinky-950 border-plinky-800 text-sky-300 font-medium shadow-xs'

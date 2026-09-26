@@ -52,13 +52,18 @@ class TerminalManager {
     return this.activeTabId;
   }
 
-  // Broadcasts input to all terminals matching the target channel
-  broadcastInput(targetChannel: SyncChannel | 'all', text: string) {
-    for (const [_id, entry] of this.terminals.entries()) {
+  // Broadcasts input to all terminals matching the target channel (the
+  // browser-only fallback; the app routes through the backend). Returns the
+  // ids that received it, like the backend does.
+  broadcastInput(targetChannel: SyncChannel | 'all', text: string): string[] {
+    const ids: string[] = [];
+    for (const [id, entry] of this.terminals.entries()) {
       if (targetChannel === 'all' || entry.syncChannel === targetChannel) {
         entry.terminal.write(text.replace(/\n/g, '\r\n') + '\r\n');
+        ids.push(id);
       }
     }
+    return ids;
   }
 }
 

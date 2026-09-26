@@ -216,8 +216,10 @@ async fn test_sync_input_router_d6_safety() {
     // 1. Broadcast on Channel A:
     // sess-1 is Live and receives input.
     // sess-2 is HostKeyPending and is safely filtered by D6 gate (not written to!).
-    let count = registry.broadcast_sync_input(SyncChannelId::A, b"echo SYNC_TEST\n").unwrap();
-    assert_eq!(count, 1, "Only Live sess-1 should receive broadcast");
+    let sent = registry.broadcast_sync_input(SyncChannelId::A, b"echo SYNC_TEST\n").unwrap();
+    assert_eq!(sent.len(), 1, "Only Live sess-1 should receive broadcast");
+    // The ids, not just the count: the UI lights up exactly these panes.
+    assert_eq!(sent, vec!["sess-1".to_string()]);
 
     // Verify sess-1 got the bytes
     let mut buf = Vec::new();
@@ -238,14 +240,14 @@ async fn test_sync_input_router_d6_safety() {
 
     // 2. Protection gate: mark sess-1 as protected -> broadcast receives 0
     registry.set_sync_protected("sess-1", true);
-    let count = registry.broadcast_sync_input(SyncChannelId::A, b"ls\n").unwrap();
-    assert_eq!(count, 0, "Protected sessions must not receive broadcast");
+    let sent = registry.broadcast_sync_input(SyncChannelId::A, b"ls\n").unwrap();
+    assert_eq!(sent.len(), 0, "Protected sessions must not receive broadcast");
 
     // 3. Emergency disarm: unprotect sess-1, disarm sync router
     registry.set_sync_protected("sess-1", false);
     registry.set_sync_armed(false);
-    let count = registry.broadcast_sync_input(SyncChannelId::A, b"ls\n").unwrap();
-    assert_eq!(count, 0, "Disarmed router must not broadcast");
+    let sent = registry.broadcast_sync_input(SyncChannelId::A, b"ls\n").unwrap();
+    assert_eq!(sent.len(), 0, "Disarmed router must not broadcast");
 
     registry.close_session("sess-1").unwrap();
     registry.close_session("sess-2").unwrap();
@@ -324,8 +326,8 @@ async fn test_sync_input_router_skips_plain_preauth_not_just_hostkey_pending() {
     // sess-b sits at a plain PreAuth password prompt -- not HostKeyPending.
     registry.reset_session_preauth("sess-b").unwrap();
 
-    let count = registry.broadcast_sync_input(SyncChannelId::A, b"echo SYNC_TEST\n").unwrap();
-    assert_eq!(count, 1, "Only Live sess-a should receive broadcast; PreAuth sess-b must be skipped");
+    let sent = registry.broadcast_sync_input(SyncChannelId::A, b"echo SYNC_TEST\n").unwrap();
+    assert_eq!(sent.len(), 1, "Only Live sess-a should receive broadcast; PreAuth sess-b must be skipped");
 
     let mut buf = Vec::new();
     let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
@@ -364,8 +366,9 @@ async fn test_sync_input_router_broadcast_all() {
     registry.set_sync_protected("sess-all-3", true);
 
     // broadcast_sync_all sends to live & unprotected sessions (sess-1 and sess-2)
-    let count = registry.broadcast_sync_all(b"ALL_BROADCAST\n").unwrap();
-    assert_eq!(count, 2, "Both sess-1 and sess-2 should receive ALL broadcast");
+    let sent = registry.broadcast_sync_all(b"ALL_BROADCAST\n").unwrap();
+    assert_eq!(sent.len(), 2, "Both sess-1 and sess-2 should receive ALL broadcast");
+    assert_eq!(sent, vec!["sess-all-1".to_string(), "sess-all-2".to_string()], "recipients come back sorted");
 
     let mut buf1 = Vec::new();
     let timeout1 = tokio::time::sleep(std::time::Duration::from_millis(1000));
@@ -401,8 +404,8 @@ async fn test_sync_input_router_broadcast_all() {
 
     // Disarming router prevents ALL broadcast
     registry.set_sync_armed(false);
-    let count = registry.broadcast_sync_all(b"NO_SEND\n").unwrap();
-    assert_eq!(count, 0, "Disarmed router must broadcast to 0 sessions");
+    let sent = registry.broadcast_sync_all(b"NO_SEND\n").unwrap();
+    assert_eq!(sent.len(), 0, "Disarmed router must broadcast to 0 sessions");
 
     registry.close_session("sess-all-1").unwrap();
     registry.close_session("sess-all-2").unwrap();
@@ -424,8 +427,8 @@ async fn test_sync_input_router_remove_session_purges_protection() {
     let (tx2, mut rx2) = mpsc::unbounded_channel();
     registry.create_local_session("sess-purge", "S_Purge", None, 80, 24, tx2).unwrap();
 
-    let count = registry.broadcast_sync_all(b"PING\n").unwrap();
-    assert_eq!(count, 1, "Re-created session must not retain stale protected state");
+    let sent = registry.broadcast_sync_all(b"PING\n").unwrap();
+    assert_eq!(sent.len(), 1, "Re-created session must not retain stale protected state");
 
     let mut buf = Vec::new();
     let timeout = tokio::time::sleep(std::time::Duration::from_millis(1000));

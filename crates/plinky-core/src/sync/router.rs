@@ -76,23 +76,25 @@ impl SyncInputRouter {
 
     /// Broadcasts input data to all LIVE and UNPROTECTED sessions assigned to `channel`.
     /// Enforces D6: never writes into sessions awaiting host key prompts or unauthenticated.
-    /// Returns the number of sessions that successfully received the broadcast.
+    /// Returns the ids of the sessions that received it, sorted, so the UI can
+    /// mark exactly those panes -- a session on the channel that was skipped
+    /// (protected, still logging in) must not look as if it got the command.
     pub fn broadcast(
         &self,
         registry: &SessionRegistry,
         channel: SyncChannelId,
         data: &[u8],
-    ) -> Result<usize> {
+    ) -> Result<Vec<String>> {
         if !self.armed {
-            return Ok(0);
+            return Ok(Vec::new());
         }
 
         let targets = match self.channels.get(&channel) {
             Some(set) => set,
-            None => return Ok(0),
+            None => return Ok(Vec::new()),
         };
 
-        let mut sent_count = 0;
+        let mut sent = Vec::new();
         for session_id in targets {
             // D6 Gate 1: Protected sessions require explicit opt-in
             if self.protected_sessions.contains(session_id) {
@@ -107,11 +109,12 @@ impl SyncInputRouter {
             // session sitting at its own password prompt. Fixed by switching
             // to write_input_live_only, not just by correcting the comment.
             if registry.write_input_live_only(session_id, data).is_ok() {
-                sent_count += 1;
+                sent.push(session_id.clone());
             }
         }
 
-        Ok(sent_count)
+        sent.sort();
+        Ok(sent)
     }
 
     /// Completely purges a session from channels and protected status upon close.
@@ -121,27 +124,28 @@ impl SyncInputRouter {
     }
 
     /// Broadcasts input data to ALL LIVE and UNPROTECTED sessions in the registry,
-    /// regardless of discrete channel assignment.
+    /// regardless of discrete channel assignment. Returns the recipients' ids, sorted.
     pub fn broadcast_all(
         &self,
         registry: &SessionRegistry,
         data: &[u8],
-    ) -> Result<usize> {
+    ) -> Result<Vec<String>> {
         if !self.armed {
-            return Ok(0);
+            return Ok(Vec::new());
         }
 
         let session_ids = registry.list_session_ids();
-        let mut sent_count = 0;
-        for session_id in &session_ids {
-            if self.protected_sessions.contains(session_id) {
+        let mut sent = Vec::new();
+        for session_id in session_ids {
+            if self.protected_sessions.contains(&session_id) {
                 continue;
             }
-            if registry.write_input_live_only(session_id, data).is_ok() {
-                sent_count += 1;
+            if registry.write_input_live_only(&session_id, data).is_ok() {
+                sent.push(session_id);
             }
         }
 
-        Ok(sent_count)
+        sent.sort();
+        Ok(sent)
     }
 }

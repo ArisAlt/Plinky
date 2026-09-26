@@ -34,6 +34,7 @@ import {
   classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
 } from '../../services/promptDetect';
 import { KeywordHighlighter } from '../../services/keywordHighlight';
+import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import {
   Radio,
@@ -392,6 +393,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const [reconnectIn, setReconnectIn] = useState<number | null>(null);
+  // Lit briefly when a sync broadcast reaches this session (T-012).
+  const broadcastGlow = useBroadcastGlow().has(tab.id);
 
   const cancelAutoReconnect = () => {
     if (reconnectTimerRef.current !== null) window.clearInterval(reconnectTimerRef.current);
@@ -1249,6 +1252,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       className="relative flex flex-col h-full w-full bg-plinky-950 overflow-hidden"
       onContextMenu={handleContextMenu}
     >
+      {/* Broadcast glow: an overlay, since an inset shadow on this element
+          would be painted under the terminal canvas. */}
+      <div
+        aria-hidden
+        data-broadcast-glow={broadcastGlow ? 'on' : 'off'}
+        className="pointer-events-none absolute inset-0 z-30"
+        style={{
+          boxShadow: `inset 0 0 0 2px ${glowColor(tab.syncChannel)}, inset 0 0 28px ${glowColor(tab.syncChannel)}66`,
+          opacity: broadcastGlow ? 1 : 0,
+          transition: `opacity ${broadcastGlow ? 120 : 700}ms ease-out`,
+        }}
+      />
       {/* Tab Control Overlay Header */}
       <div className="relative flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
         <div className="flex items-center space-x-2">
