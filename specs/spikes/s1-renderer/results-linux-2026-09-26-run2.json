@@ -1,0 +1,331 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+  "devicePixelRatio": 1,
+  "gpu": {
+    "webgl2": true,
+    "vendor": "Apple Inc.",
+    "renderer": "Apple GPU"
+  },
+  "startedAt": "2026-09-26T13:03:07.199Z",
+  "idleFrameGapMs": {
+    "n": 63,
+    "p50": 16,
+    "p95": 17,
+    "p99": 24,
+    "max": 24
+  },
+  "dom": {
+    "info": {
+      "requested": "dom",
+      "canvasCount": 0,
+      "domRows": true,
+      "cols": 162,
+      "rows": 36,
+      "contextLostDuringRun": false
+    },
+    "idle": {
+      "n": 50,
+      "p50": 12,
+      "p95": 16,
+      "p99": 17,
+      "max": 17
+    },
+    "throughputPlain": {
+      "mb": 67.1,
+      "secs": 0.8,
+      "mbps": 86.4,
+      "frameGapsMs": {
+        "n": 45,
+        "p50": 16,
+        "p95": 27,
+        "p99": 33,
+        "max": 33
+      }
+    },
+    "throughputColored": {
+      "mb": 33.6,
+      "secs": 0.9,
+      "mbps": 37.7,
+      "frameGapsMs": {
+        "n": 40,
+        "p50": 22,
+        "p95": 25,
+        "p99": 28,
+        "max": 28
+      }
+    },
+    "stream50NoFlow": {
+      "targetMBps": 50,
+      "windowBytes": null,
+      "colored": false,
+      "seconds": 10,
+      "runawayStopped": false,
+      "offeredMBps": 49.5,
+      "renderedMBps": 49.5,
+      "unrenderedAtStopMB": 0.4,
+      "receivedNotRenderedAtStopMB": 0.2,
+      "maxXtermBacklogMB": 1.5,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 100,
+      "markersRendered": 100,
+      "echoLatencyMs": {
+        "n": 100,
+        "p50": 9,
+        "p95": 18,
+        "p99": 32,
+        "max": 32
+      },
+      "messageQueueDelayMs": {
+        "n": 1891,
+        "p50": 0,
+        "p95": 3,
+        "p99": 11,
+        "max": 24
+      },
+      "frameGapsMs": {
+        "n": 604,
+        "p50": 16,
+        "p95": 19,
+        "p99": 21,
+        "max": 36
+      }
+    },
+    "stream50Window256K": {
+      "targetMBps": 50,
+      "windowBytes": 262144,
+      "colored": false,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 49.6,
+      "renderedMBps": 49.6,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.3,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 101,
+      "markersRendered": 101,
+      "echoLatencyMs": {
+        "n": 101,
+        "p50": 9,
+        "p95": 18,
+        "p99": 19,
+        "max": 19
+      },
+      "messageQueueDelayMs": {
+        "n": 1907,
+        "p50": 1,
+        "p95": 2,
+        "p99": 3,
+        "max": 5
+      },
+      "frameGapsMs": {
+        "n": 610,
+        "p50": 16,
+        "p95": 19,
+        "p99": 20,
+        "max": 20
+      }
+    },
+    "stream20ColoredNoFlow": {
+      "targetMBps": 20,
+      "windowBytes": null,
+      "colored": true,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 19.8,
+      "renderedMBps": 19.8,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.4,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 100,
+      "markersRendered": 100,
+      "echoLatencyMs": {
+        "n": 100,
+        "p50": 12,
+        "p95": 19,
+        "p99": 22,
+        "max": 22
+      },
+      "messageQueueDelayMs": {
+        "n": 783,
+        "p50": 2,
+        "p95": 9,
+        "p99": 11,
+        "max": 18
+      },
+      "frameGapsMs": {
+        "n": 609,
+        "p50": 17,
+        "p95": 18,
+        "p99": 19,
+        "max": 23
+      }
+    },
+    "idleAfter": {
+      "n": 30,
+      "p50": 12,
+      "p95": 13,
+      "p99": 16,
+      "max": 16
+    }
+  },
+  "webgl": {
+    "info": {
+      "requested": "webgl",
+      "webglLoaded": true,
+      "canvasCount": 2,
+      "domRows": false,
+      "cols": 162,
+      "rows": 36,
+      "contextLostDuringRun": false
+    },
+    "idle": {
+      "n": 50,
+      "p50": 12,
+      "p95": 13,
+      "p99": 21,
+      "max": 21
+    },
+    "throughputPlain": {
+      "mb": 67.1,
+      "secs": 0.9,
+      "mbps": 77.6,
+      "frameGapsMs": {
+        "n": 52,
+        "p50": 16,
+        "p95": 26,
+        "p99": 30,
+        "max": 30
+      }
+    },
+    "throughputColored": {
+      "mb": 33.6,
+      "secs": 0.6,
+      "mbps": 53,
+      "frameGapsMs": {
+        "n": 38,
+        "p50": 16,
+        "p95": 20,
+        "p99": 23,
+        "max": 23
+      }
+    },
+    "stream50NoFlow": {
+      "targetMBps": 50,
+      "windowBytes": null,
+      "colored": false,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 49.6,
+      "renderedMBps": 49.5,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.5,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 100,
+      "markersRendered": 100,
+      "echoLatencyMs": {
+        "n": 100,
+        "p50": 9,
+        "p95": 18,
+        "p99": 20,
+        "max": 20
+      },
+      "messageQueueDelayMs": {
+        "n": 1907,
+        "p50": 1,
+        "p95": 2,
+        "p99": 3,
+        "max": 7
+      },
+      "frameGapsMs": {
+        "n": 610,
+        "p50": 16,
+        "p95": 19,
+        "p99": 19,
+        "max": 20
+      }
+    },
+    "stream50Window256K": {
+      "targetMBps": 50,
+      "windowBytes": 262144,
+      "colored": false,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 49.6,
+      "renderedMBps": 49.6,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.3,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 101,
+      "markersRendered": 101,
+      "echoLatencyMs": {
+        "n": 101,
+        "p50": 9,
+        "p95": 18,
+        "p99": 18,
+        "max": 18
+      },
+      "messageQueueDelayMs": {
+        "n": 1909,
+        "p50": 0,
+        "p95": 2,
+        "p99": 2,
+        "max": 3
+      },
+      "frameGapsMs": {
+        "n": 610,
+        "p50": 16,
+        "p95": 19,
+        "p99": 19,
+        "max": 20
+      }
+    },
+    "stream20ColoredNoFlow": {
+      "targetMBps": 20,
+      "windowBytes": null,
+      "colored": true,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 19.8,
+      "renderedMBps": 19.8,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.1,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 100,
+      "markersRendered": 100,
+      "echoLatencyMs": {
+        "n": 100,
+        "p50": 9,
+        "p95": 18,
+        "p99": 20,
+        "max": 20
+      },
+      "messageQueueDelayMs": {
+        "n": 783,
+        "p50": 0,
+        "p95": 1,
+        "p99": 2,
+        "max": 3
+      },
+      "frameGapsMs": {
+        "n": 610,
+        "p50": 17,
+        "p95": 18,
+        "p99": 19,
+        "max": 21
+      }
+    },
+    "idleAfter": {
+      "n": 30,
+      "p50": 12,
+      "p95": 13,
+      "p99": 17,
+      "max": 17
+    }
+  },
+  "finishedAt": "2026-09-26T13:04:35.220Z"
+}

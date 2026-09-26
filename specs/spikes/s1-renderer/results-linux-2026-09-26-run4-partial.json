@@ -1,0 +1,172 @@
+{
+  "partial": true,
+  "dom": {
+    "info": {
+      "requested": "dom",
+      "canvasCount": 0,
+      "domRows": true,
+      "cols": 162,
+      "rows": 36
+    },
+    "idle": {
+      "n": 50,
+      "p50": 12,
+      "p95": 17,
+      "p99": 17,
+      "max": 17
+    },
+    "throughputPlain": {
+      "mb": 67.1,
+      "secs": 0.9,
+      "mbps": 76,
+      "frameGapsMs": {
+        "n": 51,
+        "p50": 16,
+        "p95": 29,
+        "p99": 36,
+        "max": 36
+      }
+    },
+    "throughputColored": {
+      "mb": 33.6,
+      "secs": 0.9,
+      "mbps": 35.8,
+      "frameGapsMs": {
+        "n": 41,
+        "p50": 23,
+        "p95": 25,
+        "p99": 26,
+        "max": 26
+      }
+    },
+    "stream50NoFlow": {
+      "targetMBps": 50,
+      "windowBytes": null,
+      "colored": false,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 49.5,
+      "renderedMBps": 49.1,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.7,
+      "drainAfterStopSecs": 0,
+      "markersSent": 100,
+      "markersRendered": 100,
+      "echoLatencyMs": {
+        "n": 100,
+        "p50": 10,
+        "p95": 19,
+        "p99": 20,
+        "max": 20
+      },
+      "messageQueueDelayMs": {
+        "n": 1890,
+        "p50": 1,
+        "p95": 3,
+        "p99": 5,
+        "max": 15
+      },
+      "frameGapsMs": {
+        "n": 608,
+        "p50": 16,
+        "p95": 19,
+        "p99": 20,
+        "max": 24
+      },
+      "uiTimerLateMs": {
+        "n": 192,
+        "p50": 2,
+        "p95": 5,
+        "p99": 7,
+        "max": 8
+      }
+    },
+    "stream50Window256K": {
+      "targetMBps": 50,
+      "windowBytes": 262144,
+      "colored": false,
+      "seconds": 10,
+      "runawayStopped": false,
+      "offeredMBps": 47.6,
+      "renderedMBps": 47.5,
+      "unrenderedAtStopMB": 0.1,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 0.3,
+      "drainAfterStopSecs": 0.1,
+      "markersSent": 100,
+      "markersRendered": 100,
+      "echoLatencyMs": {
+        "n": 100,
+        "p50": 10,
+        "p95": 20,
+        "p99": 20,
+        "max": 20
+      },
+      "messageQueueDelayMs": {
+        "n": 1815,
+        "p50": 1,
+        "p95": 4,
+        "p99": 5,
+        "max": 7
+      },
+      "frameGapsMs": {
+        "n": 605,
+        "p50": 16,
+        "p95": 20,
+        "p99": 20,
+        "max": 21
+      },
+      "uiTimerLateMs": {
+        "n": 191,
+        "p50": 2,
+        "p95": 5,
+        "p99": 6,
+        "max": 11
+      }
+    },
+    "stream20ColoredNoFlow": {
+      "targetMBps": 20,
+      "windowBytes": null,
+      "colored": true,
+      "seconds": 10.1,
+      "runawayStopped": false,
+      "offeredMBps": 19.8,
+      "renderedMBps": 19.6,
+      "unrenderedAtStopMB": 0,
+      "receivedNotRenderedAtStopMB": 0,
+      "maxXtermBacklogMB": 1.1,
+      "drainAfterStopSecs": 0,
+      "markersSent": 99,
+      "markersRendered": 99,
+      "echoLatencyMs": {
+        "n": 99,
+        "p50": 18,
+        "p95": 33,
+        "p99": 72,
+        "max": 72
+      },
+      "messageQueueDelayMs": {
+        "n": 775,
+        "p50": 10,
+        "p95": 19,
+        "p99": 33,
+        "max": 53
+      },
+      "frameGapsMs": {
+        "n": 551,
+        "p50": 17,
+        "p95": 24,
+        "p99": 40,
+        "max": 66
+      },
+      "uiTimerLateMs": {
+        "n": 176,
+        "p50": 6,
+        "p95": 13,
+        "p99": 43,
+        "max": 47
+      }
+    }
+  }
+}
