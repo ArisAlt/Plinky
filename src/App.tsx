@@ -47,6 +47,8 @@ export const App: React.FC = () => {
   // light up are hidden, so the tabs light up too (T-012).
   const broadcastLit = useBroadcastGlow();
   const [editingSession, setEditingSession] = useState<PuttySession | null>(null);
+  // The folder a new session starts in, when created from a folder's menu.
+  const [newSessionFolder, setNewSessionFolder] = useState<string | undefined>(undefined);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
     '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono", "FiraCode Nerd Font", "Fira Code", "DejaVu Sans Mono", monospace'
@@ -386,7 +388,7 @@ export const App: React.FC = () => {
             activeTabId={activeTabId}
             onConnectSession={handleConnectSession}
             onOpenSftp={handleOpenSftp}
-            onCreateSession={() => setIsNewSessionOpen(true)}
+            onCreateSession={(folder) => { setNewSessionFolder(folder); setIsNewSessionOpen(true); }}
             onEditSession={handleEditSession}
             onMoveToFolder={handleMoveSessionToFolder}
           />
@@ -815,9 +817,11 @@ export const App: React.FC = () => {
         isOpen={isNewSessionOpen}
         editingSession={editingSession}
         savedSessions={sessions}
+        initialFolder={newSessionFolder}
         onClose={() => {
           setIsNewSessionOpen(false);
           setEditingSession(null);
+          setNewSessionFolder(undefined);
         }}
         onSave={handleSaveSession}
       />

@@ -50,7 +50,8 @@ interface SessionExplorerProps {
   activeTabId: string | null;
   onConnectSession: (session: PuttySession, forceNew?: boolean) => void;
   onOpenSftp: (session: PuttySession) => void;
-  onCreateSession: () => void;
+  /** Opens the session editor; with a folder, pre-filled with it. */
+  onCreateSession: (folder?: string) => void;
   onEditSession: (session: PuttySession) => void;
   onMoveToFolder: (session: PuttySession, folder: string) => void;
   /** Reload sessions after a folder rename or move rewrote them. */
@@ -615,7 +616,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
           </button>
           <button
-            onClick={onCreateSession}
+            onClick={() => onCreateSession()}
             title="Create New PuTTY Session"
             className="flex items-center space-x-1 px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition shrink-0 whitespace-nowrap"
           >
@@ -712,7 +713,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <Terminal className="w-8 h-8 text-slate-600" />
             <div className="text-xs text-slate-400">No sessions yet</div>
             <button
-              onClick={onCreateSession}
+              onClick={() => onCreateSession()}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -750,7 +751,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             style={{
               position: 'fixed',
               left: Math.min(folderMenu.x, window.innerWidth - 200),
-              top: Math.min(folderMenu.y, window.innerHeight - 170),
+              top: Math.min(folderMenu.y, window.innerHeight - 200),
             }}
             className="z-50 w-48 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none"
             onClick={(e) => e.stopPropagation()}
@@ -758,6 +759,16 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <div className="px-3 py-1 text-[10px] text-slate-500 font-mono border-b border-plinky-800/80 truncate">
               {displayPath(node.path)}
             </div>
+            <button
+              className={item}
+              onClick={() => {
+                onCreateSession(node.path);
+                setFolderMenu(null);
+              }}
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>New Session Here...</span>
+            </button>
             <button
               className={item}
               onClick={() => {

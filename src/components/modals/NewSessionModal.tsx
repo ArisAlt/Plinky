@@ -19,6 +19,8 @@ interface NewSessionModalProps {
   onSave: (session: PuttySession) => void;
   editingSession?: PuttySession | null;
   savedSessions?: PuttySession[];
+  /** A new session's folder, when opened from a folder's "New Session Here". */
+  initialFolder?: string;
 }
 
 export const NewSessionModal: React.FC<NewSessionModalProps> = ({
@@ -27,6 +29,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   onSave,
   editingSession,
   savedSessions = [],
+  initialFolder,
 }) => {
   const [name, setName] = useState('');
   const [hostname, setHostname] = useState('');
@@ -164,7 +167,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setPort('22');
       setProtocol('SSH');
       setUsername('');
-      setFolder('Saved Sessions');
+      setFolder(initialFolder || 'Saved Sessions');
       setTags('');
       setPublicKeyFile('');
       setSerialLine('');
@@ -193,7 +196,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setTcpKeepalives(false);
       setAutoReconnect(false);
     }
-  }, [isOpen, editingSession]);
+  }, [isOpen, editingSession, initialFolder]);
 
   // Unlocking the vault with this dialog open fills "Link to existing".
   useEffect(() => {
