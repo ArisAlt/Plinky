@@ -4,9 +4,26 @@ on:
   push:
     tags:
       - 'v*'
+  # Build and publish from the Actions tab (or the API) without pushing a
+  # tag: the release step creates the tag on the chosen commit.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create, e.g. v0.1.4-rc.1'
+        required: true
+      prerelease:
+        description: 'Publish as a pre-release'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  # A pushed tag with a suffix (v0.1.4-rc.1) is a pre-release; a manual run
+  # says so itself.
+  PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, '-') }}
 
 jobs:
   release-linux:
@@ -62,8 +79,9 @@ jobs:
       - name: Upload Release Assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # A tag with a suffix (v0.1.4-rc.1) publishes a pre-release.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ env.PRERELEASE }}
           files: |
             target/release/bundle/appimage/*.AppImage
             target/release/bundle/deb/*.deb
@@ -74,6 +92,9 @@ jobs:
   release-windows:
     name: Build & Release Windows (MSI, EXE)
     runs-on: windows-latest
+    # The Linux job creates the release (and, on a manual run, the tag);
+    # two jobs creating the same release at once can race.
+    needs: release-linux
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -107,20 +128,21 @@ jobs:
           Copy-Item $exePath -Destination "release-portable/Plinky.exe"
           Copy-Item "README.md" -Destination "release-portable/README.md" -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path "dist-release"
-          Compress-Archive -Path "release-portable/*" -DestinationPath "dist-release/Plinky_${{ github.ref_name }}_x64_portable.zip"
+          Compress-Archive -Path "release-portable/*" -DestinationPath "dist-release/Plinky_${{ env.RELEASE_TAG }}_x64_portable.zip"
           Copy-Item $exePath -Destination "dist-release/Plinky-Portable.exe"
 
       - name: Upload Release Assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # A tag with a suffix (v0.1.4-rc.1) publishes a pre-release.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ env.PRERELEASE }}
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
-            dist-release/Plinky_${{ github.ref_name }}_x64_portable.zip
+            dist-release/Plinky_${{ env.RELEASE_TAG }}_x64_portable.zip
             dist-release/Plinky-Portable.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
