@@ -384,6 +384,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       fontSize: fontSize || 13,
       lineHeight: 1.25,
       allowTransparency: true,
+      // Find highlights matches with xterm decorations, a "proposed" API in
+      // xterm 5. Without this, the first search threw "You must set the
+      // allowProposedApi option" inside a React effect and blanked the view.
+      allowProposedApi: true,
       theme: {
         background: '#090d16',
         foreground: '#e2e8f0',
@@ -828,10 +832,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
-    if (direction === 'next') {
-      searchAddonRef.current.findNext(searchQuery, options);
-    } else {
-      searchAddonRef.current.findPrevious(searchQuery, options);
+    // A search must never take the terminal down with it (an invalid regex,
+    // or an xterm error): report it and keep the view.
+    try {
+      if (direction === 'next') {
+        searchAddonRef.current.findNext(searchQuery, options);
+      } else {
+        searchAddonRef.current.findPrevious(searchQuery, options);
+      }
+    } catch (e) {
+      setSearchStats(null);
+      console.warn('Search failed:', e);
     }
   }, [searchQuery, caseSensitive, wholeWord, isRegex]);
 
