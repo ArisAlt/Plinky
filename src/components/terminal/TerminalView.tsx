@@ -26,13 +26,14 @@ import {
   pastePaced,
   cancelPaste,
   listenPasteProgress,
+  reopenSessionId,
   VaultLookup,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import {
   classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
 } from '../../services/promptDetect';
-import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste } from '../../services/appEvents';
+import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import {
   Radio,
   Sparkles,
@@ -314,15 +315,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // paste is sent one line at a time by the backend (paste_paced).
   const pasteDelayRef = useRef(0);
   const [pasteJob, setPasteJob] = useState<{ sent: number; total: number } | null>(null);
+  const autoReconnectRef = useRef(false);
 
   useEffect(() => {
     let active = true;
     readPuttySession(tab.sessionName)
-      .then(s => { if (active) pasteDelayRef.current = pasteLineDelayFrom(s?.extra); })
+      .then(s => {
+        if (!active) return;
+        pasteDelayRef.current = pasteLineDelayFrom(s?.extra);
+        autoReconnectRef.current = s?.extra?.PlinkyAutoReconnect === '1';
+      })
       .catch(() => {});
     const onSaved = (e: Event) => {
       const d = (e as CustomEvent<SessionSavedDetail>).detail;
-      if (d?.name === tab.sessionName) pasteDelayRef.current = d.pasteLineDelayMs;
+      if (d?.name === tab.sessionName) {
+        pasteDelayRef.current = d.pasteLineDelayMs;
+        autoReconnectRef.current = d.autoReconnect;
+      }
     };
     window.addEventListener(SESSION_SAVED_EVENT, onSaved);
     return () => { active = false; window.removeEventListener(SESSION_SAVED_EVENT, onSaved); };
@@ -366,6 +375,60 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // current pasteText through this ref.
   const pasteTextRef = useRef(pasteText);
   pasteTextRef.current = pasteText;
+
+  // ---- Reconnect (T-016) ---------------------------------------------------
+  // Restarts the session in this same terminal, like PuTTY's "Restart
+  // Session": the scrollback stays and the new connection continues below.
+  // restartSessionRef is filled in by the mount effect, which owns the
+  // terminal and its output handler.
+  const restartSessionRef = useRef<(() => Promise<void>) | null>(null);
+  const reachedLiveRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const [reconnectIn, setReconnectIn] = useState<number | null>(null);
+
+  const cancelAutoReconnect = () => {
+    if (reconnectTimerRef.current !== null) window.clearInterval(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    setReconnectIn(null);
+  };
+
+  const reconnectNow = () => {
+    cancelAutoReconnect();
+    void restartSessionRef.current?.();
+  };
+
+  const handleManualReconnect = () => {
+    reconnectAttemptRef.current = 0;
+    reconnectNow();
+  };
+
+  /**
+   * After a drop from a live session: wait, then restart; the waits grow and
+   * after the last one it stops, so a host that's gone isn't hammered.
+   */
+  const scheduleAutoReconnect = () => {
+    const attempt = reconnectAttemptRef.current + 1;
+    if (attempt > RECONNECT_DELAYS_S.length) {
+      addEventLog(`Gave up reconnecting after ${RECONNECT_DELAYS_S.length} attempts`, 'warn');
+      return;
+    }
+    reconnectAttemptRef.current = attempt;
+    cancelAutoReconnect();
+    let left = RECONNECT_DELAYS_S[attempt - 1];
+    setReconnectIn(left);
+    addEventLog(`Connection lost; reconnecting in ${left} s (attempt ${attempt} of ${RECONNECT_DELAYS_S.length})`, 'warn');
+    reconnectTimerRef.current = window.setInterval(() => {
+      left -= 1;
+      if (left <= 0) reconnectNow();
+      else setReconnectIn(left);
+    }, 1000);
+  };
+  const scheduleAutoReconnectRef = useRef(scheduleAutoReconnect);
+  scheduleAutoReconnectRef.current = scheduleAutoReconnect;
+  useEffect(() => () => {
+    if (reconnectTimerRef.current !== null) window.clearInterval(reconnectTimerRef.current);
+  }, []);
 
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
@@ -598,6 +661,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);
+        // A FATAL ERROR after the session was live is a dropped connection
+        // ("Remote side unexpectedly closed", "Network error: ..."). A clean
+        // `exit` prints no FATAL, and a failed login never reached live --
+        // neither reconnects on its own.
+        const networkProtocol = !tab.protocol || tab.protocol === 'SSH' || tab.protocol === 'Telnet';
+        if (text.includes('FATAL ERROR:') && reachedLiveRef.current && autoReconnectRef.current && networkProtocol) {
+          reachedLiveRef.current = false;
+          scheduleAutoReconnectRef.current();
+        }
+        reachedLiveRef.current = false;
       } else if (isPreauthPattern) {
         onUpdateTab(tab.id, { status: 'preauth' });
         if (isEnablePrompt) {
@@ -608,6 +681,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       } else if (isLivePattern) {
         onUpdateTab(tab.id, { status: 'live' });
         setDetectedPasswordPrompt(null);
+        reachedLiveRef.current = true;
+        reconnectAttemptRef.current = 0; // back up: the next drop starts over
       } else if (isEnablePrompt) {
         setDetectedPasswordPrompt('enable');
       } else if (isPasswordPrompt) {
@@ -637,6 +712,66 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
+    const startFresh = () => {
+      // Fresh start
+      addEventLog(`Spawning session "${tab.sessionName}" (${tab.hostname || 'local'}:${tab.port || 22})`, 'info');
+      startTerminalSession(
+        tab.id,
+        tab.sessionName,
+        isLocalSession,
+        term.cols,
+        term.rows,
+        handleIncomingChunk,
+        tab.hostname,
+        tab.port,
+        tab.username,
+        (tab as any).logFileName
+      ).then(({ started, error }) => {
+        if (disposed) {
+          // Tab closed while the spawn was in flight: its close ran as a
+          // no-op before this session existed, so close the straggler now.
+          if (started && isSessionClosed(tab.id)) {
+            closeTerminalSession(tab.id);
+          }
+          return;
+        }
+        if (started) {
+          isLivePtyRef.current = true;
+        }
+        if (!started) {
+          onUpdateTab(tab.id, { status: 'disconnected' });
+          if (isTauriEnvironment()) {
+            const reason = error || 'Verify that PuTTY (plink) is installed and target host is reachable.';
+            term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}": ${reason}]\x1b[0m\r\n`);
+            addEventLog(`Failed to start session "${tab.sessionName}": ${reason}`, 'error');
+          } else {
+            // Browser development preview fallback banner (non-Tauri mode)
+            term.writeln(`\x1b[33m[Plinky: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
+            addEventLog("Running in browser development preview mode", 'info');
+            onUpdateTab(tab.id, { status: 'live' });
+          }
+        } else {
+          addEventLog(`PTY session live. Terminal ready.`, 'success');
+        }
+      });
+    };
+
+    // Reconnect: close whatever is left of the old session and start again
+    // under the same tab id, in this terminal.
+    restartSessionRef.current = async () => {
+      if (disposed) return;
+      await closeTerminalSession(tab.id);
+      reopenSessionId(tab.id);
+      if (disposed) return;
+      recentOutputRef.current = '';
+      typedRef.current = { line: '', submitted: null };
+      autoLoginSentRef.current = { user: false, password: false };
+      setDetectedPasswordPrompt(null);
+      term.writeln('\r\n\x1b[33m[Plinky: Reconnecting...]\x1b[0m');
+      onUpdateTab(tab.id, { status: 'connecting' });
+      startFresh();
+    };
+
     // Attempt to reattach to existing session or start a new PTY session
     attachTerminalSession(tab.id, 0, handleIncomingChunk).then((attachInfo) => {
       if (disposed) return;
@@ -655,48 +790,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           addEventLog(`Attached to active session "${tab.sessionName}"`, 'success');
         }
         onUpdateTab(tab.id, { status: attachInfo.is_live ? 'live' : 'preauth' });
+        reachedLiveRef.current = attachInfo.is_live;
       } else {
-        // Fresh start
-        addEventLog(`Spawning session "${tab.sessionName}" (${tab.hostname || 'local'}:${tab.port || 22})`, 'info');
-        startTerminalSession(
-          tab.id,
-          tab.sessionName,
-          isLocalSession,
-          term.cols,
-          term.rows,
-          handleIncomingChunk,
-          tab.hostname,
-          tab.port,
-          tab.username,
-          (tab as any).logFileName
-        ).then(({ started, error }) => {
-          if (disposed) {
-            // Tab closed while the spawn was in flight: its close ran as a
-            // no-op before this session existed, so close the straggler now.
-            if (started && isSessionClosed(tab.id)) {
-              closeTerminalSession(tab.id);
-            }
-            return;
-          }
-          if (started) {
-            isLivePtyRef.current = true;
-          }
-          if (!started) {
-            onUpdateTab(tab.id, { status: 'disconnected' });
-            if (isTauriEnvironment()) {
-              const reason = error || 'Verify that PuTTY (plink) is installed and target host is reachable.';
-              term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}": ${reason}]\x1b[0m\r\n`);
-              addEventLog(`Failed to start session "${tab.sessionName}": ${reason}`, 'error');
-            } else {
-              // Browser development preview fallback banner (non-Tauri mode)
-              term.writeln(`\x1b[33m[Plinky: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
-              addEventLog("Running in browser development preview mode", 'info');
-              onUpdateTab(tab.id, { status: 'live' });
-            }
-          } else {
-            addEventLog(`PTY session live. Terminal ready.`, 'success');
-          }
-        });
+        startFresh();
       }
     });
 
@@ -798,6 +894,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
 
     return () => {
+      restartSessionRef.current = null;
       pasteTarget?.removeEventListener('paste', onPasteCapture, true);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
@@ -1406,6 +1503,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </div>
         )}
 
+        {/* Reconnect (T-016) */}
+        {(reconnectIn !== null || tab.status === 'disconnected') && (
+          <div role="status" className="absolute bottom-3 left-4 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+            {reconnectIn !== null ? (
+              <>
+                <span>Connection lost. Reconnecting in {reconnectIn} s</span>
+                <button onClick={reconnectNow} className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px]">Reconnect now</button>
+                <button onClick={cancelAutoReconnect} className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-200 text-[11px]">Cancel</button>
+              </>
+            ) : (
+              <>
+                <span>Disconnected</span>
+                <button onClick={handleManualReconnect} className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px]">Reconnect</button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Paced paste in progress (T-015): how far, and a way to stop it. */}
         {pasteJob && (
           <div role="status" className="absolute bottom-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-sky-500/60 text-sky-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
@@ -1602,6 +1718,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               >
                 <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
                 <span>Change Settings...</span>
+              </button>
+            )}
+            {tab.status === 'disconnected' && (
+              <button
+                onClick={() => { setContextMenu(null); handleManualReconnect(); }}
+                className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Reconnect</span>
               </button>
             )}
             <div className="border-t border-plinky-800 my-1" />

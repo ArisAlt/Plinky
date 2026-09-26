@@ -468,7 +468,7 @@ describe('NewSessionModal Component', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     window.removeEventListener('plinky:session-saved', listener);
     expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBe('250');
-    expect(heard).toEqual([{ name: 'Console-SW', pasteLineDelayMs: 250 }]);
+    expect(heard).toEqual([{ name: 'Console-SW', pasteLineDelayMs: 250, autoReconnect: false }]);
   });
 
   it('removes the paste line delay when set back to 0', async () => {
@@ -481,5 +481,35 @@ describe('NewSessionModal Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBeUndefined();
+  });
+
+  it('saves keepalive and auto-reconnect the way PuTTY and Plinky read them', async () => {
+    const onSave = vi.fn();
+    const heard: unknown[] = [];
+    const listener = (e: Event) => heard.push((e as CustomEvent).detail);
+    window.addEventListener('plinky:session-saved', listener);
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Edge' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.1' } });
+    fireEvent.change(screen.getByLabelText('Keepalive interval in seconds'), { target: { value: '90' } });
+    fireEvent.click(screen.getByLabelText(/TCP keepalives/i));
+    fireEvent.click(screen.getByLabelText(/Reconnect automatically/i));
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    window.removeEventListener('plinky:session-saved', listener);
+    expect(onSave.mock.calls[0][0].extra).toMatchObject({
+      PingInterval: '1', PingIntervalSecs: '30', TCPKeepalives: '1', PlinkyAutoReconnect: '1',
+    });
+    expect(heard).toEqual([expect.objectContaining({ name: 'Edge', autoReconnect: true })]);
+  });
+
+  it('shows an existing PuTTY keepalive and offers no connection options for serial', () => {
+    const putty = { name: 'Old', hostname: 'h', port: 22, protocol: 'SSH' as const, extra: { PingInterval: '2', PingIntervalSecs: '5' } };
+    const { unmount } = render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={putty} />);
+    expect((screen.getByLabelText('Keepalive interval in seconds') as HTMLInputElement).value).toBe('125');
+    unmount();
+    const serial = { name: 'Con', hostname: '', port: 0, protocol: 'Serial' as const, extra: { SerialLine: '/dev/ttyUSB0' } };
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={serial} />);
+    expect(screen.queryByLabelText('Keepalive interval in seconds')).toBeNull();
   });
 });

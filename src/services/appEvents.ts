@@ -13,6 +13,8 @@ export interface SessionSavedDetail {
   name: string;
   /** 0 = paste normally. */
   pasteLineDelayMs: number;
+  /** Reconnect by itself when the connection drops. */
+  autoReconnect: boolean;
 }
 
 /** Highest line delay the backend accepts (paste.rs MAX_LINE_DELAY_MS). */
@@ -28,3 +30,25 @@ export function pasteLineDelayFrom(extra: Record<string, string> | undefined): n
 export function isMultiLinePaste(text: string): boolean {
   return /[\r\n]/.test(text.replace(/[\r\n]+$/, ''));
 }
+
+/**
+ * Seconds between keepalives. PuTTY adds its two keys together --
+ * PingInterval (minutes, the old setting) and PingIntervalSecs -- so read
+ * them the same way.
+ */
+export function keepaliveSecondsFrom(extra: Record<string, string> | undefined): number {
+  const n = (k: string) => {
+    const v = parseInt(extra?.[k] ?? '', 10);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  };
+  return n('PingInterval') * 60 + n('PingIntervalSecs');
+}
+
+/** The keys PuTTY itself writes for a keepalive interval: minutes + remainder. */
+export function keepaliveKeys(seconds: number): { PingInterval: string; PingIntervalSecs: string } {
+  const s = Math.max(0, Math.floor(seconds) || 0);
+  return { PingInterval: String(Math.floor(s / 60)), PingIntervalSecs: String(s % 60) };
+}
+
+/** Waits between automatic reconnect attempts, in seconds; then it stops. */
+export const RECONNECT_DELAYS_S = [2, 4, 8, 16, 30];
