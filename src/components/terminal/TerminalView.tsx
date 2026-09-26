@@ -22,12 +22,17 @@ import {
   vaultLookup,
   vaultSendSecret,
   sendBreak,
+  readPuttySession,
+  pastePaced,
+  cancelPaste,
+  listenPasteProgress,
   VaultLookup,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import {
   classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
 } from '../../services/promptDetect';
+import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste } from '../../services/appEvents';
 import {
   Radio,
   Sparkles,
@@ -302,6 +307,65 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
     return false;
   };
+
+  // ---- Paste with a delay between lines (T-015) --------------------------
+  // Console ports and network gear drop characters when a config is pasted
+  // at full speed. With the session's "paste line delay" set, a multi-line
+  // paste is sent one line at a time by the backend (paste_paced).
+  const pasteDelayRef = useRef(0);
+  const [pasteJob, setPasteJob] = useState<{ sent: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    readPuttySession(tab.sessionName)
+      .then(s => { if (active) pasteDelayRef.current = pasteLineDelayFrom(s?.extra); })
+      .catch(() => {});
+    const onSaved = (e: Event) => {
+      const d = (e as CustomEvent<SessionSavedDetail>).detail;
+      if (d?.name === tab.sessionName) pasteDelayRef.current = d.pasteLineDelayMs;
+    };
+    window.addEventListener(SESSION_SAVED_EVENT, onSaved);
+    return () => { active = false; window.removeEventListener(SESSION_SAVED_EVENT, onSaved); };
+  }, [tab.sessionName]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    listenPasteProgress(p => {
+      if (p.sessionId === tab.id) setPasteJob({ sent: p.sent, total: p.total });
+    }).then(u => { if (disposed) u?.(); else unlisten = u; });
+    return () => { disposed = true; unlisten?.(); };
+  }, [tab.id]);
+
+  /** Every paste goes through here: paced when the session asks for it. */
+  const pasteText = async (text: string) => {
+    if (!text) return;
+    if (!isLivePtyRef.current) {
+      terminalRef.current?.write(text);
+      return;
+    }
+    const delay = pasteDelayRef.current;
+    if (delay > 0 && isMultiLinePaste(text)) {
+      const total = text.replace(/[\r\n]+$/, '').split(/\r\n|\r|\n/).length;
+      setPasteJob({ sent: 0, total });
+      try {
+        const sent = await pastePaced(tab.id, text, delay);
+        addEventLog(sent < total
+          ? `Paste cancelled after ${sent} of ${total} lines`
+          : `Pasted ${sent} lines, ${delay} ms apart`, sent < total ? 'warn' : 'info');
+      } catch (e) {
+        addEventLog(String(e), 'error');
+      } finally {
+        setPasteJob(null);
+      }
+      return;
+    }
+    writeTerminalInput(tab.id, new TextEncoder().encode(text));
+  };
+  // The capture listener below lives as long as the terminal; it reaches the
+  // current pasteText through this ref.
+  const pasteTextRef = useRef(pasteText);
+  pasteTextRef.current = pasteText;
 
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
@@ -632,6 +696,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
+    // A keyboard paste reaches xterm as a DOM paste event on its textarea.
+    // When this session paces pastes and the text has several lines, take
+    // it here (capture phase, before xterm) so it goes out line by line;
+    // otherwise xterm pastes as usual (bracketed paste and all).
+    const pasteTarget = containerRef.current;
+    const onPasteCapture = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (pasteDelayRef.current > 0 && isLivePtyRef.current && isMultiLinePaste(text)) {
+        e.preventDefault();
+        e.stopPropagation();
+        void pasteTextRef.current(text);
+      }
+    };
+    pasteTarget?.addEventListener('paste', onPasteCapture, true);
+
     // Handle user keyboard input
     term.onData((data) => {
       typedRef.current = trackTypedInput(typedRef.current, data, Date.now());
@@ -715,6 +794,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
 
     return () => {
+      pasteTarget?.removeEventListener('paste', onPasteCapture, true);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
       if (resizeObserver) {
@@ -885,17 +965,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   const handlePaste = async () => {
-    if (navigator.clipboard) {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        if (isLivePtyRef.current) {
-          writeTerminalInput(tab.id, new TextEncoder().encode(text));
-        } else {
-          terminalRef.current?.write(text);
-        }
-      }
-    }
     setContextMenu(null);
+    if (navigator.clipboard) {
+      await pasteText(await navigator.clipboard.readText());
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -1319,6 +1392,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <div className="absolute inset-0 z-30 pointer-events-none border-2 border-dashed border-sky-400 bg-sky-950/70 backdrop-blur-xs flex items-center justify-center text-sky-300 font-mono text-xs space-x-2 animate-in fade-in duration-100">
             <Upload className="w-5 h-5 text-sky-400 animate-bounce" />
             <span>Drop file to paste path into terminal</span>
+          </div>
+        )}
+
+        {/* Paced paste in progress (T-015): how far, and a way to stop it. */}
+        {pasteJob && (
+          <div role="status" className="absolute bottom-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-sky-500/60 text-sky-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
+            <Clipboard className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+            <span>Pasting line {Math.min(pasteJob.sent + 1, pasteJob.total)} of {pasteJob.total}</span>
+            <button
+              onClick={() => { void cancelPaste(tab.id); }}
+              className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-red-600/60 text-slate-200 text-[11px]"
+            >
+              Cancel
+            </button>
           </div>
         )}
 

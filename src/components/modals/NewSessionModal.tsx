@@ -9,6 +9,7 @@ import {
   vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
+import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom } from '../../services/appEvents';
 
 interface NewSessionModalProps {
   isOpen: boolean;
@@ -47,6 +48,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // Automatic answers from the vault (owner decision: opt-in per session).
   const [autoEnable, setAutoEnable] = useState(false);
   const [autoLogin, setAutoLogin] = useState(false);
+  // Paste line delay in ms ('' or 0 = paste normally).
+  const [pasteDelay, setPasteDelay] = useState('');
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -142,6 +145,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultEnablePassword('');
       setAutoEnable(extra.PlinkyAutoEnable === '1');
       setAutoLogin(extra.PlinkyAutoLogin === '1');
+      const delay = pasteLineDelayFrom(extra);
+      setPasteDelay(delay ? String(delay) : '');
     } else {
       setName('');
       setHostname('');
@@ -173,6 +178,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultEnablePassword('');
       setAutoEnable(false);
       setAutoLogin(false);
+      setPasteDelay('');
     }
   }, [isOpen, editingSession]);
 
@@ -295,6 +301,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     }
 
     if (autoEnable) extra.PlinkyAutoEnable = '1'; else delete extra.PlinkyAutoEnable;
+    const pasteLineDelayMs = pasteLineDelayFrom({ PlinkyPasteLineDelayMs: pasteDelay });
+    if (pasteLineDelayMs > 0) extra.PlinkyPasteLineDelayMs = String(pasteLineDelayMs);
+    else delete extra.PlinkyPasteLineDelayMs;
     if (autoLogin && (protocol === 'Telnet' || protocol === 'Serial')) extra.PlinkyAutoLogin = '1';
     else delete extra.PlinkyAutoLogin;
 
@@ -313,6 +322,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     };
 
     onSave(session);
+    // Open terminals of this session apply the new delay right away.
+    window.dispatchEvent(new CustomEvent<SessionSavedDetail>(SESSION_SAVED_EVENT, {
+      detail: { name: session.name, pasteLineDelayMs },
+    }));
     onClose();
   };
 
@@ -849,6 +862,31 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Paste line delay (T-015) */}
+          <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1 text-[11px]">
+            <label className="flex items-center justify-between space-x-2">
+              <span className="text-slate-300 font-medium">Paste line delay</span>
+              <span className="flex items-center space-x-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  max={MAX_PASTE_LINE_DELAY_MS}
+                  step={50}
+                  value={pasteDelay}
+                  onChange={e => setPasteDelay(e.target.value)}
+                  placeholder="0"
+                  aria-label="Paste line delay in milliseconds"
+                  className="w-20 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs text-right focus:outline-none focus:border-sky-500"
+                />
+                <span className="text-slate-500">ms</span>
+              </span>
+            </label>
+            <p className="text-slate-500">
+              Sends a multi-line paste one line at a time, this far apart, for console ports and network gear that
+              drop characters. 0 pastes normally. Up to {MAX_PASTE_LINE_DELAY_MS} ms.
+            </p>
           </div>
 
           {/* Automatic answers from the vault. SSH needs no switch: plink

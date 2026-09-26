@@ -454,4 +454,32 @@ describe('NewSessionModal Component', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0].extra).toMatchObject({ ProxyMethod: '3', ProxyHost: 'proxy.corp', ProxyPort: '3128', ProxyUsername: 'me' });
   });
+
+  it('saves the paste line delay and tells open terminals', async () => {
+    const onSave = vi.fn();
+    const heard: unknown[] = [];
+    const listener = (e: Event) => heard.push((e as CustomEvent).detail);
+    window.addEventListener('plinky:session-saved', listener);
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Console-SW' } });
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.5' } });
+    fireEvent.change(screen.getByLabelText('Paste line delay in milliseconds'), { target: { value: '250' } });
+    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    window.removeEventListener('plinky:session-saved', listener);
+    expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBe('250');
+    expect(heard).toEqual([{ name: 'Console-SW', pasteLineDelayMs: 250 }]);
+  });
+
+  it('removes the paste line delay when set back to 0', async () => {
+    const onSave = vi.fn();
+    const paced = { name: 'SW', hostname: '10.0.0.6', port: 22, protocol: 'SSH' as const, extra: { PlinkyPasteLineDelayMs: '400' } };
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} editingSession={paced} />);
+    const field = screen.getByLabelText('Paste line delay in milliseconds') as HTMLInputElement;
+    expect(field.value).toBe('400');
+    fireEvent.change(field, { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBeUndefined();
+  });
 });
