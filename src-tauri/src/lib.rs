@@ -44,6 +44,14 @@ fn write_putty_session(session: PuttySession) -> Result<(), String> {
         .map_err(|e| format!("Failed to write PuTTY session '{}': {e}", session.name))
 }
 
+/// A folder rename or move: every session's new folder path in one call,
+/// saved all or nothing (see `set_session_folders`).
+#[tauri::command]
+fn set_session_folders(changes: Vec<(String, String)>) -> Result<(), String> {
+    putty_compat::sessions::set_session_folders(&changes)
+        .map_err(|e| format!("Failed to move sessions between folders: {e}"))
+}
+
 #[tauri::command]
 fn list_putty_hostkeys() -> Result<Vec<HostKeyEntry>, String> {
     putty_compat::hostkeys::list_host_keys()
@@ -1000,6 +1008,7 @@ pub fn run() {
             list_putty_sessions,
             read_putty_session,
             write_putty_session,
+            set_session_folders,
             list_putty_hostkeys,
             inspect_ppk,
             start_terminal_session,

@@ -352,6 +352,70 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
     Ok(())
 }
 
+/// Plinky's folder path for a session, kept beside PuTTY's own settings.
+/// PuTTY ignores keys it doesn't know, so its store stays flat.
+pub const FOLDER_KEY: &str = "PlinkyFolder";
+
+/// Sets the folder of every named session, all or nothing.
+///
+/// Renaming or moving a folder rewrites one file (or registry key) per
+/// session under it. Saved one at a time, a failure halfway left the tree
+/// split: some sessions under the new path, the rest under the old one.
+/// Here every session is read before anything is written, and a failed
+/// write puts back the ones already saved.
+pub fn set_session_folders(changes: &[(String, String)]) -> Result<()> {
+    #[cfg(windows)]
+    return set_session_folders_with(
+        changes,
+        |name| crate::registry::read_session_in(crate::registry::SESSIONS_KEY, name),
+        |s| crate::registry::write_session_in(crate::registry::SESSIONS_KEY, s),
+    );
+    #[cfg(not(windows))]
+    {
+        let dir = session_dir();
+        set_session_folders_with(
+            changes,
+            |name| read_session_in(&dir, name),
+            |s| write_session_in(&dir, s),
+        )
+    }
+}
+
+/// [`set_session_folders`] over any store, so the rollback can be tested
+/// against a write that fails partway.
+pub fn set_session_folders_with(
+    changes: &[(String, String)],
+    read: impl Fn(&str) -> Result<PuttySession>,
+    mut write: impl FnMut(&PuttySession) -> Result<()>,
+) -> Result<()> {
+    // Read everything first: a missing session fails before a byte changes.
+    let originals = changes
+        .iter()
+        .map(|(name, _)| read(name))
+        .collect::<Result<Vec<_>>>()?;
+
+    for (done, ((_, folder), original)) in changes.iter().zip(&originals).enumerate() {
+        let mut updated = original.clone();
+        updated.extra.insert(FOLDER_KEY.to_string(), folder.clone());
+        if let Err(e) = write(&updated) {
+            let unrestored: Vec<String> = originals[..done]
+                .iter()
+                .rev()
+                .filter(|prior| write(prior).is_err())
+                .map(|prior| prior.name.clone())
+                .collect();
+            if unrestored.is_empty() {
+                return Err(e);
+            }
+            return Err(PuttyCompatError::PartialFolderMove {
+                cause: e.to_string(),
+                unrestored,
+            });
+        }
+    }
+    Ok(())
+}
+
 pub fn delete_session(name: &str) -> Result<()> {
     #[cfg(windows)]
     return crate::registry::delete_session_in(crate::registry::SESSIONS_KEY, name);
