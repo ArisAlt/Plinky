@@ -1,7 +1,12 @@
 # ADR-006: Terminal Renderer and Output Flow Control (Spike S1)
 
 ## Status
-**Proposed** (2026-09-26). Linux (WebKitGTK) measured; Windows (WebView2) not yet — needs the owner's machine, CI runners have no GPU.
+- Decision 1, flow control: **Accepted and implemented** (T-018, 2026-09-26,
+  479b893 + 4e659d8). Measured in the real app, see "Real app, before and
+  after".
+- Decision 2, WebGL: **Accepted** (T-019), not yet implemented.
+- Windows (WebView2) not measured yet: needs the owner's machine, CI
+  runners have no GPU.
 
 ## Deciders
 - Project Owner
@@ -77,8 +82,30 @@ itself stopped running. In the app, that is every tab and the whole UI.
    or `onContextLoss` (as S1 already specified). +40% on coloured output,
    the kind network gear produces, and flatter frame times.
 
+## Real app, before and after (Linux)
+Release builds run with their own empty data dirs. A temporary probe (not
+committed) opened a local shell through the normal path (PTY → registry
+→ Tauri channel → page → xterm, DOM renderer) and flooded it with `yes`.
+It measured a typed key's echo, which the terminal driver puts in the same
+stream as the flood.
+
+| | v0.1.2 (before) | T-018 (after) |
+|---|---|---|
+| Idle key echo, p95 | 2 ms | 4 ms |
+| `yes` flood: throughput | page froze: ~61k messages of ~37 bytes, ~2 MB drawn, then no response | 32.4 MB/s, 160 KB messages |
+| `yes` flood: key echo p95 / p99 | first echo > 5 s, then none | 21 / 24 ms |
+| Ctrl-C stops the flood in | not through in 100 s | 0.1 s |
+| Coloured flood: throughput / echo p95 / p99 | not reached | 19.5 MB/s / 39 / 53 ms |
+| Page timers late, p95 | stalled | 10–16 ms |
+
+Without batching (one message per PTY read), the flow-controlled build
+still got only 7.6 MB/s: the PTY reads under 1 KB at a time, and Tauri
+delivers each raw message under 1 KB by evaluating a script in the page.
+The forwarder now sends at most one message per 4 ms while output keeps
+coming. After a quiet spell the first chunk goes at once.
+
 ## Consequences
-- **Still to measure: the IPC path.** A `Channel<Vec<u8>>` serialises each
+- **The IPC path** (resolved by T-018; kept for the record). A `Channel<Vec<u8>>` serialises each
   chunk as a JSON number array. A full 4 KB read is about 14 KB of JSON,
   over Tauri's 8 KB direct-delivery threshold
   (`MAX_JSON_DIRECT_EXECUTE_THRESHOLD`, `tauri-2.11.6/src/ipc/channel.rs`).
