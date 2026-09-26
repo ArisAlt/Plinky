@@ -980,6 +980,26 @@ pub fn run() {
         }
     }
 
+    // Plinky 0.1.0 for Windows saved sessions as files, which plink.exe never
+    // reads: every one failed with "plink: no valid host name provided".
+    // Copy them into PuTTY's registry key once, before the session list is
+    // first loaded. Nothing already in the registry is overwritten.
+    #[cfg(windows)]
+    if let Some(appdata) = std::env::var_os("APPDATA").map(PathBuf::from).filter(|p| p.is_absolute()) {
+        let marker = appdata
+            .join(&context.config().identifier)
+            .join(putty_compat::legacy_import::MARKER_FILE);
+        for (dir, report) in putty_compat::legacy_import::import_into_registry(&marker) {
+            match report {
+                Ok(r) => eprintln!(
+                    "plinky: sessions from {}: {} imported, {} already in the registry, {} failed {:?}",
+                    dir.display(), r.imported.len(), r.skipped_existing.len(), r.failed.len(), r.failed
+                ),
+                Err(e) => eprintln!("plinky: couldn't read old sessions in {}: {e}", dir.display()),
+            }
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
