@@ -7,6 +7,9 @@ import { terminalManager } from '../../services/terminalManager';
 import { 
   startTerminalSession, 
   attachTerminalSession,
+  startSessionLog,
+  stopSessionLog,
+  sessionLogStatus,
   detachTerminalSession,
   createOutputAcker,
   writeTerminalInput, 
@@ -57,7 +60,6 @@ import {
   FileText,
   List,
   RotateCcw,
-  Download,
   CopyCheck,
   Settings as SettingsIcon,
   Upload,
@@ -181,9 +183,29 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [loggingMode, setLoggingMode] = useState<'printable' | 'all'>('all');
   const [loggedBytes, setLoggedBytes] = useState(0);
   const [isLoggingOpen, setIsLoggingOpen] = useState(false);
-  const isLoggingRef = useRef(false);
-  const loggingModeRef = useRef<'printable' | 'all'>('all');
-  const loggedBufferRef = useRef<string[]>([]);
+  // The log is written to disk by the backend as output arrives; the page
+  // only shows where and how much. It used to collect output in memory for an
+  // export -- and collected nothing: its capture flag was never set.
+  const [logPath, setLogPath] = useState<string | null>(null);
+  const [logError, setLogError] = useState<string | null>(null);
+  // Also picks up a log PuTTY's own LogFileName setting started, and a log
+  // still running after a reload. Polled only while logging or the panel is open.
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => sessionLogStatus(tab.id).then(info => {
+      if (!alive) return;
+      setIsLogging(!!info);
+      setLogPath(info ? info.path : null);
+      setLoggedBytes(info ? info.bytes : 0);
+    }).catch(() => {});
+    refresh();
+    if (!isLogging && !isLoggingOpen) {
+      const once = setTimeout(refresh, 1500); // a PuTTY log opens just after the spawn
+      return () => { alive = false; clearTimeout(once); };
+    }
+    const timer = setInterval(refresh, 1000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [tab.id, isLogging, isLoggingOpen]);
 
   const copyOnSelectRef = useRef(copyOnSelect);
   copyOnSelectRef.current = copyOnSelect;
@@ -725,17 +747,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         setDetectedPasswordPrompt('login');
       }
       if (answeredAutomatically) setDetectedPasswordPrompt(null);
-
-      if (isLoggingRef.current) {
-        if (loggingModeRef.current === 'printable') {
-          const printable = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-          loggedBufferRef.current.push(printable);
-          setLoggedBytes(prev => prev + printable.length);
-        } else {
-          loggedBufferRef.current.push(text);
-          setLoggedBytes(prev => prev + chunk.byteLength);
-        }
-      }
     };
 
     // PuTTY Classic: Copy on select
@@ -1192,20 +1203,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
     addEventLog("Terminal hard reset (RIS) sent", 'info');
     setContextMenu(null);
-  };
-
-  const handleExportLog = () => {
-    const fullText = loggedBufferRef.current.join('');
-    const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `plinky_${tab.sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.log`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addEventLog(`Exported session log (${(fullText.length / 1024).toFixed(1)} KB)`, 'success');
   };
 
   const handleAnswerPrompt = async (answer: 'store' | 'once' | 'reject') => {
@@ -2013,6 +2010,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         name="loggingMode"
                         checked={loggingMode === 'all'}
                         onChange={() => setLoggingMode('all')}
+                        disabled={isLogging}
                         className="text-sky-500 focus:ring-0"
                       />
                       <div>
@@ -2027,6 +2025,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         name="loggingMode"
                         checked={loggingMode === 'printable'}
                         onChange={() => setLoggingMode('printable')}
+                        disabled={isLogging}
                         className="text-sky-500 focus:ring-0"
                       />
                       <div>
@@ -2037,13 +2036,50 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   </div>
                 </div>
 
+                {logPath && (
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-medium">Saving to</label>
+                    <div className="flex items-center space-x-2">
+                      <code className="flex-1 min-w-0 truncate p-1.5 rounded bg-plinky-950 border border-plinky-800 text-slate-300 font-mono text-[11px]" title={logPath}>
+                        {logPath}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(logPath)}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                      >
+                        Copy path
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {logError && (
+                  <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">
+                    {logError}
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-2 border-t border-plinky-800">
                   <button
-                    onClick={() => {
-                      const next = !isLogging;
-                      setIsLogging(next);
-                      addEventLog(`PuTTY session logging ${next ? 'started' : 'stopped'} (mode: ${loggingMode})`, next ? 'success' : 'info');
+                    onClick={async () => {
+                      setLogError(null);
+                      try {
+                        if (isLogging) {
+                          await stopSessionLog(tab.id);
+                          setIsLogging(false);
+                          addEventLog(`Session logging stopped (${logPath ?? 'log'})`, 'info');
+                          return;
+                        }
+                        const info = await startSessionLog(tab.id, tab.sessionName, loggingMode);
+                        if (!info) return; // dialog cancelled
+                        setIsLogging(true);
+                        setLogPath(info.path);
+                        setLoggedBytes(info.bytes);
+                        addEventLog(`Session logging to ${info.path} (mode: ${loggingMode})`, 'success');
+                      } catch (err) {
+                        // Not started: no live session yet, or the file couldn't be opened.
+                        setLogError(String(err));
+                      }
                     }}
                     className={`px-3 py-1.5 rounded font-medium transition ${
                       isLogging
@@ -2051,30 +2087,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         : 'bg-emerald-600 hover:bg-emerald-500 text-white'
                     }`}
                   >
-                    {isLogging ? 'Stop Logging' : 'Start Logging'}
+                    {isLogging ? 'Stop Logging' : 'Start Logging…'}
                   </button>
-
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={handleExportLog}
-                      disabled={loggedBufferRef.current.length === 0}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium transition"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export .log</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        loggedBufferRef.current = [];
-                        setLoggedBytes(0);
-                        addEventLog("Session log buffer cleared", 'info');
-                      }}
-                      className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
-                    >
-                      Clear
-                    </button>
-                  </div>
+                  <span className="text-slate-500 text-[10px]">
+                    {isLogging ? 'Written to disk as it arrives.' : 'Asks where to save, then writes as output arrives.'}
+                  </span>
                 </div>
               </div>
             </div>

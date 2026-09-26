@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, broadcast};
@@ -11,17 +10,6 @@ use crate::session::flow::{FlowGate, OUTPUT_WINDOW};
 use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo, CloseReason};
 use crate::session::ring_buffer::ScrollbackRingBuffer;
 
-/// Opens (or creates) a session log file in append mode, matching PuTTY's
-/// simplest "All session output" logging mode -- raw bytes, unfiltered.
-/// A failure to open just disables logging for this session rather than
-/// blocking the connection; the caller sees no error either way.
-fn open_log_file(path: &str) -> Option<std::fs::File> {
-    std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .ok()
-}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AttachInfo {
@@ -55,7 +43,8 @@ pub struct ActiveSession {
     pub state_machine: PreAuthStateMachine,
     pub scrollback: ScrollbackRingBuffer,
     pub subscriber: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
-    pub log_file: Option<std::fs::File>,
+    /// Written to disk as output arrives (see `session::log`).
+    pub log: Option<super::log::SessionLog>,
     /// How far the attached page is behind (ADR-006). Shared with the
     /// transport's reader, which waits on it.
     pub flow: Arc<FlowGate>,
@@ -157,7 +146,7 @@ impl SessionRegistry {
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
-            .and_then(open_log_file);
+            .and_then(|p| super::log::SessionLog::open(std::path::Path::new(p), super::log::LogMode::All).ok());
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));
@@ -181,8 +170,13 @@ impl SessionRegistry {
                         // byte the PTY produces, regardless of PreAuth/Live
                         // state -- a failed write just leaves the session
                         // running, it never blocks the connection.
-                        if let Some(f) = session.log_file.as_mut() {
-                            let _ = f.write_all(&chunk);
+                        if let Some(log) = session.log.as_mut() {
+                            // A log that can't be written any more (disk
+                            // full, drive gone) is closed, not retried per
+                            // chunk; the session carries on.
+                            if log.write(&chunk).is_err() {
+                                session.log = None;
+                            }
                         }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
@@ -263,7 +257,7 @@ impl SessionRegistry {
             state_machine: sm,
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024), // 2 MiB
             subscriber,
-            log_file,
+            log: log_file,
             flow,
             instance,
             jump_login: None,
@@ -342,7 +336,7 @@ impl SessionRegistry {
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
-            .and_then(open_log_file);
+            .and_then(|p| super::log::SessionLog::open(std::path::Path::new(p), super::log::LogMode::All).ok());
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));
@@ -362,8 +356,13 @@ impl SessionRegistry {
                     let mut lock = registry_clone.sessions.lock().unwrap();
                     if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
                         session.scrollback.push(&chunk);
-                        if let Some(f) = session.log_file.as_mut() {
-                            let _ = f.write_all(&chunk);
+                        if let Some(log) = session.log.as_mut() {
+                            // A log that can't be written any more (disk
+                            // full, drive gone) is closed, not retried per
+                            // chunk; the session carries on.
+                            if log.write(&chunk).is_err() {
+                                session.log = None;
+                            }
                         }
                         // Pre-auth only: once Live, remote output can never
                         // draw a stored password out of the vault.
@@ -485,7 +484,7 @@ impl SessionRegistry {
             state_machine,
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024),
             subscriber,
-            log_file,
+            log: log_file,
             flow,
             instance,
             jump_login,
@@ -712,6 +711,32 @@ impl SessionRegistry {
     /// The page drawing a session went away (its tab left the screen). The
     /// session keeps running: output goes to scrollback only, the reader is
     /// no longer gated, and the next attach replays it.
+    /// Starts writing this session's output to `path`, from now on,
+    /// replacing any log already open. Returns where it goes.
+    pub fn start_log(&self, id: &str, path: &std::path::Path, mode: super::log::LogMode) -> Result<std::path::PathBuf> {
+        let log = super::log::SessionLog::open(path, mode)
+            .map_err(|e| PlinkyError::ProcessError(format!("Couldn't open the log file {}: {e}", path.display())))?;
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        let out = log.path().to_path_buf();
+        session.log = Some(log);
+        Ok(out)
+    }
+
+    /// Stops logging. The file is closed and stays where it is.
+    pub fn stop_log(&self, id: &str) {
+        if let Some(s) = self.sessions.lock().unwrap().get_mut(id) {
+            s.log = None;
+        }
+    }
+
+    /// Where the session is logging and how much is on disk, if it is.
+    pub fn log_status(&self, id: &str) -> Option<(std::path::PathBuf, u64)> {
+        let lock = self.sessions.lock().unwrap();
+        let log = lock.get(id)?.log.as_ref()?;
+        Some((log.path().to_path_buf(), log.written()))
+    }
+
     pub fn detach_session(&self, id: &str) -> Result<()> {
         let lock = self.sessions.lock().unwrap();
         let session = lock.get(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;

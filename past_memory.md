@@ -606,3 +606,13 @@
 * Verified end to end through SessionRegistry with real plink 0.81 + sshd: jumpu -> finalu, `whoami` = finalu, neither password in the output; wrong jump password -> second jump prompt left to the user, no primary connection.
 * Residual risk (documented in the module): a jump server's pre-auth banner could imitate plink's lines; the final password is still only typed after the jump prompt was answered. Banners were not shown by plink 0.81 in this setup.
 * Not changed: the terminal's manual "Send password" (F1 in the review) can still type the session's password at the jump prompt if the user clicks it there.
+
+### 46. SESSION LOGGING: LIVE ON DISK (owner report + request, 2026-09-26)
+* Owner: "the logging function is not working". Two faults:
+  1. Terminal "Log" button: Start Logging set React state; the output handler read `isLoggingRef`, which nothing ever set -> captured nothing, Export stayed disabled. (And it only buffered in page memory for a later `<a download>` export.)
+  2. PuTTY per-session logging: Rust parsed `LogFileName` but the page never passed it (`(tab as any).logFileName` undefined) -> never logged.
+* Owner request: save on disk, live; "just ask where the file is to be saved".
+* Now: `session/log.rs` `SessionLog` (append, create dirs, unbuffered `File::write_all` per chunk, before the page sees it) + `PrintableFilter` (drops CSI/OSC/DCS/ESC-x, \r and C0 except \n \t; state kept across chunks). Registry `start_log/stop_log/log_status`. Tauri `start_session_log` opens a Save dialog (suggested `Documents|home/Plinky Logs/<session>_<UTC stamp>.log`, Windows-safe name), `stop_session_log`, `session_log_status`. Page shows path + bytes (polled 1 s while logging/panel open), mode locked while logging; memory buffer + Export removed.
+* PuTTY logging honoured at start: `LogType` 1 printable / 2 all with `LogFileName`; `&Y &M &D &T &H &P &&` expanded; relative names under the home dir (cwd is inside the read-only AppImage). Other LogTypes ignored.
+* Verified in the real GUI (Xvfb): Save dialog -> file on disk while the session runs (433 B, printable, colours stripped); a saved session with LogType=2 created ~/putty-127.0.0.1-<date>.log on connect. Tests: 7 unit (log.rs), 1 integration (core_tests: file readable mid-session).
+* Container-only failures (also on master, green in CI): sftp_fixture_tests, sshd_fixture_tests (root, PuTTY 0.81).

@@ -805,3 +805,41 @@ async fn a_flood_waits_for_the_page_and_a_detached_tab_runs_free() {
     registry.close_session("flood").unwrap();
 }
 
+
+/// Owner request: the session log goes to disk as output arrives, not into
+/// the page's memory for a later export. Read the file while the session is
+/// still running -- no stop, no close -- and the command's output is there.
+#[tokio::test]
+async fn a_session_log_is_on_disk_while_the_session_is_still_running() {
+    use plinky_core::session::log::LogMode;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("Plinky Logs").join("local.log");
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    registry.create_local_session("log-live", "Local", None, 80, 24, tx).unwrap();
+    // Keep the page side drained, as the real page does.
+    tokio::spawn(async move { while rx.recv().await.is_some() {} });
+
+    let opened = registry.start_log("log-live", &path, LogMode::Printable).unwrap();
+    assert_eq!(opened, path);
+    registry.write_input("log-live", b"echo LOG_$((6*7))_MARK\r").unwrap();
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut on_disk = String::new();
+    while tokio::time::Instant::now() < deadline {
+        on_disk = std::fs::read_to_string(&path).unwrap_or_default();
+        if on_disk.contains("LOG_42_MARK") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(on_disk.contains("LOG_42_MARK"), "log so far: {on_disk:?}");
+    assert!(!on_disk.contains('\x1b'), "printable mode keeps no escape sequences");
+    let (status_path, bytes) = registry.log_status("log-live").unwrap();
+    assert_eq!(status_path, path);
+    assert!(bytes > 0);
+
+    registry.stop_log("log-live");
+    assert!(registry.log_status("log-live").is_none());
+    let _ = registry.close_session("log-live");
+}
