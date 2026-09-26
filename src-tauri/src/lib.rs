@@ -144,6 +144,44 @@ async fn start_terminal_session(
     username: Option<String>,
     log_file_name: Option<String>,
 ) -> Result<(), String> {
+    let putty_log = if is_local || log_file_name.as_deref().is_some_and(|n| !n.is_empty()) {
+        None
+    } else {
+        putty_compat::sessions::read_session(&session_name)
+            .ok()
+            .and_then(|s| putty_session_log(&s, unix_now()))
+    };
+    spawn_terminal_session(
+        &registry, &vault_state, session_id.clone(), session_name, is_local, cols, rows, on_data,
+        hostname, port, username, log_file_name,
+    )
+    .await?;
+    if let Some((path, mode)) = putty_log {
+        // Opened right after the spawn returns: output from the first few
+        // milliseconds can reach the page before the log. A log that can't
+        // be opened doesn't stop the session.
+        if let Err(e) = registry.start_log(&session_id, &path, mode) {
+            eprintln!("plinky: {}", shown(e));
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn spawn_terminal_session(
+    registry: &SessionRegistry,
+    vault_state: &VaultState,
+    session_id: String,
+    session_name: String,
+    is_local: bool,
+    cols: u16,
+    rows: u16,
+    on_data: Channel,
+    hostname: Option<String>,
+    port: Option<u16>,
+    username: Option<String>,
+    log_file_name: Option<String>,
+) -> Result<(), String> {
     let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
     forward_output(rx, on_data);
 
@@ -227,6 +265,92 @@ async fn start_terminal_session(
             .create_plink_session_with_login(&session_id, &session_name, explicit_target, login, log_file_name, cols, rows, tx)
             .map_err(|e| format!("Failed to create plink session: {e}"))
     }
+}
+
+/// Where a session log is being written, and how much is on disk.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionLogInfo {
+    path: String,
+    bytes: u64,
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Asks where to save the session's log, then writes its output there from
+/// now on, as it arrives (owner request: on disk, live, not in memory).
+/// `None` when the user cancels the dialog.
+#[tauri::command]
+async fn start_session_log(
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<SessionRegistry>>,
+    session_id: String,
+    session_name: String,
+    mode: plinky_core::session::log::LogMode,
+) -> Result<Option<SessionLogInfo>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let dir = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|e| e.to_string())?
+        .join("Plinky Logs");
+    // The dialog opens in this folder; it has to exist to be offered.
+    let _ = std::fs::create_dir_all(&dir);
+    let suggested = plinky_core::session::log::default_log_path(&dir, &session_name, unix_now());
+    let file_name = suggested.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Save session log")
+        .add_filter("Log file", &["log", "txt"])
+        .set_directory(&dir)
+        .set_file_name(&file_name)
+        .save_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx.await.map_err(|_| "The save dialog closed unexpectedly".to_string())? else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    let path = registry.start_log(&session_id, &path, mode).map_err(shown)?;
+    Ok(Some(SessionLogInfo { path: path.display().to_string(), bytes: 0 }))
+}
+
+#[tauri::command]
+fn stop_session_log(registry: State<'_, Arc<SessionRegistry>>, session_id: String) {
+    registry.stop_log(&session_id);
+}
+
+#[tauri::command]
+fn session_log_status(registry: State<'_, Arc<SessionRegistry>>, session_id: String) -> Option<SessionLogInfo> {
+    registry
+        .log_status(&session_id)
+        .map(|(path, bytes)| SessionLogInfo { path: path.display().to_string(), bytes })
+}
+
+/// PuTTY's own per-session logging: `LogType` 1 (printable) or 2 (all
+/// output) with a `LogFileName`. Plinky parsed the name but never used it:
+/// the page passes none, so a session set up to log in PuTTY logged nothing
+/// here. Other types (SSH packets, raw) aren't session output; they're off.
+fn putty_session_log(saved: &putty_compat::sessions::PuttySession, now: u64) -> Option<(std::path::PathBuf, plinky_core::session::log::LogMode)> {
+    use plinky_core::session::log::{expand_putty_log_name, LogMode};
+    let mode = match saved.extra.get("LogType").map(String::as_str) {
+        Some("1") => LogMode::Printable,
+        Some("2") => LogMode::All,
+        _ => return None,
+    };
+    if saved.log_file_name.trim().is_empty() {
+        return None;
+    }
+    let home = std::path::PathBuf::from(plinky_core::sftp::client::PsftpClient::get_local_home_dir());
+    Some((expand_putty_log_name(&saved.log_file_name, &saved.host_name, saved.port_number, now, &home), mode))
 }
 
 #[tauri::command]
@@ -1185,6 +1309,9 @@ pub fn run() {
             inspect_ppk,
             start_terminal_session,
             attach_terminal_session,
+            start_session_log,
+            stop_session_log,
+            session_log_status,
             detach_terminal_session,
             ack_terminal_output,
             answer_hostkey_prompt,
