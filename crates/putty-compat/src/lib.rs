@@ -1,5 +1,6 @@
 pub mod errors;
 pub mod hostkeys;
+pub mod legacy_import;
 pub mod ppk;
 pub mod registry;
 pub mod sessions;
