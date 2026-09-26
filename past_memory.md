@@ -620,3 +620,9 @@
 ### 47. FRONT PAGE CLEANUP (owner, 2026-09-26)
 * Owner: GitHub front page should only describe what Plinky is, no technical details.
 * README.md rewritten for users (what/why/features/platforms/download/license). All previous technical content moved to `docs/DEVELOPMENT.md` (links re-pointed to ../specs). GEMINI.md documentation rule updated so technical material goes to DEVELOPMENT.md, not README.
+
+### 48. RELEASES v0.1.4-rc.1 / rc.2 (2026-09-26)
+* Agent session can push branches but not tags (HTTP 403). release.yml now has workflow_dispatch(tag, prerelease): the release step creates the tag on the built commit; Windows job `needs: release-linux` so only one job creates the release.
+* rc.1 (4c6235c): grey-window fix + jump host login. Verified: published as pre-release, 7 assets, AppImage has 0 libwayland-* files.
+* CI broke on 6e781fc (logging): test used bash `$((6*7))`; Windows local shell is cmd.exe. Fixed in 83708d8 (`%COMSPEC:~0,0%` on Windows). Same CI log showed printable logs joining lines under ConPTY (it moves the cursor, CSI H/f/E, instead of CR LF) -> filter now ends the line on a cursor move after text. CI green on 83708d8.
+* rc.2 dispatched from master at 83708d8: + live disk logging, + user-facing README.
