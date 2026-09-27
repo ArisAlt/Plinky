@@ -22,3 +22,7 @@ src-tauri/gen/
 *.swp
 *~
 .DS_Store
+
+# Local agent notes: kept on disk, not published
+past_memory.md
+STATUS.md

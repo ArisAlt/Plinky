@@ -1,29 +1,15 @@
 # Plinky
 
-**A modern, open-source home for your PuTTY sessions.**
+**A desktop terminal and session manager built on PuTTY.**
 
-Plinky is a desktop terminal and session manager for people who live in SSH:
-system administrators, network engineers and DevOps teams. It keeps PuTTY,
-the tool you already trust, doing the connecting, and gives it the workspace
-PuTTY never had: tabs, split screens, a file browser, a password vault and
-the time-savers you reach for every day.
+Plinky is for system administrators, network engineers and anyone who works
+over SSH, telnet or serial consoles. PuTTY's own tools make the connections
+and transfer the files; Plinky adds tabs, split screens, a file browser, a
+password vault and a few everyday time-savers.
 
-Your existing PuTTY sessions show up in Plinky as they are. Nothing to import,
-nothing to convert, and PuTTY keeps working exactly as before.
-
----
-
-## Why Plinky
-
-**PuTTY is trusted everywhere, but it's one window per connection.** No tabs,
-no file transfer pane, no way to type into ten servers at once.
-
-**The tools that fixed that aren't open.** Popular alternatives keep their core
-closed, or have stopped being maintained, and they end up holding your server
-passwords and keys.
-
-Plinky is fully open source and leaves the security-critical part, the SSH
-connection itself, to PuTTY.
+It uses the sessions you have already saved in PuTTY, so there is nothing to
+import. Sessions you add or change in Plinky are saved in the same place, so
+PuTTY sees them too.
 
 ---
 
@@ -33,13 +19,13 @@ connection itself, to PuTTY.
   PuTTY, organised in folders and subfolders, with tags and search.
 - **Work side by side.** Split the window into two or four terminals, with a
   file browser next to your shell.
-- **Type into many servers at once.** Group tabs into broadcast channels and
+- **Type into several servers at once.** Group tabs into broadcast channels and
   send one command to all of them.
 - **Move files without leaving the terminal.** A two-pane file browser for
   uploads, downloads and remote folders.
 - **Keep passwords in an encrypted vault.** Log in automatically, including
   through a jump host, and send network devices their enable password when
-  they ask for it. Passwords never go into PuTTY's session files.
+  they ask for it. Passwords stay in the vault, not in PuTTY's session files.
 - **Reach hosts behind a gateway.** Connect through a jump host / bastion with
   one setting.
 - **Work with network gear.** Serial console sessions with USB adapter
@@ -53,10 +39,8 @@ connection itself, to PuTTY.
 - **Keep a record.** Log any session straight to a file of your choice as it
   happens.
 - **Manage tunnels and host keys** from one place.
-- **Make it yours.** Nine interface themes (Dracula, Nord, Tokyo Night,
-  Catppuccin, Gruvbox, GitHub Light and more), sixteen terminal colour
-  schemes from PuTTY's classic look to Solarized, and popular programming
-  fonts built in, so they work offline.
+- **Make it yours.** Nine interface themes, sixteen terminal colour schemes,
+  and programming fonts built in, so they work offline.
 
 ---
 
