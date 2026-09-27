@@ -252,6 +252,18 @@ mod tests {
     }
 
     #[test]
+    fn colour_ls_output_is_plain_text() {
+        // The owner's log in "all output" mode, as a text editor showed it:
+        // "[01;34mnetshare[0m". The text mode must leave just the names.
+        let mut f = PrintableFilter::default();
+        let out = f.feed(b"\x1b[0m\x1b[01;34m..\x1b[0m\r\ndrwxr-xr-x 2 u u 4096 May 31  2025 \x1b[01;34mtest\x1b[0m\r\n-rwxr-xr-x 1 u u 312 Jul  2  2025 \x1b[01;32mupdate.sh\x1b[0m\r\n");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "..\ndrwxr-xr-x 2 u u 4096 May 31  2025 test\n-rwxr-xr-x 1 u u 312 Jul  2  2025 update.sh\n"
+        );
+    }
+
+    #[test]
     fn utf8_text_passes_through() {
         let mut f = PrintableFilter::default();
         assert_eq!(f.feed("λ ✓ ❯\n".as_bytes()), "λ ✓ ❯\n".as_bytes());

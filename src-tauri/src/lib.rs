@@ -341,9 +341,10 @@ fn session_log_status(registry: State<'_, Arc<SessionRegistry>>, session_id: Str
 /// here. Other types (SSH packets, raw) aren't session output; they're off.
 fn putty_session_log(saved: &putty_compat::sessions::PuttySession, now: u64) -> Option<(std::path::PathBuf, plinky_core::session::log::LogMode)> {
     use plinky_core::session::log::{expand_putty_log_name, LogMode};
+    // Both are saved as plain text (owner: no colour codes in logs). PuTTY's
+    // "all output" kept them, and an editor shows them as [01;34m...[0m.
     let mode = match saved.extra.get("LogType").map(String::as_str) {
-        Some("1") => LogMode::Printable,
-        Some("2") => LogMode::All,
+        Some("1") | Some("2") => LogMode::Printable,
         _ => return None,
     };
     if saved.log_file_name.trim().is_empty() {

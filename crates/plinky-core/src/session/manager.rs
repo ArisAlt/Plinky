@@ -146,7 +146,7 @@ impl SessionRegistry {
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
-            .and_then(|p| super::log::SessionLog::open(std::path::Path::new(p), super::log::LogMode::All).ok());
+            .and_then(|p| super::log::SessionLog::open(std::path::Path::new(p), super::log::LogMode::Printable).ok());
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));
@@ -336,7 +336,7 @@ impl SessionRegistry {
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
-            .and_then(|p| super::log::SessionLog::open(std::path::Path::new(p), super::log::LogMode::All).ok());
+            .and_then(|p| super::log::SessionLog::open(std::path::Path::new(p), super::log::LogMode::Printable).ok());
 
         let id_owned = id.to_string();
         let subscriber = Arc::new(Mutex::new(Some(out_tx)));

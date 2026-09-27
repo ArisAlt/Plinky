@@ -180,7 +180,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // PuTTY Session Logging State
   const [isLogging, setIsLogging] = useState(false);
-  const [loggingMode, setLoggingMode] = useState<'printable' | 'all'>('all');
   const [loggedBytes, setLoggedBytes] = useState(0);
   const [isLoggingOpen, setIsLoggingOpen] = useState(false);
   // The log is written to disk by the backend as output arrives; the page
@@ -2000,41 +1999,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   </span>
                 </div>
 
-                {/* Mode Selector */}
-                <div className="space-y-1.5">
-                  <label className="text-slate-400 font-medium">Session Logging Mode</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center space-x-2 cursor-pointer p-2 rounded bg-plinky-950 border border-plinky-800 hover:border-slate-700">
-                      <input
-                        type="radio"
-                        name="loggingMode"
-                        checked={loggingMode === 'all'}
-                        onChange={() => setLoggingMode('all')}
-                        disabled={isLogging}
-                        className="text-sky-500 focus:ring-0"
-                      />
-                      <div>
-                        <span className="text-slate-200 font-medium block">All session output</span>
-                        <span className="text-[10px] text-slate-500 block">Includes terminal escapes, cursor sequences, and raw VT codes.</span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center space-x-2 cursor-pointer p-2 rounded bg-plinky-950 border border-plinky-800 hover:border-slate-700">
-                      <input
-                        type="radio"
-                        name="loggingMode"
-                        checked={loggingMode === 'printable'}
-                        onChange={() => setLoggingMode('printable')}
-                        disabled={isLogging}
-                        className="text-sky-500 focus:ring-0"
-                      />
-                      <div>
-                        <span className="text-slate-200 font-medium block">Printable output only</span>
-                        <span className="text-[10px] text-slate-500 block">Strips ANSI color and cursor codes, keeping pure printable text.</span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
+                <p className="text-slate-400">
+                  Saves what you see on screen as plain text, without colour or cursor codes.
+                </p>
 
                 {logPath && (
                   <div className="space-y-1">
@@ -2070,12 +2037,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                           addEventLog(`Session logging stopped (${logPath ?? 'log'})`, 'info');
                           return;
                         }
-                        const info = await startSessionLog(tab.id, tab.sessionName, loggingMode);
+                        // Plain text only (owner): colour codes read as [01;34m...[0m in an editor.
+                        const info = await startSessionLog(tab.id, tab.sessionName, 'printable');
                         if (!info) return; // dialog cancelled
                         setIsLogging(true);
                         setLogPath(info.path);
                         setLoggedBytes(info.bytes);
-                        addEventLog(`Session logging to ${info.path} (mode: ${loggingMode})`, 'success');
+                        addEventLog(`Session logging to ${info.path}`, 'success');
                       } catch (err) {
                         // Not started: no live session yet, or the file couldn't be opened.
                         setLogError(String(err));
