@@ -23,6 +23,10 @@ src-tauri/gen/
 *~
 .DS_Store
 
-# Local agent notes: kept on disk, not published
-past_memory.md
-STATUS.md
+# Internal notes and design docs: kept on disk, not published
+/past_memory.md
+/STATUS.md
+/GEMINI.md
+/scaffold.md
+/specs/
+/docs/THREAT_MODEL.md
