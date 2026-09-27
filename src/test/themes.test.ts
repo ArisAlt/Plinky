@@ -111,7 +111,7 @@ describe('match interface', () => {
   });
 
   it('under GitHub Light the terminal is light too', () => {
-    // The critique's run: a black terminal slab inside a white window.
+    // A design review's run: a black terminal slab inside a white window.
     applyUiTheme('github-light', false);
     const t = findTerminalTheme(MATCH_INTERFACE);
     expect(t.theme.background).toBe('#f6f8fa');

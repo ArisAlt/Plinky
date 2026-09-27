@@ -202,7 +202,7 @@ describe('SessionExplorer nested folders', () => {
     ]);
   });
 
-  // Impeccable critique: the tree was mouse-only; double-click was the only
+  // Design review: the tree was mouse-only; double-click was the only
   // way to connect.
   describe('keyboard', () => {
     const row = (name: string) => document.querySelector(`[data-session-row="${name}"]`) as HTMLElement;

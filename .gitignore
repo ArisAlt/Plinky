@@ -12,9 +12,9 @@
 src-tauri/target/
 src-tauri/gen/
 
-# Dual-agent bridge state (task board, cursors, event log, payloads) --
-# working state for Claude/Antigravity coordination, not project source.
+# Local tooling state, not project source.
 /.agent_bridge/
+/.claude/
 
 # Temporary / backups
 *.bak

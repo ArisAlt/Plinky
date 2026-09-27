@@ -66,7 +66,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultState('unknown');
     }
   };
-  // Automatic answers from the vault (owner decision: opt-in per session).
+  // Automatic answers from the vault (opt-in per session).
   const [autoEnable, setAutoEnable] = useState(false);
   const [autoLogin, setAutoLogin] = useState(false);
   // Paste line delay in ms ('' or 0 = paste normally).
@@ -518,7 +518,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               to 531, Jump Host 330 to 407, Advanced 330. With only a floor
               the dialog grew and re-centred as tabs changed, so the tabs and
               Save moved under the pointer; once, a click aimed at Save landed
-              on the backdrop and closed it unsaved (owner report). 440 px
+              on the backdrop and closed it unsaved. 440 px
               holds every tab but a fully expanded Credentials, which scrolls
               inside; short screens get less, never more than fits. */}
           <div className="p-4 overflow-y-auto h-[min(440px,calc(100vh-220px))] shrink-0">

@@ -3,7 +3,7 @@
 //! The terminal's "Log" used to collect output in the page's memory, to be
 //! exported at the end: nothing reached the disk until then, a crash or a
 //! closed tab lost all of it, and in fact nothing was collected at all (the
-//! capture flag was never set). Owner request: save the log on disk, live.
+//! capture flag was never set). Now the log is saved on disk, live.
 //!
 //! Each chunk the session reads is written to the file as it arrives, before
 //! it goes to the page, with a plain `write_all` on an unbuffered `File`: once
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn colour_ls_output_is_plain_text() {
-        // The owner's log in "all output" mode, as a text editor showed it:
+        // A real log in "all output" mode, as a text editor showed it:
         // "[01;34mnetshare[0m". The text mode must leave just the names.
         let mut f = PrintableFilter::default();
         let out = f.feed(b"\x1b[0m\x1b[01;34m..\x1b[0m\r\ndrwxr-xr-x 2 u u 4096 May 31  2025 \x1b[01;34mtest\x1b[0m\r\n-rwxr-xr-x 1 u u 312 Jul  2  2025 \x1b[01;32mupdate.sh\x1b[0m\r\n");

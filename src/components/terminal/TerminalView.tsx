@@ -352,7 +352,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const handleCopyVaultPassword = () => copyVaultSecret('login');
   const handleCopyVaultEnablePassword = () => copyVaultSecret('enable');
 
-  // ---- Automatic answers (opt-in per session, owner decision) ----------
+  // ---- Automatic answers (opt-in per session) ----------
   // SSH login needs none of this: plink logs in from the vault by itself.
   // What's left are prompts the device prints, which the device controls,
   // so each fires only on something the user did in this tab:
@@ -2211,7 +2211,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                           addEventLog(`Session logging stopped (${logPath ?? 'log'})`, 'info');
                           return;
                         }
-                        // Plain text only (owner): colour codes read as [01;34m...[0m in an editor.
+                        // Plain text only: colour codes read as [01;34m...[0m in an editor.
                         const info = await startSessionLog(tab.id, tab.sessionName, 'printable');
                         if (!info) return; // dialog cancelled
                         setIsLogging(true);

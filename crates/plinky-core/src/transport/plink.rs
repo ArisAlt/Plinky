@@ -205,7 +205,7 @@ impl PlinkTransport {
             // Interactive flags per D8 and PUTTY_WRAPPER_SPEC §4:
             args.push("-load".to_string());
             args.push(session_name.to_string());
-            // Note: -agent is intentionally omitted per Claude architecture review:
+            // Note: -agent is intentionally omitted (architecture review):
             // -load already applies the session's own AgentFwd configuration.
         } else if let Some(target) = explicit_target {
             match target.protocol {

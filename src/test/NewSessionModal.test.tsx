@@ -190,7 +190,7 @@ describe('NewSessionModal Component', () => {
   });
 
   it('stores the gateway password in the vault, never in the PuTTY session', async () => {
-    // Owner request: log in to the jump host with a stored user/password,
+    // Log in to the jump host with a stored user/password,
     // then to the target with the session's own vault login.
     mockVaultSetEntry.mockClear();
     const onSave = vi.fn();
@@ -234,7 +234,7 @@ describe('NewSessionModal Component', () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(mockVaultSetEntry).not.toHaveBeenCalled();
   });
-  // An existing serial session as the owner has it: saved by PuTTY, line in
+  // An existing serial session as a user has it: saved by PuTTY, line in
   // extra, the adapter possibly unplugged.
   const savedSerial = (line: string) => ({
     name: 'COM USB0',
@@ -491,7 +491,7 @@ describe('NewSessionModal Component', () => {
     expect(extra.ProxyUsername).toBeUndefined();
   });
 
-  // Owner report: editing a session that went through a saved bastion and
+  // Reported: editing a session that went through a saved bastion and
   // taking the jump host off closed the dialog without saving -- the dialog
   // shrank, and the click meant for Save hit the backdrop.
   const viaBastion = {
@@ -702,7 +702,7 @@ describe('saving a password when there is no vault yet', () => {
   };
 
   it('says to create a vault first, up front and on save, and saves nothing', async () => {
-    // First run: the owner ticked the box, typed a password, pressed Save --
+    // First run: the user ticked the box, typed a password, pressed Save --
     // and got "Vault is locked ... unlock the vault" for a vault that didn't exist.
     mockVaultIsInitialized.mockResolvedValue(false);
     mockVaultIsUnlocked.mockResolvedValue(false);

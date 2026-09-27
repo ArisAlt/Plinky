@@ -270,7 +270,7 @@ fn test_hostkeys_parsing() {
     let dir = tempdir().unwrap();
     let hostkeys_file = dir.path().join("sshhostkeys");
     let content = r#"# Sample sshhostkeys
-ssh-ed25519@22:192.0.2.10 0x28b56069f86246d18d5ff08c40029803e298d3f5d21cb1b615792024cf0c8711,0x7cadb38df766f23fda4f284a023dce62099329de4693c01852ff997703cbd588
+ssh-ed25519@22:192.0.2.10 0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809,0x0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0
 ssh-rsa@2222:git.company.internal 0x10001,0x00c4f82a9...
 "#;
     fs::write(&hostkeys_file, content).unwrap();
@@ -287,16 +287,6 @@ ssh-rsa@2222:git.company.internal 0x10001,0x00c4f82a9...
     assert_eq!(entries[1].host, "git.company.internal");
 }
 
-#[test]
-fn test_parse_real_system_hostkeys_if_available() {
-    let path = std::path::Path::new("/home/ops/.putty/sshhostkeys");
-    if path.exists() {
-        let entries = list_host_keys_from(path).unwrap();
-        assert!(!entries.is_empty());
-        assert_eq!(entries[0].host, "192.0.2.10");
-        assert_eq!(entries[0].port, 22);
-    }
-}
 
 fn session_in_folder(name: &str, folder: &str) -> PuttySession {
     let mut extra = BTreeMap::new();

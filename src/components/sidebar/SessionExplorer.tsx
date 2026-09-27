@@ -440,7 +440,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     return session.port && session.port !== def ? `${session.hostname}:${session.port}` : session.hostname;
   };
 
-  // One dense row (owner decision after the impeccable critique). The two
+  // One dense row (after a design review). The two
   // densities cost either the names ("we...", "ac..." in compact view, so
   // web-prod-1 and web-prod-2 looked the same) or the list (comfortable
   // cards fit 6 of 12 sessions in a 900 px window). The name now gets the

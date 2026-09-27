@@ -1,5 +1,5 @@
 // In-app confirmation. window.confirm showed nothing at all under
-// WebKitGTK in the critique's run: a vault credential was deleted on one
+// WebKitGTK in a design review's run: a vault credential was deleted on one
 // click with no dialog on screen. One host, mounted once in App, draws these.
 
 export interface ConfirmRequest {

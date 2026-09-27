@@ -806,7 +806,7 @@ async fn a_flood_waits_for_the_page_and_a_detached_tab_runs_free() {
 }
 
 
-/// Owner request: the session log goes to disk as output arrives, not into
+/// The session log goes to disk as output arrives, not into
 /// the page's memory for a later export. Read the file while the session is
 /// still running -- no stop, no close -- and the command's output is there.
 #[tokio::test]

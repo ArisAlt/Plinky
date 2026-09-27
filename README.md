@@ -63,7 +63,8 @@ Get the latest version from the
 
 ## License
 
-Open source under the MIT or Apache-2.0 license, your choice.
+Open source under the [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE)
+license, your choice.
 
 *The name comes from `plink`, PuTTY's command-line connection tool, which does
 the connecting behind every Plinky tab.*

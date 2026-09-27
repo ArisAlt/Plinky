@@ -124,7 +124,7 @@ describe('SessionExplorer Component', () => {
     }
   });
 
-  // Impeccable critique, owner decision: one dense row. Compact view cut
+  // Design review: one dense row. Compact view cut
   // names to "we..." (web-prod-1 and web-prod-2 looked the same); the card
   // view fit 6 of 12 sessions. The row keeps the name whole, puts the host
   // under it, and shows a protocol chip only when it isn't SSH.

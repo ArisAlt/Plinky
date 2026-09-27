@@ -712,7 +712,7 @@ mod windows_tests {
         let (key, _) = RegKey::predef(HKEY_CURRENT_USER)
             .create_subkey(scratch.host_keys())
             .unwrap();
-        key.set_value("ssh-ed25519@22:192.0.2.10", &"0x28b5,0x7cad")
+        key.set_value("ssh-ed25519@22:192.0.2.10", &"0x1a2b,0x0f1e")
             .unwrap();
         key.set_value("rsa2@2222:git.company.internal", &"0x10001,0x00c4")
             .unwrap();
@@ -730,7 +730,7 @@ mod windows_tests {
             ),
             ("ssh-ed25519", 22, "192.0.2.10")
         );
-        assert_eq!(entries[0].raw_key, "0x28b5,0x7cad");
+        assert_eq!(entries[0].raw_key, "0x1a2b,0x0f1e");
         assert_eq!(
             (
                 entries[1].key_type.as_str(),

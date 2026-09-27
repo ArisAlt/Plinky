@@ -44,7 +44,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const knownFont = TERMINAL_FONTS.some(f => f.value === fontFamily);
   const [puttyInfo, setPuttyInfo] = useState<PuttyDetectInfo | null>(null);
   const [resetDone, setResetDone] = useState(false);
-  // Delete vault: two warnings, then delete (owner request).
+  // Delete vault: two warnings, then delete.
   const [vaultExists, setVaultExists] = useState(false);
   const [deleteStep, setDeleteStep] = useState<'idle' | 'warn1' | 'warn2' | 'deleting'>('idle');
   const [deleteResult, setDeleteResult] = useState<string | null>(null);

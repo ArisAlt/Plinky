@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 // One tooltip for the whole app, fed by the `title` attributes already on
 // ~90 controls. Native title tooltips are drawn by the desktop toolkit: in
-// the critique's run they came up in the light system style, ran off the
+// a design review's run they came up in the light system style, ran off the
 // window's right edge, and sat over the launcher's search box and the tab
 // menu while those were in use. This one follows the interface theme, stays
 // inside the window, and gets out of the way on the first click or key.

@@ -327,7 +327,7 @@ fn unix_now() -> u64 {
 }
 
 /// Asks where to save the session's log, then writes its output there from
-/// now on, as it arrives (owner request: on disk, live, not in memory).
+/// now on, as it arrives (on disk, live, not in memory).
 /// `None` when the user cancels the dialog.
 #[tauri::command]
 async fn start_session_log(
@@ -385,7 +385,7 @@ fn session_log_status(registry: State<'_, Arc<SessionRegistry>>, session_id: Str
 /// here. Other types (SSH packets, raw) aren't session output; they're off.
 fn putty_session_log(saved: &putty_compat::sessions::PuttySession, now: u64) -> Option<(std::path::PathBuf, plinky_core::session::log::LogMode)> {
     use plinky_core::session::log::{expand_putty_log_name, LogMode};
-    // Both are saved as plain text (owner: no colour codes in logs). PuTTY's
+    // Both are saved as plain text (no colour codes in logs). PuTTY's
     // "all output" kept them, and an editor shows them as [01;34m...[0m.
     let mode = match saved.extra.get("LogType").map(String::as_str) {
         Some("1") | Some("2") => LogMode::Printable,
@@ -1109,7 +1109,7 @@ struct KdbxExport {
 }
 
 /// Exports the whole vault to a KeePass (KDBX 4) file chosen in a Save As
-/// dialog, protected by the vault's own master password (owner decision).
+/// dialog, protected by the vault's own master password.
 /// The password is checked against the vault file itself -- an export
 /// hands every secret out in a new file, so it's asked for again even when
 /// the vault is already unlocked -- and that same check reads the entries,
@@ -1502,7 +1502,7 @@ mod tests {
 
     #[test]
     fn a_session_finds_its_vault_entry_without_an_explicit_link() {
-        // The owner's case: a password saved from the Vault screen, no
+        // The reported case: a password saved from the Vault screen, no
         // PlinkyVaultKey in the session file -- it used to be ignored.
         // The saved session is handed in rather than written to PUTTYDIR:
         // on Windows sessions are read from the registry, and this test
