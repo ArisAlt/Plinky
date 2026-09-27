@@ -11,6 +11,7 @@ import { HostKeyManager } from './components/keys/HostKeyManager';
 import { VaultManager } from './components/vault/VaultManager';
 import { DEFAULT_TERMINAL_FONT, loadTerminalFont } from './themes/fonts';
 import { ConfirmHost } from './components/common/ConfirmHost';
+import { TooltipHost } from './components/common/TooltipHost';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
@@ -906,6 +907,7 @@ export const App: React.FC = () => {
       <SyncBroadcastBar tabs={tabs} />
 
       <ConfirmHost />
+      <TooltipHost />
 
       {/* Application Bottom Status Bar */}
       <StatusBar tabs={tabs} activeTabId={activeTabId} />

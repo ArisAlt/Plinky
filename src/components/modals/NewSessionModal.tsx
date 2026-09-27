@@ -460,7 +460,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       }}
       className="fixed inset-0 bg-plinky-950/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
     >
-      <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-[500px] shadow-2xl flex flex-col overflow-hidden text-xs max-h-[90vh]">
+      <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-[560px] max-w-full shadow-2xl flex flex-col overflow-hidden text-xs max-h-[90vh]">
         {/* Header */}
         <div className="p-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2">
@@ -510,11 +510,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           }}
           className="flex-1 flex flex-col overflow-hidden"
         >
-          {/* A fixed floor under the body: unticking the jump host shrank the
-              dialog from ~460 to ~210 px and re-centred it, so the next click
-              aimed at Save landed on the backdrop and closed the dialog
-              without saving (owner report). 330 px is the General tab. */}
-          <div className="p-4 overflow-y-auto flex-1 min-h-[330px]">
+          {/* A fixed height, not a floor. Measured body heights per tab
+              (13px text, every option ticked): General 350, Credentials 330
+              to 531, Jump Host 330 to 407, Advanced 330. With only a floor
+              the dialog grew and re-centred as tabs changed, so the tabs and
+              Save moved under the pointer; once, a click aimed at Save landed
+              on the backdrop and closed it unsaved (owner report). 440 px
+              holds every tab but a fully expanded Credentials, which scrolls
+              inside; short screens get less, never more than fits. */}
+          <div className="p-4 overflow-y-auto h-[min(440px,calc(100vh-220px))] shrink-0">
             <div data-tab="general" hidden={tab !== 'general'} className="space-y-3">
               {/* Session Name */}
               <div className="space-y-1">
@@ -973,7 +977,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         </div>
                         <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/50">
                           <Shield className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="text-slate-200 font-mono font-medium truncate max-w-[120px]" title={jumpHost || 'Jump Host'}>
+                          <span className="text-slate-200 font-mono font-medium truncate max-w-[160px]" title={jumpHost || 'Jump Host'}>
                             {jumpHost.trim() ? (jumpUsername ? `${jumpUsername}@${jumpHost}` : jumpHost) : 'Bastion'}
                           </span>
                         </div>
@@ -984,7 +988,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         </div>
                         <div className="flex items-center space-x-1">
                           <Server className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="text-sky-200 font-mono font-medium truncate max-w-[110px]" title={hostname || 'Target'}>
+                          <span className="text-sky-200 font-mono font-medium truncate max-w-[150px]" title={hostname || 'Target'}>
                             {hostname.trim() || 'Target'}
                           </span>
                         </div>

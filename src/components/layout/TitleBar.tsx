@@ -293,7 +293,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Center Quick Connect with History & Autocomplete */}
-      <div ref={dropdownRef} className="relative w-80 min-w-[9rem] shrink">
+      <div ref={dropdownRef} className="relative w-80 min-w-[8rem] shrink">
         <form onSubmit={handleQuickConnectSubmit} className="flex items-center space-x-1.5 w-full">
           <input
             ref={inputRef}
@@ -308,7 +308,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             onKeyDown={handleInputKeyDown}
             aria-label="Quick connect"
             placeholder="user@host[:port]"
-            className="flex-1 px-2.5 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 placeholder-plinky-muted font-mono focus:outline-none focus:border-sky-500 transition"
+            className="flex-1 min-w-0 px-2.5 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 placeholder-plinky-muted font-mono focus:outline-none focus:border-sky-500 transition"
           />
           <button
             type="submit"
