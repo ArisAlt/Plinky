@@ -16,6 +16,7 @@ import {
   X,
   Lock,
   Play,
+  Copy,
 } from 'lucide-react';
 import {
   getUserFolders,
@@ -42,7 +43,8 @@ import {
   rebaseCollapsed,
   sessionFolder,
 } from '../../services/folderTree';
-import { setSessionFolders } from '../../services/tauriBridge';
+import { setSessionFolders, deletePuttySession, readPuttySession, writePuttySession, copyName } from '../../services/tauriBridge';
+import { askConfirm } from '../../services/confirm';
 
 interface SessionExplorerProps {
   sessions: PuttySession[];
@@ -94,6 +96,36 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [folderEdit, setFolderEdit] = useState<FolderEdit | null>(null);
   const [confirmConnect, setConfirmConnect] = useState<{ path: string; sessions: PuttySession[] } | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
+
+  // There was no way to remove or copy a saved session from Plinky: stale
+  // ones piled up, and a near-copy meant retyping every setting.
+  const duplicateSession = async (session: PuttySession) => {
+    try {
+      const full = (await readPuttySession(session.name)) ?? session;
+      const name = copyName(session.name, sessions.map(s => s.name));
+      await writePuttySession({ ...full, name });
+      await onFoldersChanged?.();
+    } catch (e) {
+      setFolderError(`Couldn't duplicate "${session.name}": ${String(e)}`);
+    }
+  };
+
+  const deleteSession = async (session: PuttySession) => {
+    const open = tabs.some(t => t.sessionName === session.name);
+    const ok = await askConfirm({
+      title: `Delete "${session.name}"?`,
+      body: `Its PuTTY settings are removed, from PuTTY too. Passwords in the vault are kept${open ? ', and the open tab keeps running' : ''}.`,
+      confirmLabel: 'Delete session',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deletePuttySession(session.name);
+      await onFoldersChanged?.();
+    } catch (e) {
+      setFolderError(`Couldn't delete "${session.name}": ${String(e)}`);
+    }
+  };
   const [folderBusy, setFolderBusy] = useState(false);
   const [folderVersion, setFolderVersion] = useState(0);
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -1057,6 +1089,29 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           >
             <Tag className="w-3.5 h-3.5 text-plinky-muted" />
             <span>Copy Hostname</span>
+          </button>
+          <button
+            onClick={() => {
+              const s = contextMenu.session;
+              setContextMenu(null);
+              void duplicateSession(s);
+            }}
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-plinky-800 transition text-left"
+          >
+            <Copy className="w-3.5 h-3.5 text-slate-400" />
+            <span>Duplicate</span>
+          </button>
+          <div className="my-1 border-t border-plinky-800/80" role="separator" />
+          <button
+            onClick={() => {
+              const s = contextMenu.session;
+              setContextMenu(null);
+              void deleteSession(s);
+            }}
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 transition text-left"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete…</span>
           </button>
         </div>
       )}

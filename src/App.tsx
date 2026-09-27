@@ -9,6 +9,7 @@ import { SftpDualPane } from './components/sftp/SftpDualPane';
 import { TunnelManager } from './components/tunnels/TunnelManager';
 import { HostKeyManager } from './components/keys/HostKeyManager';
 import { VaultManager } from './components/vault/VaultManager';
+import { ConfirmHost } from './components/common/ConfirmHost';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
 import { NewSessionModal } from './components/modals/NewSessionModal';
@@ -153,6 +154,10 @@ export const App: React.FC = () => {
       clearLayout();
     }
   }, [layoutMode, activeTabId, tabs]);
+
+  // The list only. loadSessions also restores the saved tab layout, which
+  // must happen once at startup, not after every delete or duplicate.
+  const reloadSessions = async () => setSessions(await listPuttySessions());
 
   const loadSessions = async () => {
     const list = await listPuttySessions();
@@ -421,6 +426,7 @@ export const App: React.FC = () => {
             onCreateSession={(folder) => { setNewSessionFolder(folder); setIsNewSessionOpen(true); }}
             onEditSession={handleEditSession}
             onMoveToFolder={handleMoveSessionToFolder}
+            onFoldersChanged={reloadSessions}
           />
           <div
             role="separator"
@@ -880,6 +886,8 @@ export const App: React.FC = () => {
 
       {/* Multi-Session Broadcast Sync Bar (WindTerm style) */}
       <SyncBroadcastBar tabs={tabs} />
+
+      <ConfirmHost />
 
       {/* Application Bottom Status Bar */}
       <StatusBar tabs={tabs} activeTabId={activeTabId} />

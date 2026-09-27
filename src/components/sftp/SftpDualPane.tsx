@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { askConfirm } from '../../services/confirm';
 import { SftpFileEntry, SftpTransferItem } from '../../types/session';
 import {
   SftpTarget,
@@ -272,7 +273,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
   const upload = async (entry: SftpFileEntry) => {
     if (entry.isDir || localPath === null || remotePath === null) return;
     if (!isSafeEntryName(entry.name)) return;
-    if (remoteFiles.some(f => f.name === entry.name) && !confirm(`Replace "${entry.name}" on the server?`)) return;
+    if (remoteFiles.some(f => f.name === entry.name) && !(await askConfirm({ title: `Replace "${entry.name}" on the server?`, confirmLabel: 'Replace', danger: true }))) return;
     const dest = joinRemote(remotePath, entry.name);
     const src = joinLocal(localPath, entry.name);
     const dir = remotePath;
@@ -285,7 +286,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
       setRemoteError(`Refusing to download a file named "${entry.name}": it would land outside ${localPath}`);
       return;
     }
-    if (localFiles.some(f => f.name === entry.name) && !confirm(`Replace local "${entry.name}"?`)) return;
+    if (localFiles.some(f => f.name === entry.name) && !(await askConfirm({ title: `Replace local "${entry.name}"?`, confirmLabel: 'Replace', danger: true }))) return;
     const src = joinRemote(remotePath, entry.name);
     const dest = joinLocal(localPath, entry.name);
     const dir = localPath;
@@ -322,7 +323,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
     const entry = remoteFiles.find(f => f.name === selectedRemote);
     if (!entry || entry.name === '..' || remotePath === null) return;
     const what = entry.isDir ? 'folder (must be empty)' : 'file';
-    if (!confirm(`Delete the ${what} "${entry.name}" on ${sessionName}?`)) return;
+    if (!(await askConfirm({ title: `Delete the ${what} "${entry.name}" on ${sessionName}?`, body: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await sftpRemove(target, joinRemote(remotePath, entry.name), entry.isDir);
       setSelectedRemote(null);

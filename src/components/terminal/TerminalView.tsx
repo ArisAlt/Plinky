@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { askConfirm } from '../../services/confirm';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -196,6 +197,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [isLogging, setIsLogging] = useState(false);
   const [loggedBytes, setLoggedBytes] = useState(0);
   const [isLoggingOpen, setIsLoggingOpen] = useState(false);
+  // Escape closes the topmost of this pane's own overlays. The Log and
+  // Events dialogs and the context menu ignored it, so a key that closes
+  // everything else in the app did nothing here.
+  useEffect(() => {
+    if (!contextMenu && !isEventLogOpen && !isLoggingOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (contextMenu) setContextMenu(null);
+      else if (isLoggingOpen) setIsLoggingOpen(false);
+      else setIsEventLogOpen(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [contextMenu, isEventLogOpen, isLoggingOpen]);
   // The log is written to disk by the backend as output arrives; the page
   // only shows where and how much. It used to collect output in memory for an
   // export -- and collected nothing: its capture flag was never set.
@@ -286,7 +303,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // Away from a password prompt the device echoes what's typed: at a shell
     // prompt the password would show on screen, run as a command and land
     // in the remote history and the session log.
-    if (!detectedPasswordPrompt && !confirm(`No password prompt is showing. Type the ${label} from vault entry "${vaultKey}" anyway? If the device echoes it, it will be visible.`)) return;
+    if (!detectedPasswordPrompt && !(await askConfirm({
+      title: `Type the ${label} anyway?`,
+      body: `No password prompt is showing. If the device echoes what is typed, the ${label} from "${vaultKey}" will be visible, and may land in its history and the session log.`,
+      confirmLabel: `Type ${label}`,
+      danger: true,
+    }))) return;
     try {
       await vaultSendSecret(tab.id, vaultKey, field);
       addEventLog(`Sent the ${label} from vault entry "${vaultKey}"`, 'info');

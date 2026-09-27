@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { askConfirm } from '../../services/confirm';
 import { 
   Shield, 
   Lock, 
@@ -298,7 +299,12 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   };
 
   const handleDeleteEntry = async (key: string) => {
-    if (!confirm(`Are you sure you want to delete credential '${key}'?`)) return;
+    if (!(await askConfirm({
+      title: `Delete "${key}"?`,
+      body: 'The saved password is removed from the vault. Sessions that use it will ask for a password again.',
+      confirmLabel: 'Delete credential',
+      danger: true,
+    }))) return;
     try {
       await vaultDelete(key);
       await loadEntries();

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { ConfirmHost } from '../components/common/ConfirmHost';
 import '@testing-library/jest-dom';
 import { SessionExplorer } from '../components/sidebar/SessionExplorer';
 import { PuttySession } from '../types/session';
@@ -10,8 +11,14 @@ import { getUserFolders } from '../services/sessionMetadata';
 const textOf = (el: Element | null) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
 const setSessionFolders = vi.fn();
+const deletePuttySession = vi.fn();
+const writePuttySession = vi.fn();
 vi.mock('../services/tauriBridge', () => ({
   setSessionFolders: (...args: unknown[]) => setSessionFolders(...args),
+  deletePuttySession: (...args: unknown[]) => deletePuttySession(...args),
+  writePuttySession: (...args: unknown[]) => writePuttySession(...args),
+  readPuttySession: async () => null,
+  copyName: (name: string, taken: string[]) => (taken.includes(`${name} (copy)`) ? `${name} (copy 2)` : `${name} (copy)`),
 }));
 
 const s = (name: string, folder?: string): PuttySession => ({
@@ -256,4 +263,48 @@ describe('SessionExplorer nested folders', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryAllByRole('menu')).toHaveLength(0);
   });
+
+  describe('delete and duplicate', () => {
+    const menuFor = (name: string) => {
+      fireEvent.contextMenu(screen.getByText(name));
+      return screen.getByRole('menu');
+    };
+
+    it('Delete asks first, in the app, and deletes nothing on Cancel', async () => {
+      deletePuttySession.mockReset();
+      const onFoldersChanged = vi.fn();
+      render(<ConfirmHost />);
+      renderExplorer({ onFoldersChanged });
+      fireEvent.click(within(menuFor('laptop')).getByText('Delete…'));
+      const dialog = await screen.findByRole('alertdialog');
+      expect(dialog.textContent).toMatch(/Delete "laptop"\?/);
+      expect(dialog.textContent).toMatch(/Passwords in the vault are kept/);
+      expect(document.activeElement?.textContent).toBe('Cancel'); // a stray Enter cancels
+      fireEvent.click(screen.getByText('Cancel'));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(deletePuttySession).not.toHaveBeenCalled();
+    });
+
+    it('Delete removes the session and reloads the list once confirmed', async () => {
+      deletePuttySession.mockReset();
+      deletePuttySession.mockResolvedValue(undefined);
+      const onFoldersChanged = vi.fn();
+      render(<ConfirmHost />);
+      renderExplorer({ onFoldersChanged });
+      fireEvent.click(within(menuFor('laptop')).getByText('Delete…'));
+      fireEvent.click(await screen.findByText('Delete session'));
+      await waitFor(() => expect(deletePuttySession).toHaveBeenCalledWith('laptop'));
+      await waitFor(() => expect(onFoldersChanged).toHaveBeenCalled());
+    });
+
+    it('Duplicate saves a copy under a free name, in the same folder', async () => {
+      writePuttySession.mockReset();
+      writePuttySession.mockResolvedValue(true);
+      renderExplorer({ onFoldersChanged: vi.fn() });
+      fireEvent.click(within(menuFor('laptop')).getByText('Duplicate'));
+      await waitFor(() => expect(writePuttySession).toHaveBeenCalledTimes(1));
+      expect(writePuttySession.mock.calls[0][0]).toMatchObject({ name: 'laptop (copy)', folder: 'Home', hostname: 'laptop.example' });
+    });
+  });
 });
+

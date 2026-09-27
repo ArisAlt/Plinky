@@ -327,6 +327,28 @@ export async function writePuttySession(session: PuttySession): Promise<boolean>
  * message when nothing (or, if a rollback also failed, not everything) was
  * saved. The sidecar mirror is only updated once PuTTY's store has changed.
  */
+/** Deletes a saved session. Vault entries and open tabs are left alone. */
+export async function deletePuttySession(name: string): Promise<void> {
+  if (isTauriEnvironment()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('delete_putty_session', { name });
+  } else {
+    const i = DEMO_SESSIONS.findIndex(s => s.name === name);
+    if (i < 0) throw new Error(`Session not found: ${name}`);
+    DEMO_SESSIONS.splice(i, 1);
+  }
+}
+
+/** "web-1 (copy)", then "web-1 (copy 2)", ..., free among `taken`. */
+export function copyName(name: string, taken: string[]): string {
+  const base = `${name} (copy)`;
+  if (!taken.includes(base)) return base;
+  for (let n = 2; ; n++) {
+    const next = `${name} (copy ${n})`;
+    if (!taken.includes(next)) return next;
+  }
+}
+
 export async function setSessionFolders(changes: [string, string][]): Promise<void> {
   if (changes.length === 0) return;
   if (isTauriEnvironment()) {

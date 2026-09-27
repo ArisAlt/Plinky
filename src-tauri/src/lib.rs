@@ -44,6 +44,15 @@ fn write_putty_session(session: PuttySession) -> Result<(), String> {
         .map_err(|e| format!("Failed to write PuTTY session '{}': {e}", session.name))
 }
 
+/// Removes a saved session the way PuTTY's own Delete does (registry key on
+/// Windows, session file elsewhere). There was no way to delete a session
+/// from Plinky, so stale ones piled up forever.
+#[tauri::command]
+fn delete_putty_session(name: String) -> Result<(), String> {
+    putty_compat::sessions::delete_session(&name)
+        .map_err(|e| format!("Failed to delete PuTTY session '{name}': {e}"))
+}
+
 /// A folder rename or move: every session's new folder path in one call,
 /// saved all or nothing (see `set_session_folders`).
 #[tauri::command]
@@ -1305,6 +1314,7 @@ pub fn run() {
             list_putty_sessions,
             read_putty_session,
             write_putty_session,
+            delete_putty_session,
             set_session_folders,
             list_putty_hostkeys,
             inspect_ppk,
