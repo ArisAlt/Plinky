@@ -1,4 +1,6 @@
 mod cli;
+#[cfg(unix)]
+mod handoff;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -1330,7 +1332,17 @@ pub fn run() {
         }
     }
 
-    let startup_requests = cli::parse_args(&std::env::args().collect::<Vec<_>>());
+    let argv: Vec<String> = std::env::args().collect();
+    let startup_requests = cli::parse_args(&argv);
+
+    // A console request from GNS3 goes to the Plinky already running, if
+    // there is one, before anything else starts (see handoff.rs).
+    #[cfg(unix)]
+    let handoff_path = handoff::socket_path(&context.config().identifier);
+    #[cfg(unix)]
+    if !startup_requests.is_empty() && handoff::try_hand_over(&handoff_path, &argv) {
+        return;
+    }
 
     tauri::Builder::default()
         // First: a second launch (GNS3 runs the console command once per
@@ -1356,6 +1368,21 @@ pub fn run() {
         .manage(VaultState::new())
         .manage(PasteJobs::default())
         .setup(move |app| {
+            #[cfg(unix)]
+            {
+                let handle = app.handle().clone();
+                handoff::listen(handoff_path.clone(), move |args| {
+                    let requests = cli::parse_args(&args);
+                    if !requests.is_empty() {
+                        handle.state::<OpenRequests>().0.lock().unwrap().extend(requests);
+                        let _ = handle.emit("cli:open", ());
+                    }
+                    if let Some(w) = handle.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                });
+            }
             let app_handle = app.handle().clone();
             let mut rx = reg_for_setup.subscribe_prompts();
             // tauri::async_runtime::spawn, NOT tokio::spawn: setup() runs
