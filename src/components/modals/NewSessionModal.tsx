@@ -466,10 +466,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           <div className="flex items-center space-x-2">
             <Terminal className="w-4 h-4 text-sky-400" />
             <h3 className="font-semibold text-slate-100 text-base">
-              {editingSession ? `Edit "${editingSession.name}"` : 'New PuTTY Session'}
+              {editingSession ? `Edit "${editingSession.name}"` : 'New session'}
             </h3>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
           >
@@ -518,8 +518,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             <div data-tab="general" hidden={tab !== 'general'} className="space-y-3">
               {/* Session Name */}
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Session Name *</label>
-                <input
+                <label htmlFor="new-session-modal-session-name" className="text-slate-300 font-medium">Session Name *</label>
+                <input id="new-session-modal-session-name"
                   type="text"
                   required
                   placeholder={isSerial ? 'e.g. Cisco Console Cable' : 'e.g. Production Web Server'}
@@ -529,15 +529,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 />
                 {editingSession && name.trim() !== editingSession.name && (
                   <p className="text-amber-400 text-[11px]">
-                    Changing the name saves this as a new session -- "{editingSession.name}" will still exist separately.
+                    Changing the name saves a new session. "{editingSession.name}" stays as it is.
                   </p>
                 )}
               </div>
 
               {/* Protocol Selection */}
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Connection Protocol</label>
-                <select
+                <label htmlFor="new-session-modal-connection-protocol" className="text-slate-300 font-medium">Connection Protocol</label>
+                <select id="new-session-modal-connection-protocol"
                   value={protocol}
                   onChange={e => {
                     const nextProto = e.target.value as Protocol;
@@ -563,7 +563,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               {isSerial ? (
                 <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-3">
                   <div className="flex items-center space-x-2 text-slate-300 font-medium pb-1 border-b border-plinky-800">
-                    <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                    <Cpu className="w-3.5 h-3.5 text-slate-400" />
                     <span>Serial Port & Hardware Line Settings</span>
                   </div>
 
@@ -586,6 +586,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                           <input
                             type="text"
                             required
+                            aria-label="Serial line"
                             placeholder="/dev/ttyUSB0 or COM3"
                             value={serialLine}
                             onChange={e => setSerialLine(e.target.value)}
@@ -601,6 +602,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         </div>
                       ) : (
                         <select
+                          aria-label="Serial line"
                           value={serialLine}
                           onChange={e => {
                             if (e.target.value === '__custom__') {
@@ -633,8 +635,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-slate-300 text-[11px]">Speed (Baud)</label>
-                      <select
+                      <label htmlFor="new-session-modal-speed-baud" className="text-slate-300 text-[11px]">Speed (Baud)</label>
+                      <select id="new-session-modal-speed-baud"
                         value={serialSpeed}
                         onChange={e => setSerialSpeed(e.target.value)}
                         className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
@@ -656,8 +658,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 <>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="col-span-2 space-y-1">
-                      <label className="text-slate-300 font-medium">Host Name or IP Address *</label>
-                      <input
+                      <label htmlFor="new-session-modal-host-name-or-ip-address" className="text-slate-300 font-medium">Host Name or IP Address *</label>
+                      <input id="new-session-modal-host-name-or-ip-address"
                         type="text"
                         required
                         placeholder="192.0.2.10 or router.internal"
@@ -667,8 +669,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-300 font-medium">Port</label>
-                      <input
+                      <label htmlFor="new-session-modal-port" className="text-slate-300 font-medium">Port</label>
+                      <input id="new-session-modal-port"
                         type="number"
                         value={port}
                         onChange={e => setPort(e.target.value)}
@@ -678,8 +680,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-300 font-medium">Default Username</label>
-                    <input
+                    <label htmlFor="new-session-modal-default-username" className="text-slate-300 font-medium">Default Username</label>
+                    <input id="new-session-modal-default-username"
                       type="text"
                       placeholder="e.g. root, admin, or deploy"
                       value={username}
@@ -693,11 +695,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               {/* Organization & Tags */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-medium flex items-center space-x-1">
+                  <label htmlFor="new-session-modal-folder-category" className="text-slate-300 font-medium flex items-center space-x-1">
                     <Folder className="w-3.5 h-3.5 text-sky-400" />
                     <span>Folder Category</span>
                   </label>
-                  <input
+                  <input id="new-session-modal-folder-category"
                     type="text"
                     placeholder="e.g. Staging or Network"
                     value={folder}
@@ -707,11 +709,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-medium flex items-center space-x-1">
-                    <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                  <label htmlFor="new-session-modal-tags-comma-separated" className="text-slate-300 font-medium flex items-center space-x-1">
+                    <Tag className="w-3.5 h-3.5 text-slate-400" />
                     <span>Tags (comma-separated)</span>
                   </label>
-                  <input
+                  <input id="new-session-modal-tags-comma-separated"
                     type="text"
                     placeholder="cisco, core, serial, lab"
                     value={tags}
@@ -726,11 +728,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             <div data-tab="credentials" hidden={tab !== 'credentials'} className="space-y-3">
                   {protocol === 'SSH' && (
                     <div className="space-y-1">
-                      <label className="text-slate-300 font-medium flex items-center space-x-1">
-                        <Key className="w-3.5 h-3.5 text-amber-400" />
+                      <label htmlFor="new-session-modal-private-key-file-ppk" className="text-slate-300 font-medium flex items-center space-x-1">
+                        <Key className="w-3.5 h-3.5 text-slate-400" />
                         <span>Private Key File (.ppk)</span>
                       </label>
-                      <input
+                      <input id="new-session-modal-private-key-file-ppk"
                         type="text"
                         placeholder="/path/to/key.ppk (or Pageant/agent will handle auth)"
                         value={publicKeyFile}
@@ -750,7 +752,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
                     />
                     <span className="text-slate-200 font-medium flex items-center space-x-1.5">
-                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
                       <span>Save Credentials in Encrypted Vault</span>
                     </span>
                   </label>
@@ -798,8 +800,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
                     {vaultMode === 'link' ? (
                       <div className="space-y-1">
-                        <label className="text-slate-300 text-[11px]">Select Vault Credential *</label>
-                        <select
+                        <label htmlFor="new-session-modal-select-vault-credential" className="text-slate-300 text-[11px]">Select Vault Credential *</label>
+                        <select id="new-session-modal-select-vault-credential"
                           value={selectedVaultKey}
                           onChange={e => setSelectedVaultKey(e.target.value)}
                           className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500 font-mono"
@@ -821,8 +823,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1">
-                            <label className="text-slate-300 text-[11px]">Vault Key ID</label>
-                            <input
+                            <label htmlFor="new-session-modal-vault-key-id" className="text-slate-300 text-[11px]">Vault Key ID</label>
+                            <input id="new-session-modal-vault-key-id"
                               type="text"
                               value={vaultKeyId}
                               onChange={e => setVaultKeyId(e.target.value)}
@@ -831,8 +833,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-slate-300 text-[11px]">Login Password *</label>
-                            <input
+                            <label htmlFor="new-session-modal-login-password" className="text-slate-300 text-[11px]">Login Password *</label>
+                            <input id="new-session-modal-login-password"
                               type="password"
                               value={vaultPassword}
                               onChange={e => setVaultPassword(e.target.value)}
@@ -849,7 +851,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                               type="checkbox"
                               checked={isNetworkDevice}
                               onChange={e => setIsNetworkDevice(e.target.checked)}
-                              className="rounded border-plinky-700 text-amber-500 focus:ring-0 bg-plinky-900"
+                              className="rounded border-plinky-700 text-sky-500 focus:ring-0 bg-plinky-900"
                             />
                             <span className="text-slate-300 text-xs font-medium">
                               Network Device (requires Enable Password / Privileged Exec)
@@ -858,16 +860,16 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         </div>
 
                         {isNetworkDevice && (
-                          <div className="p-2 bg-amber-950/20 border border-amber-500/30 rounded space-y-1 animate-in fade-in duration-100">
-                            <label className="block text-[11px] text-amber-300 font-medium">
+                          <div className="p-2 bg-plinky-950/60 border border-plinky-700 rounded space-y-1 animate-in fade-in duration-100">
+                            <label htmlFor="new-session-modal-enable-password-cisco-arista-h" className="block text-[11px] text-slate-300 font-medium">
                               Enable Password (Cisco / Arista / Huawei Privileged EXEC)
                             </label>
-                            <input
+                            <input id="new-session-modal-enable-password-cisco-arista-h"
                               type="password"
                               value={vaultEnablePassword}
                               onChange={e => setVaultEnablePassword(e.target.value)}
                               placeholder="e.g. Cisco enable secret..."
-                              className="w-full bg-plinky-900 border border-amber-500/40 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-amber-400"
+                              className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
                             />
                           </div>
                         )}
@@ -970,19 +972,19 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                           <ArrowRight className="w-3 h-3 text-sky-400" />
                         </div>
                         <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/50">
-                          <Shield className="w-3 h-3 text-amber-400 shrink-0" />
-                          <span className="text-amber-300 font-mono font-medium truncate max-w-[120px]" title={jumpHost || 'Jump Host'}>
+                          <Shield className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="text-slate-200 font-mono font-medium truncate max-w-[120px]" title={jumpHost || 'Jump Host'}>
                             {jumpHost.trim() ? (jumpUsername ? `${jumpUsername}@${jumpHost}` : jumpHost) : 'Bastion'}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1 text-plinky-muted">
-                          <div className="h-px w-4 bg-emerald-500/50" />
-                          <span className="text-[11px] text-emerald-400 uppercase font-semibold">SSH</span>
-                          <ArrowRight className="w-3 h-3 text-emerald-400" />
+                          <div className="h-px w-4 bg-sky-500/50" />
+                          <span className="text-[11px] text-sky-400 uppercase font-semibold">SSH</span>
+                          <ArrowRight className="w-3 h-3 text-slate-400" />
                         </div>
                         <div className="flex items-center space-x-1">
-                          <Server className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span className="text-emerald-300 font-mono font-medium truncate max-w-[110px]" title={hostname || 'Target'}>
+                          <Server className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="text-sky-200 font-mono font-medium truncate max-w-[110px]" title={hostname || 'Target'}>
                             {hostname.trim() || 'Target'}
                           </span>
                         </div>
@@ -991,8 +993,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       {/* Preset from existing saved sessions */}
                       {savedSessions.length > 0 && (
                         <div className="space-y-1">
-                          <label className="text-slate-400 text-[11px]">Populate from Saved Session</label>
-                          <select
+                          <label htmlFor="new-session-modal-populate-from-saved-session" className="text-slate-400 text-[11px]">Populate from Saved Session</label>
+                          <select id="new-session-modal-populate-from-saved-session"
                             onChange={e => {
                               const sess = savedSessions.find(s => s.name === e.target.value);
                               if (sess) {
@@ -1017,8 +1019,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
                       <div className="grid grid-cols-3 gap-2">
                         <div className="col-span-2 space-y-1">
-                          <label className="text-slate-300 text-[11px]">Jump Host / Gateway IP *</label>
-                          <input
+                          <label htmlFor="new-session-modal-jump-host-gateway-ip" className="text-slate-300 text-[11px]">Jump Host / Gateway IP *</label>
+                          <input id="new-session-modal-jump-host-gateway-ip"
                             type="text"
                             required={enableJumpHost}
                             placeholder="bastion.internal or jump.corp.com"
@@ -1028,8 +1030,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-slate-300 text-[11px]">Port</label>
-                          <input
+                          <label htmlFor="new-session-modal-port-2" className="text-slate-300 text-[11px]">Port</label>
+                          <input id="new-session-modal-port-2"
                             type="number"
                             value={jumpPort}
                             onChange={e => { setJumpPreset(null); setJumpPort(e.target.value); }}
@@ -1039,8 +1041,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-slate-300 text-[11px]">Gateway Username</label>
-                        <input
+                        <label htmlFor="new-session-modal-gateway-username" className="text-slate-300 text-[11px]">Gateway Username</label>
+                        <input id="new-session-modal-gateway-username"
                           type="text"
                           placeholder="bastion_user"
                           value={jumpUsername}
@@ -1081,13 +1083,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             <div data-tab="serial" hidden={tab !== 'serial'} className="space-y-3">
               <div className="p-3 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-2">
                 <div className="flex items-center space-x-2 text-slate-300 font-medium pb-1 border-b border-plinky-800">
-                  <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                  <Cpu className="w-3.5 h-3.5 text-slate-400" />
                   <span>Line settings</span>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   <div className="space-y-1">
-                    <label className="text-slate-400 text-[11px]">Data Bits</label>
-                    <select
+                    <label htmlFor="new-session-modal-data-bits" className="text-slate-400 text-[11px]">Data Bits</label>
+                    <select id="new-session-modal-data-bits"
                       value={serialDataBits}
                       onChange={e => setSerialDataBits(e.target.value)}
                       className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
@@ -1100,8 +1102,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-400 text-[11px]">Stop Bits</label>
-                    <select
+                    <label htmlFor="new-session-modal-stop-bits" className="text-slate-400 text-[11px]">Stop Bits</label>
+                    <select id="new-session-modal-stop-bits"
                       value={serialStopBits}
                       onChange={e => setSerialStopBits(e.target.value)}
                       className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
@@ -1112,8 +1114,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-400 text-[11px]">Parity</label>
-                    <select
+                    <label htmlFor="new-session-modal-parity" className="text-slate-400 text-[11px]">Parity</label>
+                    <select id="new-session-modal-parity"
                       value={serialParity}
                       onChange={e => setSerialParity(e.target.value)}
                       className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
@@ -1125,8 +1127,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-400 text-[11px]">Flow Control</label>
-                    <select
+                    <label htmlFor="new-session-modal-flow-control" className="text-slate-400 text-[11px]">Flow Control</label>
+                    <select id="new-session-modal-flow-control"
                       value={serialFlowControl}
                       onChange={e => setSerialFlowControl(e.target.value)}
                       className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-slate-200 text-xs"
@@ -1203,7 +1205,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             </div>
 
             {vaultSaveError && (
-              <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">
+              <div role="alert" className="p-2 rounded border border-rose-500/40 bg-rose-950/40 text-rose-300 text-[11px]">
                 {vaultSaveError}
               </div>
             )}
@@ -1224,7 +1226,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium shadow-sm transition"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>{editingSession ? 'Save Changes' : 'Save PuTTY Session'}</span>
+              <span>{editingSession ? 'Save Changes' : 'Save session'}</span>
             </button>
           </div>
         </form>

@@ -104,7 +104,7 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
     if (item.kind === 'local') {
       return (
         <button key="local" role="option" aria-selected={active} className={base} onMouseEnter={() => setIndex(i)} onClick={() => choose(item)}>
-          <Terminal className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+          <Terminal className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
           <span>Local Shell</span>
         </button>
       );
@@ -113,7 +113,7 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
       return (
         <button key="new" role="option" aria-selected={active} className={base} onMouseEnter={() => setIndex(i)} onClick={() => choose(item)}>
           <Plus className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
-          <span>New Session…</span>
+          <span>New session…</span>
         </button>
       );
     }
@@ -122,7 +122,7 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
     return (
       <button key={`${item.recent ? 'r' : 's'}:${s.name}`} role="option" aria-selected={active} className={base} onMouseEnter={() => setIndex(i)} onClick={() => choose(item)}>
         {item.recent
-          ? <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+          ? <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
           : <Server className="w-3.5 h-3.5 text-plinky-muted flex-shrink-0" />}
         <span className="truncate flex-1">{s.name}</span>
         {host && <span className="text-[11px] text-plinky-muted font-mono truncate max-w-[110px]">{host}</span>}
@@ -148,7 +148,8 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
           autoFocus
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Open a session…"
+          aria-label="Open a session"
+            placeholder="Open a session…"
           className="w-full pl-6 pr-2 py-1 bg-plinky-950 border border-plinky-700 rounded text-slate-200 focus:outline-none focus:border-sky-500"
         />
       </div>

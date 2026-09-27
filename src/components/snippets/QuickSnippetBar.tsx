@@ -76,15 +76,9 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
     updateSnippets(prev => prev.filter(s => s.id !== id));
   };
 
-  const getCategoryColor = (cat: SnippetItem['category']) => {
-    switch (cat) {
-      case 'Docker': return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
-      case 'System': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-      case 'Network': return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-      case 'Logs': return 'text-rose-400 bg-rose-500/10 border-rose-500/30';
-      default: return 'text-purple-400 bg-purple-500/10 border-purple-500/30';
-    }
-  };
+  // One neutral chip: the category is a filter, not a state, and five
+  // hues for five categories left no colour meaning anything.
+  const getCategoryColor = (_cat: SnippetItem['category']) => 'text-slate-400 bg-plinky-800 border-plinky-700';
 
   return (
     <div className="bg-plinky-900 border-t border-plinky-800 text-xs select-none">
@@ -95,7 +89,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center space-x-1 font-semibold text-slate-200 hover:text-white transition"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Sparkles className="w-3.5 h-3.5 text-slate-400" />
             <span>Quick Snippets</span>
             {isExpanded ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronUp className="w-3 h-3 text-slate-400" />}
           </button>
@@ -122,7 +116,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             title="Create Custom Snippet"
             className="flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 text-[11px] transition"
           >
-            <Plus className="w-3 h-3 text-emerald-400" />
+            <Plus className="w-3 h-3 text-slate-400" />
             <span>Add Snippet</span>
           </button>
         </div>
@@ -198,10 +192,10 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
           <div className="bg-plinky-900 border border-plinky-700 rounded-xl shadow-2xl max-w-md w-full p-5 text-slate-100">
             <div className="flex items-center justify-between mb-4 border-b border-plinky-800 pb-2">
               <div className="flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-amber-400" />
+                <Sparkles className="w-4 h-4 text-slate-400" />
                 <h3 className="text-base font-semibold">Create Quick Snippet</h3>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={() => setIsAddModalOpen(false)}
                 className="p-1 text-slate-400 hover:text-white"
               >
@@ -211,8 +205,8 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
 
             <form onSubmit={handleAddSnippet} className="space-y-3">
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Snippet Name</label>
-                <input
+                <label htmlFor="quick-snippet-bar-snippet-name" className="block text-[11px] text-slate-400 mb-1">Snippet Name</label>
+                <input id="quick-snippet-bar-snippet-name"
                   type="text"
                   placeholder="e.g. Restart Nginx"
                   value={newName}
@@ -223,8 +217,8 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Category</label>
-                <select
+                <label htmlFor="quick-snippet-bar-category" className="block text-[11px] text-slate-400 mb-1">Category</label>
+                <select id="quick-snippet-bar-category"
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value as SnippetItem['category'])}
                   className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
@@ -238,8 +232,8 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Command String</label>
-                <textarea
+                <label htmlFor="quick-snippet-bar-command-string" className="block text-[11px] text-slate-400 mb-1">Command String</label>
+                <textarea id="quick-snippet-bar-command-string"
                   rows={3}
                   placeholder="e.g. sudo systemctl restart ${SERVICE:nginx}"
                   value={newCommand}

@@ -102,7 +102,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
 
   const getTargetBadgeColor = (target: SyncChannel | 'all') => {
     switch (target) {
-      case 'all': return 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+      case 'all': return 'bg-sky-500/15 text-sky-200 border-sky-500/40';
       case 'A': return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
       case 'B': return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
       case 'C': return 'bg-amber-500/20 text-amber-300 border-amber-500/40';

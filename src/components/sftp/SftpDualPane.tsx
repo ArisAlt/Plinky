@@ -413,11 +413,11 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
           onDoubleClick={() => open(file)}
           title={file.isDir ? 'Double-click to open' : `Double-click to ${side === 'local' ? 'upload' : 'download'}`}
           className={`cursor-pointer hover:bg-plinky-800/50 transition ${
-            selected === file.name ? (side === 'local' ? 'bg-sky-500/20 text-sky-200' : 'bg-emerald-500/20 text-emerald-200') : ''
+            selected === file.name ? 'bg-sky-500/20 text-sky-200' : ''
           }`}
         >
           <td className="py-1 px-2 flex items-center space-x-1.5">
-            {file.isDir ? <Folder className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" /> : <File className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+            {file.isDir ? <Folder className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> : <File className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
             <span className="truncate">{file.name}</span>
           </td>
           <td className="py-1 px-2 text-slate-400 font-mono text-[11px]">{file.isDir ? '-' : formatSize(file.size)}</td>
@@ -435,7 +435,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between p-2.5 bg-plinky-900 border-b border-plinky-800">
         <div className="flex items-center space-x-2 min-w-0">
-          <Server className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <Server className="w-4 h-4 text-slate-400 flex-shrink-0" />
           <span className="font-semibold text-slate-200 truncate">SFTP: {sessionName}</span>
           {hostname && <span className="text-plinky-muted font-mono truncate">({username ? `${username}@` : ''}{hostname})</span>}
         </div>
@@ -476,6 +476,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
                 <span className="font-medium text-slate-300">Local:</span>
                 <input
                   type="text"
+                  aria-label="Local folder"
                   value={localDraft}
                   onChange={e => setLocalDraft(e.target.value)}
                   title="Type a path and press Enter"
@@ -486,13 +487,13 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
                 {renderBreadcrumbs(localPath, p => void loadLocal(p))}
                 <div className="relative flex items-center w-28 flex-shrink-0">
                   <Search className="w-3 h-3 absolute left-1.5 text-plinky-muted" />
-                  <input type="text" placeholder="Filter..." value={localFilter} onChange={e => setLocalFilter(e.target.value)}
+                  <input type="text" aria-label="Filter local files" placeholder="Filter…" value={localFilter} onChange={e => setLocalFilter(e.target.value)}
                     className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[11px] text-slate-300" />
                 </div>
               </div>
             </div>
             {localError && (
-              <div className="m-2 p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px] flex items-start space-x-1.5">
+              <div className="m-2 p-2 rounded border border-rose-500/40 bg-rose-950/40 text-rose-300 text-[11px] flex items-start space-x-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /><span>{displayError(localError)}</span>
               </div>
             )}
@@ -528,7 +529,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
               onClick={handleDownloadSelected}
               disabled={!selectedRemoteEntry || selectedRemoteEntry.isDir || localPath === null}
               title="Download the selected file"
-              className="p-1.5 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 disabled:opacity-30 disabled:pointer-events-none transition"
+              className="p-1.5 rounded bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 disabled:opacity-30 disabled:pointer-events-none transition"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -540,10 +541,11 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
           <div className="flex-1 flex flex-col min-w-0">
             <div className="p-2 bg-plinky-900/60 border-b border-plinky-800 space-y-1.5">
               <form className="flex items-center space-x-1.5" onSubmit={e => { e.preventDefault(); void loadRemote(remoteDraft.trim() || null, target); }}>
-                <Server className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <Server className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                 <span className="font-medium text-slate-300">Remote:</span>
                 <input
                   type="text"
+                  aria-label="Remote folder"
                   value={remoteDraft}
                   onChange={e => setRemoteDraft(e.target.value)}
                   placeholder={remoteLoading ? 'Connecting…' : ''}
@@ -556,15 +558,15 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
                 <div className="flex items-center space-x-1.5 flex-shrink-0">
                   <button onClick={handleCreateRemoteFolder} disabled={remotePath === null}
                     className="p-1 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 hover:text-white disabled:opacity-30 transition" title="New remote folder">
-                    <FolderPlus className="w-3.5 h-3.5 text-emerald-400" />
+                    <FolderPlus className="w-3.5 h-3.5 text-slate-400" />
                   </button>
                   <button onClick={handleDeleteRemoteItem} disabled={!selectedRemoteEntry || selectedRemote === '..'}
-                    className="p-1 rounded bg-plinky-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:pointer-events-none transition" title="Delete the selected remote item">
-                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    className="p-1 rounded bg-plinky-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 disabled:opacity-30 disabled:pointer-events-none transition" title="Delete the selected remote item">
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                   </button>
                   <div className="relative flex items-center w-28">
                     <Search className="w-3 h-3 absolute left-1.5 text-plinky-muted" />
-                    <input type="text" placeholder="Filter..." value={remoteFilter} onChange={e => setRemoteFilter(e.target.value)}
+                    <input type="text" aria-label="Filter remote files" placeholder="Filter…" value={remoteFilter} onChange={e => setRemoteFilter(e.target.value)}
                       className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[11px] text-slate-300" />
                   </div>
                 </div>
@@ -572,16 +574,17 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
             </div>
 
             {remoteError && (
-              <div className="m-2 p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px] space-y-2" role="alert">
+              <div className="m-2 p-2 rounded border border-rose-500/40 bg-rose-950/40 text-rose-300 text-[11px] space-y-2" role="alert">
                 <div className="flex items-start space-x-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
                   <span className="select-text">{displayError(remoteError)}</span>
                 </div>
                 {needsPassword && (
                   <form onSubmit={submitPassword} className="flex items-center space-x-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                    <KeyRound className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                     <input
                       type="password"
+                      aria-label="SFTP password"
                       autoFocus
                       value={passwordDraft}
                       onChange={e => setPasswordDraft(e.target.value)}
@@ -596,7 +599,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
               </div>
             )}
 
-            <div {...dropOn('remote')} className={`flex-1 overflow-y-auto relative ${dragOver === 'remote' ? 'outline outline-2 outline-dashed outline-emerald-400 -outline-offset-4' : ''}`}>
+            <div {...dropOn('remote')} className={`flex-1 overflow-y-auto relative ${dragOver === 'remote' ? 'outline outline-2 outline-dashed outline-sky-400 -outline-offset-4' : ''}`}>
               {remoteLoading && remoteFiles.length === 0 && !remoteError && (
                 <div className="flex items-center justify-center py-8 text-plinky-muted space-x-2">
                   <Loader2 className="w-4 h-4 animate-spin" /><span>Connecting to {hostname || sessionName}…</span>
@@ -641,7 +644,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
                 <span>{runningCount} running</span>
               </span>
             )}
-            {failedCount > 0 && <span className="text-red-400">{failedCount} failed</span>}
+            {failedCount > 0 && <span className="text-rose-400">{failedCount} failed</span>}
             {!queueOpen && doneCount > 0 && <span>{doneCount} done</span>}
             {!queueOpen && transfers.length === 0 && (
               <span className="text-plinky-muted">Double-click a file, use the arrows, or drag it to the other pane.</span>
@@ -662,15 +665,15 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
             )}
             {transfers.map(item => (
               <div key={item.id} className="flex items-center space-x-2 text-xs bg-plinky-950 p-1.5 rounded border border-plinky-800/60">
-                {item.direction === 'upload' ? <Upload className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" /> : <Download className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
+                {item.direction === 'upload' ? <Upload className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" /> : <Download className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
                 <span className="font-medium text-slate-200 truncate w-40 flex-shrink-0">{item.filename}</span>
                 <span className="font-mono text-[11px] text-plinky-muted w-16 flex-shrink-0">{formatSize(item.size)}</span>
-                <span className={`flex-1 truncate text-[11px] ${item.status === 'failed' ? 'text-red-400 select-text' : 'text-slate-400'}`} title={item.error}>
+                <span className={`flex-1 truncate text-[11px] ${item.status === 'failed' ? 'text-rose-400 select-text' : 'text-slate-400'}`} title={item.error}>
                   {item.status === 'transferring' ? 'Transferring…' : item.status === 'completed' ? 'Done' : item.error}
                 </span>
                 {item.status === 'completed' && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
                 {item.status === 'transferring' && <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin flex-shrink-0" />}
-                {item.status === 'failed' && <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                {item.status === 'failed' && <AlertTriangle className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />}
               </div>
             ))}
           </div>

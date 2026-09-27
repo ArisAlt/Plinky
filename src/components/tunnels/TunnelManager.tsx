@@ -170,8 +170,8 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
                     t.type === 'Local'
                       ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                       : t.type === 'Dynamic'
-                      ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      ? 'bg-plinky-800 text-slate-300 border border-plinky-700'
+                      : 'bg-plinky-800 text-slate-300 border border-plinky-700'
                   }`}
                 >
                   {t.type} Forward ({t.type === 'Local' ? '-L' : t.type === 'Remote' ? '-R' : '-D'})
@@ -199,7 +199,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
                 <button
                   onClick={() => handleDeleteTunnel(t.id)}
                   title="Delete Port Forward"
-                  className="p-1 rounded text-plinky-muted bg-slate-800 hover:text-red-400 hover:bg-red-500/20 transition"
+                  className="p-1 rounded text-plinky-muted bg-slate-800 hover:text-rose-400 hover:bg-rose-500/20 transition"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -216,7 +216,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
               <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
 
               <div className="flex items-center space-x-1 text-slate-400 px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[11px]">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <ShieldCheck className="w-3 h-3 text-slate-400" />
                 <span>SSH Pipe</span>
               </div>
 
@@ -224,10 +224,10 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
 
               <div className="flex items-center space-x-1.5 text-slate-300">
                 {t.type === 'Dynamic' ? (
-                  <span className="font-semibold text-purple-400">Dynamic Target Resolution</span>
+                  <span className="font-semibold text-slate-200">Dynamic Target Resolution</span>
                 ) : (
                   <>
-                    <span className="font-semibold text-emerald-400">{t.destHost}:{t.destPort}</span>
+                    <span className="font-semibold text-slate-200">{t.destHost}:{t.destPort}</span>
                     <span className="text-[11px] text-plinky-muted">(Remote)</span>
                   </>
                 )}
@@ -249,7 +249,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
           <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-96 shadow-xl p-4 space-y-3">
             <div className="flex items-center justify-between pb-1 border-b border-plinky-800">
               <h3 className="font-semibold text-slate-100 text-base">Add SSH Port Forward</h3>
-              <button
+              <button aria-label="Close"
                 onClick={() => setShowAddModal(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
               >
@@ -278,8 +278,8 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
             </div>
 
             <div className="space-y-1">
-              <label className="text-slate-400 text-xs">Listen / Source Port</label>
-              <input
+              <label htmlFor="tunnel-manager-listen-source-port" className="text-slate-400 text-xs">Listen / Source Port</label>
+              <input id="tunnel-manager-listen-source-port"
                 type="number"
                 value={newSrcPort}
                 onChange={e => setNewSrcPort(e.target.value)}
@@ -290,8 +290,8 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
             {newType !== 'Dynamic' && (
               <>
                 <div className="space-y-1">
-                  <label className="text-slate-400 text-xs">Destination Host</label>
-                  <input
+                  <label htmlFor="tunnel-manager-destination-host" className="text-slate-400 text-xs">Destination Host</label>
+                  <input id="tunnel-manager-destination-host"
                     type="text"
                     value={newDestHost}
                     onChange={e => setNewDestHost(e.target.value)}
@@ -299,8 +299,8 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-400 text-xs">Destination Port</label>
-                  <input
+                  <label htmlFor="tunnel-manager-destination-port" className="text-slate-400 text-xs">Destination Port</label>
+                  <input id="tunnel-manager-destination-port"
                     type="number"
                     value={newDestPort}
                     onChange={e => setNewDestPort(e.target.value)}

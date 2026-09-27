@@ -96,7 +96,7 @@ describe('SessionExplorer nested folders', () => {
   it('New Session Here opens the editor for that folder, full path and all', () => {
     const props = renderExplorer();
     fireEvent.contextMenu(folderHeader('Corp 1/Site 1/Site 1 Production'), { clientX: 10, clientY: 10 });
-    fireEvent.click(screen.getByText('New Session Here...'));
+    fireEvent.click(screen.getByText('New session here…'));
     expect(props.onCreateSession).toHaveBeenCalledWith('Corp 1/Site 1/Site 1 Production');
     expect(screen.queryByRole('menu')).toBeNull();
   });
@@ -105,7 +105,7 @@ describe('SessionExplorer nested folders', () => {
     // It was wired as onClick={onCreateSession}: once the callback took a
     // folder, the click event would have arrived as the "folder".
     const props = renderExplorer();
-    fireEvent.click(screen.getByTitle('Create New PuTTY Session'));
+    fireEvent.click(screen.getByTitle('New session'));
     expect(props.onCreateSession).toHaveBeenCalledWith();
   });
 

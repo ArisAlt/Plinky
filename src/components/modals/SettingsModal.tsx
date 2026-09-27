@@ -146,8 +146,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Font Family */}
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-400 font-medium">Font Family</label>
-              <select
+              <label htmlFor="settings-modal-font-family" className="text-[11px] text-slate-400 font-medium">Font Family</label>
+              <select id="settings-modal-font-family"
                 value={fontFamily}
                 onChange={(e) => onChangeFontFamily(e.target.value)}
                 className="w-full px-2.5 py-1.5 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 focus:outline-none focus:border-sky-500 transition"
@@ -161,8 +161,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Font Size & Cursor Style */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[11px] text-slate-400 font-medium">Font Size ({fontSize}px)</label>
-                <input
+                <label htmlFor="settings-modal-font-size-px" className="text-[11px] text-slate-400 font-medium">Font Size ({fontSize}px)</label>
+                <input id="settings-modal-font-size-px"
                   type="range"
                   min="10"
                   max="20"
@@ -198,7 +198,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Section: PuTTY Mouse & Clipboard */}
           <div className="space-y-3">
             <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
-              <MousePointer className="w-3.5 h-3.5 text-amber-400" />
+              <MousePointer className="w-3.5 h-3.5 text-slate-400" />
               <span>PuTTY Mouse & Clipboard Behavior</span>
             </div>
 
@@ -254,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Section: PuTTY Environment */}
           <div className="space-y-3">
             <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <Shield className="w-3.5 h-3.5 text-slate-400" />
               <span>PuTTY Discovery & Toolchain</span>
             </div>
 
@@ -265,7 +265,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Version:</span>
-                <span className="font-mono text-emerald-400">v{puttyInfo?.version || '0.85'}</span>
+                <span className="font-mono text-slate-200">v{puttyInfo?.version || '0.85'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Status:</span>
@@ -280,7 +280,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Section: Workbench Layout & State */}
           <div className="space-y-3">
             <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
-              <Monitor className="w-3.5 h-3.5 text-purple-400" />
+              <Monitor className="w-3.5 h-3.5 text-slate-400" />
               <span>Workbench Layout & Cache</span>
             </div>
 
@@ -312,7 +312,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Section: Credential Vault */}
           <div className="space-y-3">
             <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
-              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <Shield className="w-3.5 h-3.5 text-slate-400" />
               <span>Credential Vault</span>
             </div>
 
@@ -327,7 +327,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => { setDeleteResult(null); setDeleteStep('warn1'); }}
                   disabled={!vaultExists || deleteStep !== 'idle'}
                   title={vaultExists ? 'Delete the vault' : 'There is no vault'}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-red-950/40 border border-red-800/50 hover:bg-red-900/50 text-red-300 disabled:opacity-40 disabled:pointer-events-none transition"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-rose-950/40 border border-rose-800/50 hover:bg-rose-900/50 text-rose-300 disabled:opacity-40 disabled:pointer-events-none transition"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Delete Vault</span>
@@ -351,8 +351,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
 
               {(deleteStep === 'warn2' || deleteStep === 'deleting') && (
-                <div role="alertdialog" aria-label="Final warning" className="p-2.5 rounded border border-red-600/60 bg-red-950/40 space-y-2">
-                  <p className="flex items-start space-x-1.5 text-red-200">
+                <div role="alertdialog" aria-label="Final warning" className="p-2.5 rounded border border-rose-600/60 bg-rose-950/40 space-y-2">
+                  <p className="flex items-start space-x-1.5 text-rose-200">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
                     <span>
                       Last warning: this can't be undone. If you might need these passwords, cancel and use
@@ -361,7 +361,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </p>
                   <div className="flex justify-end space-x-2">
                     <button type="button" onClick={() => setDeleteStep('idle')} disabled={deleteStep === 'deleting'} className="px-3 py-1 rounded bg-plinky-800 hover:bg-plinky-700 disabled:opacity-40">Cancel</button>
-                    <button type="button" onClick={handleDeleteVault} disabled={deleteStep === 'deleting'} className="px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white font-medium disabled:opacity-40">
+                    <button type="button" onClick={handleDeleteVault} disabled={deleteStep === 'deleting'} className="px-3 py-1 rounded bg-rose-700 hover:bg-rose-600 text-white font-medium disabled:opacity-40">
                       {deleteStep === 'deleting' ? 'Deleting…' : 'Delete vault permanently'}
                     </button>
                   </div>

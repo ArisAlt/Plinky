@@ -47,13 +47,13 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-plinky-800">
         <div className="flex items-center space-x-2">
-          <Key className="w-4 h-4 text-amber-400" />
+          <Key className="w-4 h-4 text-slate-400" />
           <h2 className="font-semibold text-sm text-slate-100">PuTTY Trusted Host Keys & PPK Manager</h2>
         </div>
         <div className="flex items-center space-x-2">
           <button
             onClick={handleSimulateInspectKey}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-amber-950 font-medium transition"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Inspect .ppk Key</span>
@@ -72,16 +72,16 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
 
       {/* Inspected PPK Banner if any */}
       {inspectedPpk && (
-        <div className="p-3.5 bg-plinky-900 border border-amber-500/40 rounded-lg space-y-2">
-          <div className="flex items-center space-x-2 text-amber-300 font-semibold text-xs">
+        <div className="p-3.5 bg-plinky-900 border border-plinky-700 rounded-lg space-y-2">
+          <div className="flex items-center space-x-2 text-slate-200 font-semibold text-xs">
             <FileKey className="w-4 h-4" />
             <span>PPK Header Verified: {inspectedPpk.comment}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-300">
-            <div>Format Version: <span className="text-amber-400 font-bold">v{inspectedPpk.version}</span></div>
+            <div>Format Version: <span className="text-slate-200 font-semibold">v{inspectedPpk.version}</span></div>
             <div>Algorithm: <span className="text-sky-400">{inspectedPpk.algorithm}</span></div>
             <div>Encryption: <span className="text-slate-400">{inspectedPpk.isEncrypted ? 'Argon2id' : 'None'}</span></div>
-            <div className="col-span-2 truncate">Fingerprint: <span className="text-emerald-400">{inspectedPpk.fingerprintSha256}</span></div>
+            <div className="col-span-2 truncate">Fingerprint: <span className="text-slate-200">{inspectedPpk.fingerprintSha256}</span></div>
           </div>
         </div>
       )}
@@ -110,7 +110,7 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
                   <td className="py-2 px-3 font-medium text-slate-200">{hk.hostname}</td>
                   <td className="py-2 px-3 text-slate-400">{hk.port}</td>
                   <td className="py-2 px-3 text-sky-400 text-[11px]">{hk.keyType}</td>
-                  <td className="py-2 px-3 text-emerald-400 text-[11px] truncate max-w-xs">
+                  <td className="py-2 px-3 text-slate-300 text-[11px] truncate max-w-xs">
                     {hk.fingerprint || 'Verified in PuTTY store'}
                   </td>
                   <td className="py-2 px-3 text-center">

@@ -57,7 +57,7 @@ describe('TitleBar Component - Quick Connect History & Auto-Complete', () => {
       />
     );
 
-    const input = screen.getByPlaceholderText('Quick Connect: user@host[:port]...');
+    const input = screen.getByLabelText('Quick connect');
     fireEvent.change(input, { target: { value: 'admin@192.168.1.1:2222' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -81,7 +81,7 @@ describe('TitleBar Component - Quick Connect History & Auto-Complete', () => {
       />
     );
 
-    const input = screen.getByPlaceholderText('Quick Connect: user@host[:port]...');
+    const input = screen.getByLabelText('Quick connect');
     fireEvent.focus(input);
 
     // Initial dropdown with history and saved sessions
@@ -111,7 +111,7 @@ describe('TitleBar Component - Quick Connect History & Auto-Complete', () => {
       />
     );
 
-    const input = screen.getByPlaceholderText('Quick Connect: user@host[:port]...');
+    const input = screen.getByLabelText('Quick connect');
     fireEvent.focus(input);
 
     expect(screen.getByText('old-target:22')).toBeDefined();
@@ -140,7 +140,7 @@ describe('TitleBar Component - Quick Connect History & Auto-Complete', () => {
       />
     );
 
-    const input = screen.getByPlaceholderText('Quick Connect: user@host[:port]...');
+    const input = screen.getByLabelText('Quick connect');
 
     // With port and user
     fireEvent.change(input, { target: { value: 'ops@[2001:db8::1]:2222' } });

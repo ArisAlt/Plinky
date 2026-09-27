@@ -63,7 +63,7 @@ describe('NewSessionModal Component', () => {
       />
     );
 
-    expect(screen.getByText('New PuTTY Session')).toBeDefined();
+    expect(screen.getByText('New session')).toBeDefined();
 
     // Fill in standard SSH session
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
@@ -73,7 +73,7 @@ describe('NewSessionModal Component', () => {
       target: { value: '10.0.0.10' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -117,7 +117,7 @@ describe('NewSessionModal Component', () => {
     });
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -171,7 +171,7 @@ describe('NewSessionModal Component', () => {
     });
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -203,7 +203,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(screen.getByPlaceholderText(/bastion\.internal/i), { target: { value: 'jump.corp.com' } });
     fireEvent.change(screen.getByPlaceholderText(/bastion_user/i), { target: { value: 'sec_admin' } });
     fireEvent.change(screen.getByLabelText('Gateway Password'), { target: { value: ' gw pass ' } });
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(mockVaultSetEntry).toHaveBeenCalledWith(expect.objectContaining({
@@ -228,7 +228,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
     fireEvent.change(screen.getByPlaceholderText(/bastion\.internal/i), { target: { value: 'jump.corp.com' } });
     fireEvent.change(screen.getByLabelText('Gateway Password'), { target: { value: 'pw' } });
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/gateway username/i);
     expect(onSave).not.toHaveBeenCalled();
@@ -326,7 +326,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(enablePwdInput, { target: { value: 'ciscoPrivilegedSecret456' } });
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     // Verify vaultSetEntry called with credentials including enable_secret
     expect(mockVaultSetEntry).toHaveBeenCalledWith(
@@ -363,7 +363,7 @@ describe('NewSessionModal Component', () => {
       fireEvent.click(screen.getByLabelText(/Network Device \(requires Enable Password \/ Privileged Exec\)/i));
       fireEvent.change(screen.getByPlaceholderText(/e\.g\. Cisco enable secret\.\.\./i), { target: { value: enable } });
     }
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
   };
 
   it('keeps the dialog open and says so when the vault refuses the password', async () => {
@@ -434,7 +434,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(vaultSelect, { target: { value: 'router-cisco-core' } });
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     // Should NOT call vaultSetEntry since it's linking existing
     expect(mockVaultSetEntry).not.toHaveBeenCalled();
@@ -457,7 +457,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.2' } });
     expect(screen.queryByLabelText(/Log in automatically/i)).toBeNull(); // SSH logs in by itself
     fireEvent.click(screen.getByLabelText(/Send enable password automatically/i));
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0].extra.PlinkyAutoEnable).toBe('1');
     expect(onSave.mock.calls[0][0].extra.PlinkyAutoLogin).toBeUndefined();
@@ -469,7 +469,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(screen.getByDisplayValue(/SSH/i), { target: { value: 'Telnet' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.3' } });
     fireEvent.click(screen.getByLabelText(/Log in automatically/i));
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     await waitFor(() => expect(onSave2).toHaveBeenCalled());
     expect(onSave2.mock.calls[0][0].extra.PlinkyAutoLogin).toBe('1');
     expect(onSave2.mock.calls[0][0].extra.PlinkyAutoEnable).toBeUndefined();
@@ -483,7 +483,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.9' } });
     fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
     fireEvent.change(screen.getByDisplayValue(/Select a saved bastion host/i), { target: { value: 'Bastion-1' } });
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     const extra = onSave.mock.calls[0][0].extra;
     expect(extra.ProxyMethod).toBe('6');
@@ -555,7 +555,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Console-SW' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.5' } });
     fireEvent.change(screen.getByLabelText('Paste line delay in milliseconds'), { target: { value: '250' } });
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     window.removeEventListener('plinky:session-saved', listener);
     expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBe('250');
@@ -585,7 +585,7 @@ describe('NewSessionModal Component', () => {
     fireEvent.change(screen.getByLabelText('Keepalive interval in seconds'), { target: { value: '90' } });
     fireEvent.click(screen.getByLabelText(/TCP keepalives/i));
     fireEvent.click(screen.getByLabelText(/Reconnect automatically/i));
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     window.removeEventListener('plinky:session-saved', listener);
     expect(onSave.mock.calls[0][0].extra).toMatchObject({
@@ -629,7 +629,7 @@ describe('the session editor tabs (T-014)', () => {
     expect(panel('advanced').hidden).toBe(false);
     fireEvent.change(screen.getByLabelText('Keepalive interval in seconds'), { target: { value: '30' } });
     fireEvent.click(screen.getByRole('tab', { name: 'General' }));
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     const saved = onSave.mock.calls[0][0];
     expect(saved.name).toBe('edge-01');
     expect(saved.hostname).toBe('192.0.2.44');
@@ -677,7 +677,7 @@ describe('a new session from a folder (T-010)', () => {
     expect((screen.getByPlaceholderText('e.g. Staging or Network') as HTMLInputElement).value).toBe('Corp 1/Site 1');
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'site1-core' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.5' } });
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     expect(onSave.mock.calls[0][0].folder).toBe('Corp 1/Site 1');
   });
 
@@ -714,7 +714,7 @@ describe('saving a password when there is no vault yet', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Session login password...'), { target: { value: 's3cret' } });
     fireEvent.click(screen.getByRole('tab', { name: 'General' }));
-    fireEvent.click(screen.getByRole('button', { name: /save putty session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/There is no vault yet/);
     expect(onSave).not.toHaveBeenCalled();
@@ -738,5 +738,22 @@ describe('saving a password when there is no vault yet', () => {
     await waitFor(() => expect(mockVaultIsUnlocked).toHaveBeenCalled());
     expect(screen.queryByRole('status')).toBeNull();
   });
-});
 
+  it('every field on every tab has a name a screen reader can read', () => {
+    // 46 of 67 fields in the app had none: their <label> sat beside the
+    // input with no htmlFor, and 28 had only a placeholder, which vanishes
+    // as soon as the user types.
+    const { container } = render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    const unnamed = () => [...container.querySelectorAll('input, select, textarea')]
+      .filter(el => !['checkbox', 'radio', 'hidden'].includes((el as HTMLInputElement).type))
+      .filter(el => !(el as HTMLInputElement).labels?.length && !el.getAttribute('aria-label'))
+      .map(el => el.outerHTML.slice(0, 80));
+    for (const name of ['General', /Credentials & Vault/, 'Jump Host', 'Advanced']) {
+      fireEvent.click(screen.getByRole('tab', { name }));
+      container.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach(cb => {
+        if (!cb.checked) fireEvent.click(cb); // reveal the fields each option shows
+      });
+      expect(unnamed()).toEqual([]);
+    }
+  });
+});

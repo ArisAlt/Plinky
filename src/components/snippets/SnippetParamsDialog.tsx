@@ -40,7 +40,7 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
       >
         <div className="flex items-center justify-between border-b border-plinky-800 pb-2">
           <div className="flex items-center space-x-2">
-            <Braces className="w-4 h-4 text-amber-400" />
+            <Braces className="w-4 h-4 text-slate-400" />
             <h3 className="text-base font-semibold">{snippet.name}</h3>
           </div>
           <button type="button" onClick={onCancel} aria-label="Cancel" className="p-1 text-slate-400 hover:text-white">

@@ -22,7 +22,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
     <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between text-[11px] text-slate-400 select-none tabular-nums">
       {/* Left: Active Session & Transport Status */}
       <div className="flex items-center space-x-3">
-        <div className="flex items-center space-x-1.5 text-emerald-400">
+        <div className="flex items-center space-x-1.5 text-slate-400">
           <Wifi className="w-3 h-3" />
           <span>Plink Transport: Ready</span>
         </div>

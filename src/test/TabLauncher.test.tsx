@@ -35,7 +35,7 @@ describe('the tab launcher', () => {
   it('offers the local shell, every session by name, and a new session', () => {
     launcher();
     expect(optionLabels()).toEqual([
-      'Local Shell', 'bastionjump.example.test', 'core-sw110.0.0.1', 'edge-rtr10.0.0.254', 'New Session…',
+      'Local Shell', 'bastionjump.example.test', 'core-sw110.0.0.1', 'edge-rtr10.0.0.254', 'New session…',
     ]);
     expect(screen.queryByText('Recent')).toBeNull();
   });
@@ -43,7 +43,7 @@ describe('the tab launcher', () => {
   it('puts recent sessions first, once, and skips recents that were deleted', () => {
     launcher({ recentNames: ['edge-rtr', 'gone-since', 'core-sw1'] });
     expect(optionLabels()).toEqual([
-      'Local Shell', 'edge-rtr10.0.0.254', 'core-sw110.0.0.1', 'bastionjump.example.test', 'New Session…',
+      'Local Shell', 'edge-rtr10.0.0.254', 'core-sw110.0.0.1', 'bastionjump.example.test', 'New session…',
     ]);
     expect(screen.getByText('Recent')).toBeTruthy();
     expect(screen.getByText('Sessions')).toBeTruthy();
@@ -53,11 +53,11 @@ describe('the tab launcher', () => {
     launcher();
     const search = screen.getByPlaceholderText('Open a session…');
     fireEvent.change(search, { target: { value: 'ops' } });
-    expect(optionLabels()).toEqual(['bastionjump.example.test', 'New Session…']);
+    expect(optionLabels()).toEqual(['bastionjump.example.test', 'New session…']);
     fireEvent.change(search, { target: { value: 'lab' } });
-    expect(optionLabels()).toEqual(['core-sw110.0.0.1', 'New Session…']);
+    expect(optionLabels()).toEqual(['core-sw110.0.0.1', 'New session…']);
     fireEvent.change(search, { target: { value: 'loc' } });
-    expect(optionLabels()).toEqual(['Local Shell', 'New Session…']);
+    expect(optionLabels()).toEqual(['Local Shell', 'New session…']);
   });
 
   it('opens the highlighted item from the keyboard', () => {
@@ -87,7 +87,7 @@ describe('the tab launcher', () => {
     const props = launcher();
     fireEvent.click(screen.getByText('Local Shell'));
     expect(props.onOpenLocalShell).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByText('New Session…'));
+    fireEvent.click(screen.getByText('New session…'));
     expect(props.onNewSession).toHaveBeenCalledTimes(1);
     expect(props.onOpenSession).not.toHaveBeenCalled();
   });

@@ -17,18 +17,24 @@ const KEY = 'plinky_snippets';
 
 const CATEGORIES: SnippetItem['category'][] = ['System', 'Docker', 'Logs', 'Network', 'Custom'];
 
+// First run only; saved snippets are never replaced. Network gear first:
+// the people who open PuTTY all day are mostly on routers and switches, and
+// the old defaults led with Docker. "terminal length 0" comes early because
+// every "show" after it pages otherwise. ping and traceroute need no -c: IOS,
+// NX-OS, EOS and JunOS all stop on their own, and Ctrl+C ends a Linux ping.
 export const DEFAULT_SNIPPETS: SnippetItem[] = [
-  { id: '1', name: 'Docker PS', command: 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"\n', category: 'Docker' },
-  { id: '2', name: 'Docker Stats', command: 'docker stats --no-stream\n', category: 'Docker' },
-  { id: '3', name: 'Disk Usage', command: 'df -h\n', category: 'System' },
-  { id: '4', name: 'Memory', command: 'free -h\n', category: 'System' },
-  { id: '5', name: 'System Load', command: 'uptime\n', category: 'System' },
-  { id: '6', name: 'Open Ports', command: 'ss -tulpn\n', category: 'Network' },
-  { id: '7', name: 'Recent Logs', command: 'journalctl -xe --no-pager -n 50\n', category: 'Logs' },
-  { id: '8', name: 'Tail Syslog', command: 'tail -f /var/log/syslog\n', category: 'Logs' },
-  { id: '9', name: 'Git Status', command: 'git status -sb\n', category: 'Custom' },
-  { id: '10', name: 'Show Interface', command: 'show interfaces ${INTERFACE:GigabitEthernet0/1}\n', category: 'Network' },
-  { id: '11', name: 'Ping Host', command: 'ping ${HOST}\n', category: 'Network' },
+  { id: '1', name: 'Interfaces', command: 'show ip interface brief\n', category: 'Network' },
+  { id: '2', name: 'No paging', command: 'terminal length 0\n', category: 'Network' },
+  { id: '3', name: 'Config section', command: 'show running-config | section ${SECTION:interface}\n', category: 'Network' },
+  { id: '4', name: 'Ping', command: 'ping ${HOST}\n', category: 'Network' },
+  { id: '5', name: 'Traceroute', command: 'traceroute ${HOST}\n', category: 'Network' },
+  { id: '6', name: 'Interface detail', command: 'show interfaces ${INTERFACE:GigabitEthernet0/1}\n', category: 'Network' },
+  { id: '7', name: 'LLDP neighbors', command: 'show lldp neighbors\n', category: 'Network' },
+  { id: '8', name: 'Version', command: 'show version\n', category: 'System' },
+  { id: '9', name: 'Device log', command: 'show logging\n', category: 'Logs' },
+  { id: '10', name: 'Disk usage', command: 'df -h\n', category: 'System' },
+  { id: '11', name: 'Load', command: 'uptime\n', category: 'System' },
+  { id: '12', name: 'Journal', command: 'journalctl -xe --no-pager -n 50\n', category: 'Logs' },
 ];
 
 /** The saved snippets, or the defaults on first run or when storage is unreadable. */

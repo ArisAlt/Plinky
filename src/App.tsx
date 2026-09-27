@@ -587,7 +587,7 @@ export const App: React.FC = () => {
                   <button
                     onClick={() => setLayoutMode(layoutMode === 'terminal-sftp' ? 'single' : 'terminal-sftp')}
                     title="Terminal + SFTP Side-by-Side Split"
-                    className={`p-1.5 rounded transition ${layoutMode === 'terminal-sftp' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
+                    className={`p-1.5 rounded transition ${layoutMode === 'terminal-sftp' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'hover:bg-plinky-800 hover:text-slate-200'}`}
                   >
                     <FolderGit2 className="w-3.5 h-3.5" />
                   </button>
@@ -616,7 +616,7 @@ export const App: React.FC = () => {
                     ) : (
                       <button
                         onClick={() => { setNewSessionFolder(undefined); setIsNewSessionOpen(true); }}
-                        className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition-colors"
+                        className="px-3 py-1.5 rounded border border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20 font-medium transition-colors"
                       >
                         New session
                       </button>

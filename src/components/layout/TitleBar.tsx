@@ -240,7 +240,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             onClick={() => setActiveView(activeView === 'sftp' ? 'sessions' : 'sftp')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'sftp'
-                ? 'bg-plinky-800 text-emerald-300 font-medium'
+                ? 'bg-plinky-800 text-sky-300 font-medium'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/60'
             }`}
           >
@@ -254,7 +254,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             onClick={() => setActiveView(activeView === 'tunnels' ? 'sessions' : 'tunnels')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'tunnels'
-                ? 'bg-plinky-800 text-purple-300 font-medium'
+                ? 'bg-plinky-800 text-sky-300 font-medium'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/60'
             }`}
           >
@@ -268,7 +268,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             onClick={() => setActiveView(activeView === 'keys' ? 'sessions' : 'keys')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'keys'
-                ? 'bg-plinky-800 text-amber-300 font-medium'
+                ? 'bg-plinky-800 text-sky-300 font-medium'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/60'
             }`}
           >
@@ -306,7 +306,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }}
             onFocus={() => setIsDropdownOpen(true)}
             onKeyDown={handleInputKeyDown}
-            placeholder="Quick Connect: user@host[:port]..."
+            aria-label="Quick connect"
+            placeholder="user@host[:port]"
             className="flex-1 px-2.5 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 placeholder-plinky-muted font-mono focus:outline-none focus:border-sky-500 transition"
           />
           <button
@@ -383,13 +384,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       {/* Right Actions */}
       <div className="flex items-center space-x-2 shrink-0">
         <button
-            aria-label="New Session"
-            title="New Session"
+            aria-label="New session"
+            title="New session"
           onClick={onNewSession}
           className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">New Session</span>
+          <span className="hidden md:inline">New session</span>
         </button>
 
         <button

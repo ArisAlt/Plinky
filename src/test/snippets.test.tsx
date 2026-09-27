@@ -60,8 +60,8 @@ describe('the snippet bar', () => {
   it('runs a snippet without parameters straight away', () => {
     const run = vi.fn();
     render(<QuickSnippetBar onExecuteSnippet={run} />);
-    fireEvent.click(screen.getAllByText('Disk Usage')[0]);
-    expect(run).toHaveBeenCalledWith('df -h\n');
+    fireEvent.click(screen.getAllByText('No paging')[0]);
+    expect(run).toHaveBeenCalledWith('terminal length 0\n');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
@@ -69,9 +69,9 @@ describe('the snippet bar', () => {
     const run = vi.fn();
     render(<QuickSnippetBar onExecuteSnippet={run} activeSessionName="core-sw1" />);
     open();
-    fireEvent.click(screen.getByText('Show Interface'));
+    fireEvent.click(screen.getAllByText('Interface detail')[0]);
     expect(run).not.toHaveBeenCalled();
-    const dialog = screen.getByRole('dialog', { name: 'Run Show Interface' });
+    const dialog = screen.getByRole('dialog', { name: 'Run Interface detail' });
     const input = dialog.querySelector('input')!;
     expect(input.value).toBe('GigabitEthernet0/1'); // the default
     fireEvent.change(input, { target: { value: 'Te1/0/48' } });
@@ -86,7 +86,7 @@ describe('the snippet bar', () => {
     const run = vi.fn();
     render(<QuickSnippetBar onExecuteSnippet={run} />);
     open();
-    fireEvent.click(screen.getByText('Ping Host'));
+    fireEvent.click(screen.getAllByText('Ping')[0]);
     const dialog = screen.getByRole('dialog');
     expect((screen.getByText('Run').closest('button') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.submit(dialog);
@@ -103,13 +103,13 @@ describe('the snippet bar', () => {
     fireEvent.change(screen.getByPlaceholderText(/systemctl restart/), { target: { value: 'show vlan brief' } });
     fireEvent.click(screen.getByText('Save Snippet'));
     open();
-    fireEvent.click(screen.getAllByTitle('Delete Snippet')[0]); // Docker PS
+    fireEvent.click(screen.getAllByTitle('Delete Snippet')[0]); // Interfaces
     unmount();
 
     render(<QuickSnippetBar onExecuteSnippet={vi.fn()} />);
     open();
     expect(screen.getByText('VLAN brief')).toBeTruthy();
-    expect(screen.queryByText('Docker PS')).toBeNull();
+    expect(screen.queryByText('Interfaces')).toBeNull();
   });
 
   it('does not write the defaults to storage just by being shown', () => {
@@ -117,3 +117,15 @@ describe('the snippet bar', () => {
     expect(localStorage.getItem('plinky_snippets')).toBeNull();
   });
 });
+
+describe('default snippets', () => {
+  it('lead with network gear, not Docker', () => {
+    // The bar shows the first five. They were Docker PS, Docker Stats, Disk
+    // Usage, Memory and System Load, for people who mostly live on routers.
+    const bar = DEFAULT_SNIPPETS.slice(0, 5);
+    expect(bar.every(s => s.category === 'Network')).toBe(true);
+    expect(bar[0].command).toBe('show ip interface brief\n');
+    expect(DEFAULT_SNIPPETS.some(s => /docker/i.test(s.command))).toBe(false);
+  });
+});
+

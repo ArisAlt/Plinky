@@ -1314,22 +1314,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 title={`Encrypted Vault: ${vaultKey}`}
                 className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-medium transition-colors ${
                   isVaultMenuOpen
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                    : 'bg-slate-800/80 text-amber-400 border-amber-500/30 hover:bg-slate-700 hover:text-amber-300'
+                    ? 'bg-sky-500/15 text-sky-200 border-sky-500/40'
+                    : 'bg-slate-800/80 text-slate-300 border-plinky-700 hover:bg-slate-700 hover:text-slate-100'
                 }`}
               >
-                <Key className="w-3 h-3 text-amber-400" />
+                <Key className="w-3 h-3 text-slate-400" />
                 <span>Vault</span>
               </button>
 
               {isVaultMenuOpen && (
                 <div 
-                  className="absolute right-0 top-full mt-1.5 z-50 w-56 bg-plinky-900 border border-amber-500/40 rounded-lg shadow-2xl py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in duration-100"
+                  className="absolute right-0 top-full mt-1.5 z-50 w-56 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in duration-100"
                   onClick={e => e.stopPropagation()}
                 >
                   <div className="px-3 py-1 border-b border-plinky-800 flex items-center justify-between">
                     <span className="font-semibold text-slate-200 text-[11px]">Vault Credentials</span>
-                    <span className="text-[11px] text-amber-400 font-mono truncate max-w-[100px]" title={vaultKey}>
+                    <span className="text-[11px] text-plinky-muted font-mono truncate max-w-[100px]" title={vaultKey}>
                       {vaultKey}
                     </span>
                   </div>
@@ -1348,7 +1348,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         }}
                         className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
                       >
-                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <Zap className="w-3.5 h-3.5 text-slate-400" />
                         <span>Send Login Password</span>
                       </button>
 
@@ -1358,9 +1358,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                             handleSendVaultEnablePassword();
                             setIsVaultMenuOpen(false);
                           }}
-                          className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-amber-600/30 hover:text-amber-200 text-left transition"
+                          className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/20 hover:text-sky-100 text-left transition"
                         >
-                          <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                          <Shield className="w-3.5 h-3.5 text-slate-400" />
                           <span>Send Enable Password</span>
                         </button>
                       )}
@@ -1384,7 +1384,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                           className="w-full flex items-center justify-between px-3 py-1 hover:bg-slate-800 text-slate-300 text-left text-[11px] transition"
                         >
                           <span className="flex items-center space-x-1.5">
-                            <Copy className="w-3 h-3 text-amber-400" />
+                            <Copy className="w-3 h-3 text-slate-400" />
                             <span>Copy Enable Password</span>
                           </span>
                           {copiedVaultKey === 'enable' && <Check className="w-3 h-3 text-emerald-400" />}
@@ -1430,7 +1430,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               : 'Keyword highlighting off. Click to turn on.'}
             className={`flex items-center space-x-1 px-1.5 py-0.5 rounded border text-[11px] transition ${
               tab.activeHighlighting !== false
-                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/20'
+                ? 'bg-sky-500/15 text-sky-300 border-sky-500/40 hover:bg-sky-500/25'
                 : 'bg-slate-800/60 text-plinky-muted border-slate-700 hover:text-slate-300'
             }`}
           >
@@ -1451,7 +1451,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             {isLogging ? (
               <span className="h-1.5 w-1.5 rounded-full bg-rose-400"></span>
             ) : (
-              <FileText className="w-3 h-3 text-amber-400" />
+              <FileText className="w-3 h-3 text-slate-400" />
             )}
             <span>{isLogging ? `Log: ${(loggedBytes / 1024).toFixed(1)}k` : 'Log'}</span>
           </button>
@@ -1462,7 +1462,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             title="PuTTY Event Log - view connection diagnostics and trace"
             className="flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 text-[11px] transition"
           >
-            <List className="w-3 h-3 text-cyan-400" />
+            <List className="w-3 h-3 text-slate-400" />
             <span>Events</span>
           </button>
         </div>
@@ -1475,7 +1475,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Find in terminal..."
+            aria-label="Find in terminal"
+              placeholder="Find in terminal…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -1599,7 +1600,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             <span>Pasting line {Math.min(pasteJob.sent + 1, pasteJob.total)} of {pasteJob.total}</span>
             <button
               onClick={() => { void cancelPaste(tab.id); }}
-              className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-red-600/60 text-slate-200 text-[11px]"
+              className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-rose-600/60 text-slate-200 text-[11px]"
             >
               Cancel
             </button>
@@ -1675,28 +1676,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               onClick={handleCopyAll}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <CopyCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <CopyCheck className="w-3.5 h-3.5 text-slate-400" />
               <span>Copy All to Clipboard</span>
             </button>
             <button
               onClick={handlePaste}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <Clipboard className="w-3.5 h-3.5 text-emerald-400" />
+              <Clipboard className="w-3.5 h-3.5 text-slate-400" />
               <span>Paste Clipboard</span>
             </button>
             <button
               onClick={handleSelectAll}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <CheckSquare className="w-3.5 h-3.5 text-slate-400" />
               <span>Select All</span>
             </button>
             {vaultKey && (
               <>
                 <div className="border-t border-plinky-800 my-1" />
-                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-400/80 flex items-center space-x-1">
-                  <Shield className="w-3 h-3 text-amber-400" />
+                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-plinky-muted flex items-center space-x-1">
+                  <Shield className="w-3 h-3 text-slate-400" />
                   <span>Vault ({vaultKey})</span>
                 </div>
                 <button
@@ -1706,10 +1707,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   }}
                   disabled={!isVaultUnlocked}
                   className={`w-full flex items-center space-x-2 px-3 py-1.5 text-left transition ${
-                    isVaultUnlocked ? 'hover:bg-amber-600/30 text-amber-200' : 'text-plinky-muted cursor-not-allowed'
+                    isVaultUnlocked ? 'hover:bg-sky-600/20 text-slate-200' : 'text-plinky-muted cursor-not-allowed'
                   }`}
                 >
-                  <Key className="w-3.5 h-3.5 text-amber-400" />
+                  <Key className="w-3.5 h-3.5 text-slate-400" />
                   <span>Send Login Password</span>
                 </button>
                 {vault?.hasEnableSecret && (
@@ -1720,10 +1721,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                     }}
                     disabled={!isVaultUnlocked}
                     className={`w-full flex items-center space-x-2 px-3 py-1.5 text-left transition ${
-                      isVaultUnlocked ? 'hover:bg-emerald-600/30 text-emerald-200' : 'text-plinky-muted cursor-not-allowed'
+                      isVaultUnlocked ? 'hover:bg-sky-600/20 text-slate-200' : 'text-plinky-muted cursor-not-allowed'
                     }`}
                   >
-                    <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                    <Shield className="w-3.5 h-3.5 text-slate-400" />
                     <span>Send Enable Password</span>
                   </button>
                 )}
@@ -1734,7 +1735,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               onClick={handleClearScrollback}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+              <Trash2 className="w-3.5 h-3.5 text-slate-400" />
               <span>Clear Scrollback</span>
             </button>
             <button
@@ -1752,7 +1753,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               }}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <List className="w-3.5 h-3.5 text-cyan-400" />
+              <List className="w-3.5 h-3.5 text-slate-400" />
               <span>PuTTY Event Log...</span>
             </button>
             <button
@@ -1762,7 +1763,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               }}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <FileText className="w-3.5 h-3.5 text-amber-400" />
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
               <span>Session Logging...</span>
             </button>
             {onDuplicateTab && (
@@ -1773,7 +1774,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 }}
                 className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
               >
-                <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                <Copy className="w-3.5 h-3.5 text-slate-400" />
                 <span>Duplicate Session</span>
               </button>
             )}
@@ -1794,7 +1795,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 onClick={() => { setContextMenu(null); handleManualReconnect(); }}
                 className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
                 <span>Reconnect</span>
               </button>
             )}
@@ -1807,7 +1808,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               }}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
-              <Search className="w-3.5 h-3.5 text-amber-400" />
+              <Search className="w-3.5 h-3.5 text-slate-400" />
               <span>Find in Terminal...</span>
             </button>
             {tab.protocol === 'Serial' && (
@@ -1826,7 +1827,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   title="Hold a Break condition on the line for 400 ms (ROMMON / password recovery)"
                   className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
                 >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <Zap className="w-3.5 h-3.5 text-slate-400" />
                   <span>Send Break</span>
                 </button>
               </>
@@ -1838,7 +1839,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   className="px-3 pt-1 pb-0.5 flex items-center space-x-2 text-slate-400"
                   title="Optional. Teaches the remote Unix shell to report prompts and its current directory (SFTP folder-following, Ctrl+Up/Down prompt jumping). Not for network devices."
                 >
-                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <Zap className="w-3.5 h-3.5 text-slate-400" />
                   <span>
                     {hooksInjected ? `Shell hooks active (${hooksInjected})` : 'Shell hooks for:'}
                   </span>
@@ -1852,7 +1853,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         title={shell === lastHooksShell ? 'Last used for this session' : undefined}
                         className={`flex-1 py-0.5 rounded border font-mono text-[11px] transition ${
                           shell === lastHooksShell
-                            ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                            ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
                             : 'border-plinky-700 text-slate-300 hover:bg-sky-600/30 hover:text-sky-200'
                         }`}
                       >
@@ -1894,13 +1895,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {/* PuTTY Event Log Modal */}
         {isEventLogOpen && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-            <div className="bg-plinky-900 border border-cyan-500/60 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[80vh] overflow-hidden text-slate-100">
+            <div className="bg-plinky-900 border border-plinky-700 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[80vh] overflow-hidden text-slate-100">
               <div className="px-4 py-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <List className="w-4 h-4 text-cyan-400" />
+                  <List className="w-4 h-4 text-slate-400" />
                   <span className="font-semibold text-sm">Event Log: {tab.sessionName}</span>
                 </div>
-                <button
+                <button aria-label="Close event log"
                   onClick={() => setIsEventLogOpen(false)}
                   className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
                 >
@@ -1944,7 +1945,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   }}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition"
                 >
-                  <CopyCheck className="w-3.5 h-3.5 text-cyan-400" />
+                  <CopyCheck className="w-3.5 h-3.5 text-slate-400" />
                   <span>Copy All to Clipboard</span>
                 </button>
 
@@ -1970,13 +1971,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {/* PuTTY Session Logging Modal */}
         {isLoggingOpen && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-            <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden text-slate-100">
+            <div className="bg-plinky-900 border border-plinky-700 rounded-xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden text-slate-100">
               <div className="px-4 py-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <FileText className="w-4 h-4 text-amber-400" />
+                  <FileText className="w-4 h-4 text-slate-400" />
                   <span className="font-semibold text-sm">Session Log</span>
                 </div>
-                <button
+                <button aria-label="Close logging"
                   onClick={() => setIsLoggingOpen(false)}
                   className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
                 >
@@ -2019,7 +2020,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   </div>
                 )}
                 {logError && (
-                  <div role="alert" className="p-2 rounded border border-red-500/40 bg-red-950/40 text-red-300 text-[11px]">
+                  <div role="alert" className="p-2 rounded border border-rose-500/40 bg-rose-950/40 text-rose-300 text-[11px]">
                     {logError}
                   </div>
                 )}
@@ -2051,7 +2052,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                     className={`px-3 py-1.5 rounded font-medium transition ${
                       isLogging
                         ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                        : 'bg-emerald-700 hover:brightness-110 text-white'
+                        : 'bg-sky-700 hover:brightness-110 text-white'
                     }`}
                   >
                     {isLogging ? 'Stop Logging' : 'Start Logging…'}
