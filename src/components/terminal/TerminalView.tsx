@@ -1290,7 +1290,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       {/* Tab Control Overlay Header */}
       <div className="relative flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
         <div className="flex items-center space-x-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
           <span className="font-semibold text-slate-200">{tab.sessionName}</span>
           <span className="text-slate-500 font-mono">
             {isLocalSession ? '(local shell)' : `(${tab.hostname}:${tab.port})`}
@@ -1312,7 +1312,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   setIsVaultMenuOpen(prev => !prev);
                 }}
                 title={`Encrypted Vault: ${vaultKey}`}
-                className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-medium transition-all ${
+                className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-medium transition-colors ${
                   isVaultMenuOpen
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
                     : 'bg-slate-800/80 text-amber-400 border-amber-500/30 hover:bg-slate-700 hover:text-amber-300'
@@ -1414,7 +1414,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <button
             onClick={cycleChannel}
             title="Click to cycle broadcast sync channel (A, B, C, D, none)"
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-mono transition-all ${getChannelColor(tab.syncChannel)}`}
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-mono transition-colors ${getChannelColor(tab.syncChannel)}`}
           >
             <Radio className="w-3 h-3" />
             <span>Channel: {tab.syncChannel === 'none' ? 'Off' : tab.syncChannel}</span>
@@ -1442,14 +1442,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <button
             onClick={() => setIsLoggingOpen(true)}
             title="Session Logging (PuTTY-style) - record output to log file"
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-all ${
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] transition-colors ${
               isLogging
                 ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
                 : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-300'
             }`}
           >
             {isLogging ? (
-              <span className="h-1.5 w-1.5 rounded-full bg-rose-400 animate-ping"></span>
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-400"></span>
             ) : (
               <FileText className="w-3 h-3 text-amber-400" />
             )}
@@ -1649,8 +1649,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <div
             className="free-type-cursor-indicator rounded"
             style={{
-              left: clickIndicator.x - 12,
-              top: clickIndicator.y - 8,
+              transform: `translate(${clickIndicator.x - 12}px, ${clickIndicator.y - 8}px)`,
               width: '24px',
               height: '18px',
             }}
@@ -1894,12 +1893,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         {/* PuTTY Event Log Modal */}
         {isEventLogOpen && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
             <div className="bg-plinky-900 border border-cyan-500/60 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[80vh] overflow-hidden text-slate-100">
               <div className="px-4 py-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <List className="w-4 h-4 text-cyan-400" />
-                  <span className="font-semibold text-sm">PuTTY Event Log — {tab.sessionName}</span>
+                  <span className="font-semibold text-sm">Event Log: {tab.sessionName}</span>
                 </div>
                 <button
                   onClick={() => setIsEventLogOpen(false)}
@@ -1970,12 +1969,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         {/* PuTTY Session Logging Modal */}
         {isLoggingOpen && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
             <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden text-slate-100">
               <div className="px-4 py-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <FileText className="w-4 h-4 text-amber-400" />
-                  <span className="font-semibold text-sm">PuTTY Session Logging</span>
+                  <span className="font-semibold text-sm">Session Log</span>
                 </div>
                 <button
                   onClick={() => setIsLoggingOpen(false)}
@@ -1989,7 +1988,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 {/* Status Bar */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-plinky-950 border border-plinky-800">
                   <div className="flex items-center space-x-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${isLogging ? 'bg-rose-500 animate-ping' : 'bg-slate-600'}`}></span>
+                    <span className={`h-2.5 w-2.5 rounded-full ${isLogging ? 'bg-rose-500' : 'bg-slate-600'}`}></span>
                     <span className="font-semibold text-slate-200">
                       {isLogging ? 'Logging is ACTIVE' : 'Logging is STOPPED'}
                     </span>
@@ -2068,7 +2067,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         {/* Native Host Key Verification Dialog */}
         {pendingPrompt && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-lg w-full p-6 text-slate-100">
               <div className="flex items-start space-x-3 mb-4">
                 <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
@@ -2100,19 +2099,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <div className="flex flex-col sm:flex-row gap-2 justify-end">
                 <button
                   onClick={() => handleAnswerPrompt('reject')}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-all"
+                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
                 >
                   Abandon Connection
                 </button>
                 <button
                   onClick={() => handleAnswerPrompt('once')}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/30 text-amber-300 text-xs font-medium transition-all"
+                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/30 text-amber-300 text-xs font-medium transition-colors"
                 >
                   Connect Just Once
                 </button>
                 <button
                   onClick={() => handleAnswerPrompt('store')}
-                  className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-sm transition-all"
+                  className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-sm transition-colors"
                 >
                   Store Key in Cache & Connect
                 </button>

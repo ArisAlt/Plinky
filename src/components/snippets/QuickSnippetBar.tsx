@@ -194,7 +194,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
 
       {/* Add Custom Snippet Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-plinky-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div className="bg-plinky-900 border border-plinky-700 rounded-xl shadow-2xl max-w-md w-full p-5 text-slate-100">
             <div className="flex items-center justify-between mb-4 border-b border-plinky-800 pb-2">
               <div className="flex items-center space-x-2">

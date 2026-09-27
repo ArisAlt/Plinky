@@ -70,6 +70,10 @@ pub enum PreAuthAction {
     TransitionToLive(Vec<u8>),
     /// Session closed (error, rejected, or auth failure).
     Closed(CloseReason),
+    /// Pre-auth output that is part of plink's host-key notice. The dialog
+    /// shows it; the terminal gets only the bytes carried here (whatever came
+    /// before the notice in this chunk, often nothing).
+    Withhold(Vec<u8>),
 }
 
 pub struct PreAuthStateMachine {
@@ -77,7 +81,42 @@ pub struct PreAuthStateMachine {
     buffer: Vec<u8>,
     access_granted_regex: Regex,
     hostkey_prompt_regex: Regex,
+    /// Inside plink's host-key notice, before its question. That text used to
+    /// reach the terminal and stay there after the dialog was answered, with
+    /// the answer's echo glued on ("...press Returny").
+    in_hostkey_notice: bool,
+    /// The terminal echo of the answer just typed ("y\r\n"), dropped when it
+    /// comes back.
+    pending_echo: Vec<u8>,
+    /// The end of the output so far, not yet shown: an unfinished line that
+    /// could still turn into a host-key notice ("The" arrived alone in a
+    /// real run, and leaked in front of the dialog). Shown with the next
+    /// output once the line is clearly something else.
+    held: Vec<u8>,
 }
+
+/// How plink's host-key notices begin, for holding back an unfinished line
+/// that may be one of them.
+const HOSTKEY_NOTICE_STARTS: [&str; 4] = [
+    "The host key is not cached",
+    "The server's host key is not cached",
+    "The host key does not match",
+    "WARNING - POTENTIAL SECURITY BREACH",
+];
+
+/// Whether `tail` (an unfinished last line) may still become a notice.
+fn could_start_notice(tail: &[u8]) -> bool {
+    let t = String::from_utf8_lossy(tail);
+    let t = t.trim_start_matches('\r');
+    !t.is_empty() && HOSTKEY_NOTICE_STARTS.iter().any(|m| m.starts_with(t) && m.len() > t.len())
+}
+
+/// How plink (0.75 to 0.85) opens a host-key notice, new key or changed key.
+const HOSTKEY_NOTICE_MARKERS: [&str; 3] = [
+    "host key is not cached",
+    "WARNING - POTENTIAL SECURITY BREACH",
+    "host key does not match",
+];
 
 impl PreAuthStateMachine {
     pub const MAX_PREAUTH_BUFFER_LEN: usize = 8192;
@@ -93,6 +132,9 @@ impl PreAuthStateMachine {
             hostkey_prompt_regex: Regex::new(
                 r"(Store key in cache\?|Update cached key\?)"
             ).unwrap(),
+            in_hostkey_notice: false,
+            pending_echo: Vec::new(),
+            held: Vec::new(),
         }
     }
 
@@ -128,6 +170,23 @@ impl PreAuthStateMachine {
             return PreAuthAction::Suppress;
         }
 
+        // The echo of a host-key answer: drop it, byte by byte, across reads.
+        let mut chunk = chunk;
+        while let (Some(&want), Some(&got)) = (self.pending_echo.first(), chunk.first()) {
+            if want != got {
+                self.pending_echo.clear();
+                break;
+            }
+            self.pending_echo.remove(0);
+            chunk = &chunk[1..];
+        }
+        if chunk.is_empty() {
+            return PreAuthAction::Withhold(Vec::new());
+        }
+        self.pending_echo.clear();
+
+        let notice_was_open = self.in_hostkey_notice;
+        let visible_before = self.buffer.len();
         self.buffer.extend_from_slice(chunk);
 
         // 8 KiB PreAuth bounded default-deny: fail closed on unrecognized output
@@ -181,6 +240,37 @@ impl PreAuthStateMachine {
             return PreAuthAction::HostKeyPrompt(prompt_info);
         }
 
+        // A host-key notice has started: keep it off the terminal (the dialog
+        // shows it). Bytes of this chunk from before the notice still show.
+        if !notice_was_open {
+            if let Some(start) = HOSTKEY_NOTICE_MARKERS.iter().filter_map(|m| text.find(m)).min() {
+                self.in_hostkey_notice = true;
+                // The notice's first line begins at the line start before the marker.
+                let line_start = text[..start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                // Clamped: `text` is a lossy view, so its offsets can run past the bytes.
+                let shown_from = visible_before.saturating_sub(self.held.len());
+                let shown_end = line_start.max(shown_from).min(self.buffer.len());
+                let shown = self.buffer[shown_from.min(shown_end)..shown_end].to_vec();
+                self.held.clear();
+                return PreAuthAction::Withhold(shown);
+            }
+        } else {
+            return PreAuthAction::Withhold(Vec::new());
+        }
+
+        // An unfinished last line that may still become a notice waits.
+        let mut pending = std::mem::take(&mut self.held);
+        let had_held = !pending.is_empty();
+        pending.extend_from_slice(chunk);
+        let tail_start = pending.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0);
+        if could_start_notice(&pending[tail_start..]) {
+            self.held = pending.split_off(tail_start);
+            return PreAuthAction::Withhold(pending);
+        }
+        if had_held {
+            return PreAuthAction::Withhold(pending);
+        }
+
         // Default-deny: hold unmatched pre-auth bytes until transition to Live or prompt
         PreAuthAction::Hold
     }
@@ -197,9 +287,18 @@ impl PreAuthStateMachine {
     /// and through a jump host, the target's host-key prompt was hidden and
     /// re-announced with the bastion's fingerprint.
     pub fn prompt_answered(&mut self) {
+        self.prompt_answered_with_echo(b"");
+    }
+
+    /// As `prompt_answered`, also dropping `echo` (the terminal's echo of
+    /// the answer, e.g. `y\r\n`) when it comes back.
+    pub fn prompt_answered_with_echo(&mut self, echo: &[u8]) {
         if matches!(self.state, SessionState::HostKeyPending { .. }) {
             self.state = SessionState::PreAuth;
             self.buffer.clear();
+            self.in_hostkey_notice = false;
+            self.held.clear();
+            self.pending_echo = echo.to_vec();
         }
     }
 
@@ -211,5 +310,84 @@ impl PreAuthStateMachine {
     pub fn terminate(&mut self) {
         self.state = SessionState::Closed(CloseReason::Ok);
         self.buffer.clear();
+    }
+}
+
+#[cfg(test)]
+mod hostkey_notice_tests {
+    use super::*;
+
+    // Verbatim plink 0.81 output for an unknown host, via a jump host
+    // (2026-09-26 GUI test), split where the PTY split it.
+    const PROXY_LINE: &[u8] = b"-- Making proxy SSH connection to 127.0.0.1 port 2222 ---\r\n";
+    const NOTICE: &[u8] = b"The host key is not cached for this server:\r\n  127.0.0.1 (port 2222)\r\nYou have no guarantee that the server is the computer you\r\nthink it is.\r\nThe server's ssh-ed25519 key fingerprint is:\r\n  ssh-ed25519 255 SHA256:L+WPtiy7pQ5CsKZG3ScgWz1Bues7LXQ1uPhfNvl7J+8\r\nIf you trust this host, enter \"y\" to add the key to Plink's\r\ncache and carry on connecting.\r\n";
+    const QUESTION: &[u8] = b"Store key in cache? (y/n, Return cancels connection, i for more info) ";
+
+    #[test]
+    fn the_host_key_notice_goes_to_the_dialog_not_the_terminal() {
+        let mut sm = PreAuthStateMachine::new();
+        assert_eq!(sm.feed_bytes(PROXY_LINE), PreAuthAction::Hold, "text before the notice still shows");
+        assert_eq!(sm.feed_bytes(NOTICE), PreAuthAction::Withhold(Vec::new()));
+        match sm.feed_bytes(QUESTION) {
+            PreAuthAction::HostKeyPrompt(info) => assert_eq!(info.fingerprint, "SHA256:L+WPtiy7pQ5CsKZG3ScgWz1Bues7LXQ1uPhfNvl7J+8"),
+            other => panic!("expected the dialog, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn text_before_the_notice_in_the_same_read_still_shows() {
+        let mut sm = PreAuthStateMachine::new();
+        let mut chunk = PROXY_LINE.to_vec();
+        chunk.extend_from_slice(NOTICE);
+        assert_eq!(sm.feed_bytes(&chunk), PreAuthAction::Withhold(PROXY_LINE.to_vec()));
+    }
+
+    #[test]
+    fn the_answers_echo_is_dropped_and_what_follows_shows() {
+        let mut sm = PreAuthStateMachine::new();
+        sm.feed_bytes(NOTICE);
+        sm.feed_bytes(QUESTION);
+        sm.prompt_answered_with_echo(b"y\r\n");
+        // Echo split across reads, then the password prompt.
+        assert_eq!(sm.feed_bytes(b"y"), PreAuthAction::Withhold(Vec::new()));
+        assert_eq!(sm.feed_bytes(b"\r\nuser@host's password: "), PreAuthAction::Hold);
+        assert!(String::from_utf8_lossy(&sm.buffer).starts_with("user@host"), "echo not in the buffer");
+    }
+
+    #[test]
+    fn a_second_host_key_notice_is_withheld_too() {
+        // Through a jump host plink asks about the bastion, then the target.
+        let mut sm = PreAuthStateMachine::new();
+        sm.feed_bytes(NOTICE);
+        sm.feed_bytes(QUESTION);
+        sm.prompt_answered_with_echo(b"y\r\n");
+        assert_eq!(sm.feed_bytes(b"y\r\n"), PreAuthAction::Withhold(Vec::new()));
+        assert_eq!(sm.feed_bytes(NOTICE), PreAuthAction::Withhold(Vec::new()));
+        assert!(matches!(sm.feed_bytes(QUESTION), PreAuthAction::HostKeyPrompt(_)));
+    }
+
+    #[test]
+    fn a_notice_split_after_its_first_word_does_not_leak_that_word() {
+        // Real run, 2026-09-27: "The" arrived alone and showed in front of
+        // the dialog as "TheUsing username ...".
+        let mut sm = PreAuthStateMachine::new();
+        assert_eq!(sm.feed_bytes(b"The"), PreAuthAction::Withhold(Vec::new()));
+        assert_eq!(sm.feed_bytes(&NOTICE[3..]), PreAuthAction::Withhold(Vec::new()));
+        assert!(matches!(sm.feed_bytes(QUESTION), PreAuthAction::HostKeyPrompt(_)));
+    }
+
+    #[test]
+    fn a_held_line_that_is_not_a_notice_is_shown_after_all() {
+        let mut sm = PreAuthStateMachine::new();
+        assert_eq!(sm.feed_bytes(b"The"), PreAuthAction::Withhold(Vec::new()));
+        assert_eq!(sm.feed_bytes(b"re is a banner\r\n"), PreAuthAction::Withhold(b"There is a banner\r\n".to_vec()));
+        assert_eq!(sm.feed_bytes(b"user@host's password: "), PreAuthAction::Hold);
+    }
+
+    #[test]
+    fn a_fatal_error_during_the_notice_still_closes_with_its_reason() {
+        let mut sm = PreAuthStateMachine::new();
+        sm.feed_bytes(NOTICE);
+        assert!(matches!(sm.feed_bytes(b"FATAL ERROR: Network error: Connection reset\r\n"), PreAuthAction::Closed(_)));
     }
 }

@@ -96,7 +96,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
+      className="fixed inset-0 bg-plinky-950/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
     >
       <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-[520px] shadow-2xl flex flex-col overflow-hidden text-xs text-slate-200">
         {/* Header */}

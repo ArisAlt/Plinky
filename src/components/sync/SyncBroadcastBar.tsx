@@ -129,7 +129,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
 
       {/* D6 Multi-Line Broadcast Confirmation Modal */}
       {pendingConfirmation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-plinky-950/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-lg w-full p-5 text-slate-100">
             <div className="flex items-start space-x-3 mb-3">
               <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">

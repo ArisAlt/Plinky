@@ -406,7 +406,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
           <div>
             <h1 className="text-sm font-semibold text-white tracking-wide">Plinky Credential Vault</h1>
             <p className="text-[11px] text-slate-400">
-              Argon2id (64 MiB, 3 iter) · AES-256-GCM authenticated container · In-memory Zeroize
+              AES-256-GCM encryption, key derived with Argon2id
             </p>
           </div>
         </div>
@@ -823,7 +823,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
     )}
 
     {exportOpen && (
-      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget && !exportBusy) closeExport(); }}>
+      <div className="fixed inset-0 z-50 bg-plinky-950/70 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget && !exportBusy) closeExport(); }}>
         <form onSubmit={handleExport} className="w-full max-w-sm bg-plinky-900 border border-plinky-700 rounded-lg p-4 space-y-3 text-xs text-slate-300">
           <div className="flex items-center space-x-2 text-sm font-semibold text-slate-100">
             <Download className="w-4 h-4 text-sky-400" />

@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Plinky — Terminal Workbench",
+        "title": "Plinky",
         "width": 1280,
         "height": 820,
         "minWidth": 900,

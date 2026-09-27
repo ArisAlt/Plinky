@@ -5,6 +5,56 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Motion. One curve for everything that appears: a strong ease-out, so the
+   element is already most of the way there in the first frames. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* The 17 `animate-in fade-in ...` classes came from tailwindcss-animate, which
+   was never installed: menus, the host-key dialog and the jump-host panel
+   appeared with no transition at all. Defined here instead. Enter only;
+   elements leave instantly. */
+@keyframes plinky-enter {
+  from { opacity: 0; transform: scale(0.97); }
+}
+@keyframes plinky-enter-down {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+.animate-in { animation: plinky-enter 150ms var(--ease-out) both; }
+@keyframes plinky-enter-up {
+  from { opacity: 0; transform: translateY(4px); }
+}
+.animate-in.slide-in-from-top-1,
+.animate-in.slide-in-from-top-2 { animation-name: plinky-enter-down; }
+.animate-in.slide-in-from-bottom-2 { animation-name: plinky-enter-up; }
+/* zoom-in-95 is the default plinky-enter (scale 0.97). */
+.animate-in.duration-100 { animation-duration: 100ms; }
+/* Dialogs: 200 ms max; UI motion stays under 300 ms. */
+.animate-in.duration-200 { animation-duration: 200ms; }
+
+@layer base {
+  /* Every button answers a press. Colour and transform only, never `all`. */
+  button {
+    transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease-out);
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+}
+
+/* Reduced motion: keep fades that explain a change, drop movement, stop
+   anything that repeats. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in { animation-name: plinky-fade; }
+  @keyframes plinky-fade { from { opacity: 0; } }
+  button:not(:disabled):active { transform: none; }
+  .animate-pulse, .animate-ping, .animate-spin { animation: none; }
+  .free-type-cursor-indicator { transition: none; }
+}
+
 :root {
   --channel-A: #06b6d4;
   --channel-B: #10b981;
@@ -99,9 +149,12 @@ body {
 
 .free-type-cursor-indicator {
   position: absolute;
+  left: 0;
+  top: 0;
   pointer-events: none;
   border: 1px dashed rgba(56, 189, 248, 0.7);
   background-color: rgba(56, 189, 248, 0.15);
   z-index: 50;
-  transition: all 0.05s ease-out;
+  /* Moved with transform (set inline), not left/top: no layout per move. */
+  transition: transform 80ms var(--ease-out);
 }

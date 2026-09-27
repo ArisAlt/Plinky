@@ -206,6 +206,16 @@ impl SessionRegistry {
                         }
                     }
                     PreAuthAction::Suppress => {}
+                    PreAuthAction::Withhold(shown) => {
+                        if !shown.is_empty() {
+                            if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
+                                let n = shown.len();
+                                if tx.send(shown).is_ok() {
+                                    forwarded = n;
+                                }
+                            }
+                        }
+                    }
                     PreAuthAction::HostKeyPrompt(info) => {
                         // Priority 1 security fix: DO NOT forward raw chunk to terminal.
                         // Broadcast structured prompt event for native UI dialog.
@@ -420,6 +430,16 @@ impl SessionRegistry {
                         }
                     }
                     PreAuthAction::Suppress => {}
+                    PreAuthAction::Withhold(shown) => {
+                        if !shown.is_empty() {
+                            if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
+                                let n = shown.len();
+                                if tx.send(shown).is_ok() {
+                                    forwarded = n;
+                                }
+                            }
+                        }
+                    }
                     PreAuthAction::HostKeyPrompt(info) => {
                         // Priority 1 security fix: DO NOT forward raw chunk to terminal.
                         // Broadcast structured prompt event for native UI dialog.
@@ -582,13 +602,13 @@ impl SessionRegistry {
             ));
         }
 
-        let bytes: &[u8] = match answer {
-            PromptAnswer::AcceptAndStore => b"y\r",
-            PromptAnswer::AcceptOnce => b"n\r",
-            PromptAnswer::Reject => b"\r",
+        let (bytes, echo): (&[u8], &[u8]) = match answer {
+            PromptAnswer::AcceptAndStore => (b"y\r", b"y\r\n"),
+            PromptAnswer::AcceptOnce => (b"n\r", b"n\r\n"),
+            PromptAnswer::Reject => (b"\r", b"\r\n"),
         };
         session.transport.write(bytes)?;
-        session.state_machine.prompt_answered();
+        session.state_machine.prompt_answered_with_echo(echo);
         Ok(())
     }
 

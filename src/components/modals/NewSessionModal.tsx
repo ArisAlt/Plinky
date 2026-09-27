@@ -458,7 +458,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         if (e.target === e.currentTarget && pressedOnBackdrop.current) onClose();
         pressedOnBackdrop.current = false;
       }}
-      className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
+      className="fixed inset-0 bg-plinky-950/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
     >
       <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-[500px] shadow-2xl flex flex-col overflow-hidden text-xs max-h-[90vh]">
         {/* Header */}
@@ -874,8 +874,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       </div>
                     )}
 
-                    <p className="text-[10px] text-slate-400 italic">
-                      🔒 Credentials are encrypted with Argon2id and never saved in plaintext PuTTY session files.
+                    <p className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                      <Lock className="w-3 h-3 shrink-0 text-slate-500" aria-hidden="true" />
+                      <span>Stored encrypted in the vault, never in PuTTY's session files.</span>
                     </p>
                   </div>
                 )}

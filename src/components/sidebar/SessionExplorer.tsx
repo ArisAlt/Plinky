@@ -316,7 +316,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         <div className="flex items-center space-x-1.5 flex-1 min-w-0">
           {openTab ? (
             <span
-              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500/60'}`}
+              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400' : 'bg-emerald-500/60'}`}
               title={isActiveTab ? 'Connected -- this is the active tab' : 'Connected -- open in another tab'}
             />
           ) : (
@@ -397,7 +397,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         <div className="flex items-center space-x-1.5 flex-1 min-w-0">
           {openTab ? (
             <span
-              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500/60'}`}
+              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400' : 'bg-emerald-500/60'}`}
               title={isActiveTab ? 'Connected -- this is the active tab' : 'Connected -- open in another tab'}
             />
           ) : (
@@ -563,7 +563,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                     : 'border-plinky-800/80 text-slate-500 hover:border-slate-700'
                 }`}
               >
-                Empty folder — drag sessions here
+                Empty folder. Drag sessions here.
               </div>
             ) : (
               node.sessions.map(renderSession)
@@ -822,7 +822,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       {/* Connect All confirmation: a deep folder can hold dozens of sessions. */}
       {confirmConnect && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-plinky-950/50"
           onClick={() => setConfirmConnect(null)}
           onKeyDown={(e) => { if (e.key === 'Escape') setConfirmConnect(null); }}
         >

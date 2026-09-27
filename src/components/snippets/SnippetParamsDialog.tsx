@@ -29,7 +29,7 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-plinky-950/70 backdrop-blur-xs p-4"
       onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } }}
     >
       <form

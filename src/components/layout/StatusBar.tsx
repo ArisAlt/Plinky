@@ -85,10 +85,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
 
         <span className="text-plinky-700">|</span>
 
-        {/* PuTTY R3 Safety */}
-        <div className="flex items-center space-x-1 text-slate-400">
+        {/* Design doc R3: plink verifies host keys; Plinky never reads them
+            out of terminal text. "R3 Safe (Zero Hostkey Scrape)" was that
+            shorthand, meaningless to a user. */}
+        <div
+          className="flex items-center space-x-1 text-slate-400"
+          title="PuTTY verifies every server's host key. Plinky only shows you the fingerprint and passes on your answer."
+        >
           <ShieldCheck className="w-3 h-3 text-sky-400" />
-          <span>R3 Safe (Zero Hostkey Scrape)</span>
+          <span>Host keys verified by PuTTY</span>
         </div>
       </div>
     </footer>

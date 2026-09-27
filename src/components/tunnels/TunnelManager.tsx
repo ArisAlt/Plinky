@@ -244,7 +244,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowAddModal(false);
           }}
-          className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-plinky-950/70 backdrop-blur-xs flex items-center justify-center z-50 p-4"
         >
           <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-96 shadow-xl p-4 space-y-3">
             <div className="flex items-center justify-between pb-1 border-b border-plinky-800">

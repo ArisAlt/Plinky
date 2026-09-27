@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession } from '../../types/session';
+import { detectPutty } from '../../services/tauriBridge';
 import { 
   Terminal, 
   Plus, 
@@ -33,6 +34,19 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   sessions = [],
 }) => {
   const [quickHost, setQuickHost] = useState('');
+  // The PuTTY Plinky actually found. The badge said "PuTTY v0.85" whatever
+  // was installed (0.81 on the test machine); a wrong version is a bad first
+  // impression for a tool whose pitch is "uses the PuTTY you trust".
+  const [puttyVersion, setPuttyVersion] = useState<string | null>(null);
+  const [puttyMissing, setPuttyMissing] = useState(false);
+  useEffect(() => {
+    detectPutty()
+      .then(info => {
+        setPuttyVersion(info.version ?? null);
+        setPuttyMissing(!info.ok);
+      })
+      .catch(() => setPuttyMissing(true));
+  }, []);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -190,9 +204,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <Terminal className="w-3.5 h-3.5 text-sky-400" />
           </div>
           <span className="font-bold text-sm tracking-tight text-white font-mono">PLINKY</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">
-            PuTTY v0.85
-          </span>
+          {(puttyVersion || puttyMissing) && (
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+                puttyMissing
+                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                  : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+              }`}
+              title={puttyMissing ? 'PuTTY (plink) was not found, or is older than 0.75' : 'Detected PuTTY version'}
+            >
+              {puttyMissing ? 'PuTTY not found' : `PuTTY ${puttyVersion}`}
+            </span>
+          )}
         </div>
 
         {/* View Switchers */}
