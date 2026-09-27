@@ -1340,7 +1340,7 @@ pub fn run() {
     #[cfg(unix)]
     let handoff_path = handoff::socket_path(&context.config().identifier);
     #[cfg(unix)]
-    if !startup_requests.is_empty() && handoff::try_hand_over(&handoff_path, &argv) {
+    if !startup_requests.is_empty() && handoff_path.as_deref().is_some_and(|p| handoff::try_hand_over(p, &argv)) {
         return;
     }
 
@@ -1368,10 +1368,12 @@ pub fn run() {
         .manage(VaultState::new())
         .manage(PasteJobs::default())
         .setup(move |app| {
+            // No safe socket path (see handoff::socket_path): no handoff,
+            // later launches still reach us through the plugin.
             #[cfg(unix)]
-            {
+            if let Some(path) = handoff_path.clone() {
                 let handle = app.handle().clone();
-                handoff::listen(handoff_path.clone(), move |args| {
+                handoff::listen(path, move |args| {
                     let requests = cli::parse_args(&args);
                     if !requests.is_empty() {
                         handle.state::<OpenRequests>().0.lock().unwrap().extend(requests);

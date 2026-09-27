@@ -2981,6 +2981,7 @@ dependencies = [
 name = "plinky-desktop"
 version = "0.1.4"
 dependencies = [
+ "libc",
  "plinky-core",
  "putty-compat",
  "serde",

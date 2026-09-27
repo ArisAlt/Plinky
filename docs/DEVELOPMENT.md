@@ -160,6 +160,10 @@ plinky --ssh [USER@]HOST[:PORT] [--title NAME]
 - Arguments are untrusted: hosts or users starting with `-` are refused (plink
   would read them as options), titles lose control characters and are capped
   at 80 characters, anything unrecognised is ignored.
+- On Linux the handoff also works without a D-Bus session bus, over a
+  socket in `$XDG_RUNTIME_DIR` (or a private `/tmp/com.plinky.desktop-<uid>/`
+  directory). Only a socket owned by the same user is ever used; otherwise
+  the launch opens its own window.
 - GNS3 (Preferences → General → Console applications → Custom):
   Linux `plinky --telnet {host} {port} --title "{name}"`,
   Windows `"C:\Program Files\Plinky\Plinky.exe" --telnet %h %p --title "%d"`.

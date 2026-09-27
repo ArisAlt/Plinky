@@ -21,5 +21,10 @@ putty-compat = { path = "../crates/putty-compat", version = "0.1.0" }
 plinky-core = { path = "../crates/plinky-core", version = "0.1.0" }
 tokio = { version = "1.38", features = ["full"] }
 
+# geteuid: the GNS3 handoff socket is used only when this user owns it
+# (handoff.rs). Already in Cargo.lock through tauri.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
