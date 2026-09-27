@@ -93,6 +93,20 @@ interface TerminalViewProps {
   onHoverFocus?: () => void;
 }
 
+// The pane's status dot. It was always green, whatever the session did.
+const STATUS_DOT: Record<TerminalTab['status'], string> = {
+  connecting: 'bg-amber-400 animate-pulse',
+  preauth: 'bg-amber-400',
+  live: 'bg-emerald-400',
+  disconnected: 'bg-rose-500',
+};
+const STATUS_TEXT: Record<TerminalTab['status'], string> = {
+  connecting: 'Connecting',
+  preauth: 'Waiting for login',
+  live: 'Connected',
+  disconnected: 'Disconnected',
+};
+
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
   tab, 
   onUpdateTab,
@@ -221,6 +235,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const isVaultUnlocked = !!vault && !vault.locked;
   const [isVaultMenuOpen, setIsVaultMenuOpen] = useState(false);
   const [detectedPasswordPrompt, setDetectedPasswordPrompt] = useState<'login' | 'enable' | null>(null);
+  // When plink was started and nothing has come back yet. An unreachable
+  // host printed nothing for 35 s or more: a black terminal under a green
+  // dot and a green "Terminal ready", which read as connected but hung.
+  const [waitingSince, setWaitingSince] = useState<number | null>(null);
+  const [, setWaitTick] = useState(0);
+  useEffect(() => {
+    if (waitingSince === null) return;
+    const t = setInterval(() => setWaitTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [waitingSince]);
+  const cancelConnectRef = useRef<() => void>(() => {});
+  // Esc cancels while waiting, from the terminal itself: nothing is running
+  // on the other end to take the key, and moving focus to a Cancel button
+  // would leave it nowhere once the password prompt arrives.
+  useEffect(() => {
+    if (waitingSince === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !containerRef.current?.contains(document.activeElement)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      cancelConnectRef.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [waitingSince]);
   const [copiedVaultKey, setCopiedVaultKey] = useState<'login' | 'enable' | null>(null);
   const recentOutputRef = useRef('');
 
@@ -684,6 +723,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handleIncomingChunk = (chunk: Uint8Array, live = true) => {
       if (disposed) return;
       isLivePtyRef.current = true;
+      if (chunk.length > 0) setWaitingSince(null);
       term.write(chunk, () => {
         scheduleHighlight();
         if (live) acker.ack(chunk.length);
@@ -736,6 +776,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           setDetectedPasswordPrompt('login');
         }
       } else if (isLivePattern) {
+        if (!reachedLiveRef.current && live) addEventLog(isLocalSession ? 'Shell ready' : 'Connected', 'success');
         onUpdateTab(tab.id, { status: 'live' });
         setDetectedPasswordPrompt(null);
         reachedLiveRef.current = true;
@@ -760,7 +801,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const startFresh = () => {
       // Fresh start
-      addEventLog(`Spawning session "${tab.sessionName}" (${tab.hostname || 'local'}:${tab.port || 22})`, 'info');
+      addEventLog(isLocalSession
+        ? 'Starting local shell'
+        : `Connecting to ${tab.hostname || tab.sessionName}${tab.port ? `:${tab.port}` : ''}`, 'info');
+      if (!isLocalSession && isTauriEnvironment()) setWaitingSince(Date.now());
       startTerminalSession(
         tab.id,
         tab.sessionName,
@@ -785,6 +829,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           isLivePtyRef.current = true;
         }
         if (!started) {
+          setWaitingSince(null);
           onUpdateTab(tab.id, { status: 'disconnected' });
           if (isTauriEnvironment()) {
             const reason = error || 'Verify that PuTTY (plink) is installed and target host is reachable.';
@@ -797,9 +842,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             onUpdateTab(tab.id, { status: 'live' });
           }
         } else {
-          addEventLog(`PTY session live. Terminal ready.`, 'success');
+          // The process is up; the connection is not. "Connected" is logged
+          // when the login actually finishes.
+          addEventLog(isLocalSession ? 'Local shell started' : 'plink started, waiting for the server', 'info');
         }
       });
+    };
+
+    cancelConnectRef.current = () => {
+      if (disposed) return;
+      setWaitingSince(null);
+      void closeTerminalSession(tab.id);
+      onUpdateTab(tab.id, { status: 'disconnected' });
+      term.writeln('\r\n\x1b[33m[Plinky: Connection cancelled]\x1b[0m');
+      addEventLog('Connection cancelled', 'warn');
     };
 
     // Reconnect: close whatever is left of the old session and start again
@@ -1290,7 +1346,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       {/* Tab Control Overlay Header */}
       <div className="relative flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
         <div className="flex items-center space-x-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+          <span
+            role="img"
+            aria-label={STATUS_TEXT[tab.status]}
+            title={STATUS_TEXT[tab.status]}
+            className={`h-2 w-2 rounded-full ${STATUS_DOT[tab.status]}`}
+          />
           <span className="font-semibold text-slate-200">{tab.sessionName}</span>
           <span className="text-plinky-muted font-mono">
             {isLocalSession ? '(local shell)' : `(${tab.hostname}:${tab.port})`}
@@ -1575,6 +1636,29 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         )}
 
         {/* Reconnect (T-016) */}
+        {waitingSince !== null && (
+          <div
+            role="status"
+            className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
+          >
+            <div
+              className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-lg border border-plinky-700 bg-plinky-900/95 shadow-2xl text-xs text-slate-200"
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" aria-hidden />
+              <span>
+                Connecting to <span className="font-mono text-slate-100">{tab.hostname || tab.sessionName}{tab.port ? `:${tab.port}` : ''}</span>
+                <span className="text-plinky-muted tabular-nums"> · {Math.max(0, Math.floor((Date.now() - waitingSince) / 1000))} s</span>
+              </span>
+              <button
+                onClick={() => cancelConnectRef.current()}
+                title="Esc"
+                className="px-2 py-0.5 rounded border border-plinky-700 text-slate-300 hover:bg-plinky-800 outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {(reconnectIn !== null || tab.status === 'disconnected') && (
           <div role="status" className="absolute bottom-3 left-4 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
             <RotateCcw className="w-3.5 h-3.5 text-amber-400" />

@@ -38,7 +38,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
           <>
             <span className="text-plinky-700">|</span>
             <span className="text-slate-300">
-              Current: <strong className="text-sky-300">{activeTab.sessionName}</strong> ({activeTab.hostname}:{activeTab.port})
+              Current: <strong className="text-sky-300">{activeTab.sessionName}</strong>
+              {activeTab.hostname ? ` (${activeTab.hostname}${activeTab.port ? `:${activeTab.port}` : ''})` : ''}
             </span>
           </>
         )}
