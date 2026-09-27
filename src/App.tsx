@@ -879,7 +879,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* Multi-Session Broadcast Sync Bar (WindTerm style) */}
-      <SyncBroadcastBar />
+      <SyncBroadcastBar tabs={tabs} />
 
       {/* Application Bottom Status Bar */}
       <StatusBar tabs={tabs} activeTabId={activeTabId} />

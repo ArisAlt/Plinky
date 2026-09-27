@@ -4,7 +4,7 @@ import {
   CommandHistory, MAX_HISTORY, useBroadcastGlow, announceBroadcast, GLOW_MS,
   BROADCAST_SENT_EVENT, broadcastHistory,
 } from '../services/broadcast';
-import { SyncBroadcastBar } from '../components/sync/SyncBroadcastBar';
+import { SyncBroadcastBar, ARM_MS } from '../components/sync/SyncBroadcastBar';
 import { broadcastSyncInput } from '../services/tauriBridge';
 
 vi.mock('../services/tauriBridge', () => ({
@@ -101,6 +101,9 @@ describe('the broadcast bar', () => {
     broadcastHistory.clear(); // module-level: start each test from a clean one
   });
 
+  const live = (id: string, syncChannel: 'none' | 'A' | 'B' = 'none') => ({ id, status: 'live' as const, syncChannel });
+  const ONE = [live('tab-1')];
+
   const type = (value: string) => {
     const input = screen.getByLabelText('Broadcast command');
     fireEvent.change(input, { target: { value } });
@@ -112,8 +115,9 @@ describe('the broadcast bar', () => {
     send.mockResolvedValue(['tab-1', 'tab-2']);
     const heard = vi.fn();
     window.addEventListener(BROADCAST_SENT_EVENT, heard);
-    render(<SyncBroadcastBar />);
+    render(<SyncBroadcastBar tabs={[live('tab-1'), live('tab-2')]} />);
     type('show clock');
+    type('show clock'); // every live session: the second Enter sends
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Sent to 2 sessions'));
     expect(send).toHaveBeenCalledWith('all', new TextEncoder().encode('show clock\n'));
     expect((heard.mock.calls[0][0] as CustomEvent).detail).toEqual({ ids: ['tab-1', 'tab-2'] });
@@ -122,7 +126,7 @@ describe('the broadcast bar', () => {
 
   it('says so when the command reached nobody', async () => {
     send.mockResolvedValue([]);
-    render(<SyncBroadcastBar />);
+    render(<SyncBroadcastBar tabs={ONE} />);
     fireEvent.click(screen.getByText('CH-B'));
     type('show clock');
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Not sent: no live session on CH-B'));
@@ -130,7 +134,7 @@ describe('the broadcast bar', () => {
 
   it('recalls sent commands with Up and Down', async () => {
     send.mockResolvedValue(['tab-1']);
-    render(<SyncBroadcastBar />);
+    render(<SyncBroadcastBar tabs={ONE} />);
     const input = type('show version');
     await waitFor(() => expect(input.value).toBe(''));
     type('show clock');
@@ -144,5 +148,56 @@ describe('the broadcast bar', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(input.value).toBe('sh');
+  });
+
+  it('says before sending how many live sessions a command reaches', () => {
+    render(<SyncBroadcastBar tabs={[live('a', 'A'), live('b', 'B'), { id: 'c', status: 'connecting', syncChannel: 'A' }]} />);
+    expect(screen.getByRole('button', { name: /Send to 2/ })).toBeTruthy();
+    fireEvent.click(screen.getByText('CH-A'));
+    // The connecting tab takes no input, as in the backend's router.
+    expect(screen.getByRole('button', { name: /Send to 1/ })).toBeTruthy();
+  });
+
+  it('a command for every live session needs a second Enter', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<SyncBroadcastBar tabs={[live('tab-1'), live('tab-2'), live('tab-3')]} />);
+      type('reload');
+      expect(send).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /Enter again: send to 3/ })).toBeTruthy();
+      // Left alone, the arm lapses: a stray Enter later starts over.
+      act(() => { vi.advanceTimersByTime(ARM_MS + 1); });
+      type('reload');
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a single-channel broadcast still sends on the first Enter', async () => {
+    send.mockResolvedValue(['a', 'b']);
+    render(<SyncBroadcastBar tabs={[live('a', 'A'), live('b', 'A')]} />);
+    fireEvent.click(screen.getByText('CH-A'));
+    type('show clock');
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+  });
+
+  it('a pasted script is caught before the input drops its line breaks', () => {
+    // A text input flattens pasted newlines, so the multi-line check could
+    // never fire and "conf t / reload" went out as one run-on line.
+    render(<SyncBroadcastBar tabs={ONE} />);
+    const input = screen.getByLabelText('Broadcast command');
+    fireEvent.paste(input, { clipboardData: { getData: () => 'conf t\nreload\n' } });
+    expect(screen.getByText('Multi-line broadcast')).toBeTruthy();
+    expect(screen.getByText(/2 lines will run/)).toBeTruthy();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('a paste with one line and a trailing newline is not a script', () => {
+    render(<SyncBroadcastBar tabs={ONE} />);
+    const input = screen.getByLabelText('Broadcast command') as HTMLInputElement;
+    fireEvent.paste(input, { clipboardData: { getData: () => 'show clock\r\n' } });
+    expect(screen.queryByText('Multi-line broadcast')).toBeNull();
+    expect(input.value).toBe('show clock');
   });
 });

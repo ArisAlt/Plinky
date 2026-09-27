@@ -26,6 +26,8 @@ export interface HostKeyPromptInfo {
   key_type: string;
   fingerprint: string;
   raw_prompt: string;
+  /** The key differs from the one PuTTY cached ("POTENTIAL SECURITY BREACH"). */
+  changed?: boolean;
 }
 
 export interface PromptEvent {

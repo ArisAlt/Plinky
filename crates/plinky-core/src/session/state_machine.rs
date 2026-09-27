@@ -7,6 +7,12 @@ pub struct HostKeyPromptInfo {
     pub key_type: String,
     pub fingerprint: String,
     pub raw_prompt: String,
+    /// The server offered a different key from the one PuTTY has cached:
+    /// plink's "WARNING - POTENTIAL SECURITY BREACH". The same dialog used to
+    /// show for this and for a first visit, saying "not cached" with a green
+    /// accept button, at exactly the moment a man-in-the-middle would appear.
+    #[serde(default)]
+    pub changed: bool,
 }
 
 impl HostKeyPromptInfo {
@@ -34,6 +40,7 @@ impl HostKeyPromptInfo {
             key_type,
             fingerprint,
             raw_prompt: raw.to_string(),
+            changed: raw.contains("POTENTIAL SECURITY BREACH") || raw.contains("host key does not match"),
         }
     }
 }
@@ -389,5 +396,34 @@ mod hostkey_notice_tests {
         let mut sm = PreAuthStateMachine::new();
         sm.feed_bytes(NOTICE);
         assert!(matches!(sm.feed_bytes(b"FATAL ERROR: Network error: Connection reset\r\n"), PreAuthAction::Closed(_)));
+    }
+}
+
+#[cfg(test)]
+mod changed_key_tests {
+    use super::*;
+
+    // Verbatim plink 0.81 against an sshd whose host key was swapped after
+    // the first one was cached (run 2026-09-27).
+    const CHANGED: &str = "WARNING - POTENTIAL SECURITY BREACH!\r\nThe host key does not match the one Plink has cached for\r\nthis server:\r\n  127.0.0.1 (port 2230)\r\nThis means that either the server administrator has changed\r\nthe host key, or you have actually connected to another\r\ncomputer pretending to be the server.\r\nThe new ssh-ed25519 key fingerprint is:\r\n  ssh-ed25519 255 SHA256:3O68y3/hYcPWT0PvUA6iAW4Hke8MxUWDn1JMiSW6EGo\r\nIf you were expecting this change and trust the new key,\r\nenter \"y\" to update Plink's cache and carry on connecting.\r\nIf you want to carry on connecting but without updating the\r\ncache, enter \"n\".\r\nIf you want to abandon the connection completely, press\r\nReturn to cancel. Pressing Return is the ONLY guaranteed\r\nsafe choice.\r\nUpdate cached key? (y/n, Return cancels connection, i for more info) ";
+
+    #[test]
+    fn a_changed_host_key_is_reported_as_changed_not_as_new() {
+        let mut sm = PreAuthStateMachine::new();
+        match sm.feed_bytes(CHANGED.as_bytes()) {
+            PreAuthAction::HostKeyPrompt(info) => {
+                assert!(info.changed);
+                assert_eq!(info.host, "127.0.0.1");
+                assert_eq!(info.port, 2230);
+                assert_eq!(info.fingerprint, "SHA256:3O68y3/hYcPWT0PvUA6iAW4Hke8MxUWDn1JMiSW6EGo");
+            }
+            other => panic!("expected a host-key prompt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_first_visit_is_not_reported_as_changed() {
+        let raw = "The host key is not cached for this server:\r\n  127.0.0.1 (port 2230)\r\nThe server's ssh-ed25519 key fingerprint is:\r\n  ssh-ed25519 255 SHA256:abc\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+        assert!(!HostKeyPromptInfo::parse(raw).changed);
     }
 }

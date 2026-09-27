@@ -1,15 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { SyncChannel } from '../../types/session';
+import { SyncChannel, TerminalTab } from '../../types/session';
 import { terminalManager } from '../../services/terminalManager';
 import { broadcastSyncInput, isTauriEnvironment } from '../../services/tauriBridge';
 import { announceBroadcast, broadcastHistory } from '../../services/broadcast';
 import { Radio, Send, Terminal, AlertTriangle, X } from 'lucide-react';
 
 interface SyncBroadcastBarProps {
+  /** Open tabs, to say before sending how many sessions a command reaches. */
+  tabs: Pick<TerminalTab, 'id' | 'status' | 'syncChannel'>[];
   onClose?: () => void;
 }
 
-export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
+/** How long a first Enter on a wide broadcast stays armed. */
+export const ARM_MS = 4000;
+
+export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
   const [broadcastTarget, setBroadcastTarget] = useState<SyncChannel | 'all'>('all');
   const [command, setCommand] = useState('');
   const [pendingConfirmation, setPendingConfirmation] = useState<{ command: string; lineCount: number } | null>(null);
@@ -18,6 +23,20 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
   const [result, setResult] = useState<{ text: string; ok: boolean } | null>(null);
   const resultTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(resultTimer.current), []);
+  // A command for every live session needs a second Enter. It sat one stray
+  // Enter away from every open router, and said how many only afterwards.
+  const [armed, setArmed] = useState(false);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(armTimer.current), []);
+  const disarm = () => {
+    clearTimeout(armTimer.current);
+    setArmed(false);
+  };
+
+  // Same rule as the backend's router: only live sessions receive input.
+  const liveTargets = tabs.filter(t =>
+    t.status === 'live' && (broadcastTarget === 'all' || t.syncChannel === broadcastTarget)
+  ).length;
 
   const executeBroadcast = async (cmd: string) => {
     const formatted = cmd.endsWith('\n') ? cmd : `${cmd}\n`;
@@ -46,17 +65,39 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
     setCommand(next);
   };
 
+  const confirmIfScript = (text: string): boolean => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) return false;
+    setPendingConfirmation({ command: text, lineCount: lines.length });
+    return true;
+  };
+
   const handleBroadcast = (e: React.FormEvent) => {
     e.preventDefault();
     if (!command.trim()) return;
-
-    // D6 Multi-line paste / script safety check
-    const lines = command.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (lines.length >= 2) {
-      setPendingConfirmation({ command, lineCount: lines.length });
-    } else {
-      executeBroadcast(command);
+    if (confirmIfScript(command)) return;
+    if (broadcastTarget === 'all' && liveTargets > 1 && !armed) {
+      setArmed(true);
+      clearTimeout(armTimer.current);
+      armTimer.current = setTimeout(() => setArmed(false), ARM_MS);
+      return;
     }
+    disarm();
+    executeBroadcast(command);
+  };
+
+  // A text input drops line breaks on paste, so the script check above
+  // never saw one: a pasted script went out as a single run-on line. Catch
+  // the paste itself, while the line breaks are still in it.
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    if (!/[\r\n]/.test(pasted)) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? command.length;
+    const end = el.selectionEnd ?? command.length;
+    const text = command.slice(0, start) + pasted + command.slice(end);
+    if (!confirmIfScript(text)) setCommand(text.replace(/[\r\n]+/g, ' ').trim());
   };
 
   const getTargetBadgeColor = (target: SyncChannel | 'all') => {
@@ -81,7 +122,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
           {(['all', 'A', 'B', 'C', 'D'] as const).map(target => (
             <button
               key={target}
-              onClick={() => setBroadcastTarget(target)}
+              onClick={() => { setBroadcastTarget(target); disarm(); }}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition ${
                 broadcastTarget === target
                   ? getTargetBadgeColor(target) + ' font-bold shadow-xs'
@@ -101,11 +142,12 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
           <input
             type="text"
             value={command}
-            onChange={e => setCommand(e.target.value)}
+            onChange={e => { setCommand(e.target.value); disarm(); }}
             onKeyDown={recall}
+            onPaste={handlePaste}
             aria-label="Broadcast command"
             title="Up / Down: commands sent before"
-            placeholder={`Type command to simultaneously broadcast to ${broadcastTarget === 'all' ? 'ALL active sessions' : `Channel ${broadcastTarget}`}... (e.g. uptime, df -h, systemctl status)`}
+            placeholder={`Command for ${broadcastTarget === 'all' ? 'every live session' : `channel ${broadcastTarget}`}`}
             className="w-full pl-8 pr-3 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-100 placeholder-plinky-muted focus:outline-none focus:border-sky-500 font-mono transition"
           />
         </div>
@@ -113,10 +155,13 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
         <button
           type="submit"
           disabled={!command.trim()}
-          className="flex items-center space-x-1 px-3 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium disabled:opacity-40 disabled:pointer-events-none transition"
+          title={armed ? 'Press Enter again to send' : undefined}
+          className={`flex items-center space-x-1 px-3 py-1 rounded font-medium whitespace-nowrap tabular-nums disabled:opacity-40 disabled:pointer-events-none transition ${
+            armed ? 'bg-amber-500 hover:bg-amber-400 text-amber-950' : 'bg-sky-700 hover:brightness-110 text-white'
+          }`}
         >
           <Send className="w-3 h-3" />
-          <span>Broadcast</span>
+          <span>{armed ? `Enter again: send to ${liveTargets}` : `Send to ${liveTargets}`}</span>
         </button>
         <span
           role="status"
@@ -140,13 +185,14 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
                   <h3 className="text-base font-semibold text-white">Multi-line broadcast</h3>
                   <button
                     onClick={() => setPendingConfirmation(null)}
+                    aria-label="Cancel broadcast"
                     className="p-1 text-slate-400 hover:text-white"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  You are about to simultaneously execute a multi-line script ({pendingConfirmation.lineCount} lines) across all sessions in {broadcastTarget === 'all' ? 'ALL active channels' : `Channel ${broadcastTarget}`}.
+                  {pendingConfirmation.lineCount} lines will run, one after another, in {liveTargets} live session{liveTargets === 1 ? '' : 's'}{broadcastTarget === 'all' ? '' : ` on channel ${broadcastTarget}`}.
                 </p>
               </div>
             </div>
@@ -171,7 +217,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = () => {
                 }}
                 className="px-3.5 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-amber-950 font-medium text-xs shadow-xs"
               >
-                Confirm & Broadcast ({pendingConfirmation.lineCount} lines)
+                Send {pendingConfirmation.lineCount} lines to {liveTargets}
               </button>
             </div>
           </div>

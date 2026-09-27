@@ -2065,60 +2065,137 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </div>
         )}
 
-        {/* Native Host Key Verification Dialog */}
+        {/* Host key dialog. A changed key is the moment a man-in-the-middle
+            shows up, and plink itself says Return (abandon) is the only
+            guaranteed safe choice; so it gets a red frame, Abandon focused,
+            and accepting reads as the destructive action it is. */}
         {pendingPrompt && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-lg w-full p-6 text-slate-100">
-              <div className="flex items-start space-x-3 mb-4">
-                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
-                  <ShieldAlert className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-white">Host Key Verification Required</h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    The server's host key is not cached in PuTTY's known hosts store. You have no guarantee that the server is the computer you think it is.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 bg-slate-950/80 rounded-lg p-3 border border-slate-800 text-xs font-mono mb-5">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Destination:</span>
-                  <span className="text-slate-200 font-semibold">{pendingPrompt.host}:{pendingPrompt.port}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Key Type:</span>
-                  <span className="text-cyan-400">{pendingPrompt.key_type}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block mb-1">Key Fingerprint:</span>
-                  <span className="text-emerald-400 break-all select-all font-bold">{pendingPrompt.fingerprint}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 justify-end">
-                <button
-                  onClick={() => handleAnswerPrompt('reject')}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
-                >
-                  Abandon Connection
-                </button>
-                <button
-                  onClick={() => handleAnswerPrompt('once')}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/30 text-amber-300 text-xs font-medium transition-colors"
-                >
-                  Connect Just Once
-                </button>
-                <button
-                  onClick={() => handleAnswerPrompt('store')}
-                  className="px-3 py-2 rounded-lg bg-emerald-700 hover:brightness-110 text-white text-xs font-medium shadow-sm transition-colors"
-                >
-                  Store Key in Cache & Connect
-                </button>
-              </div>
-            </div>
-          </div>
+          <HostKeyDialog prompt={pendingPrompt} onAnswer={handleAnswerPrompt} />
         )}
+      </div>
+    </div>
+  );
+};
+
+export const HostKeyDialog: React.FC<{
+  prompt: HostKeyPromptInfo;
+  onAnswer: (answer: 'reject' | 'once' | 'store') => void;
+}> = ({ prompt, onAnswer }) => {
+  const changed = !!prompt.changed;
+  const abandonRef = useRef<HTMLButtonElement>(null);
+  // The parent re-renders on every chunk of output; a fresh onAnswer each
+  // time must not re-run the effect and yank focus back to Abandon.
+  const answerRef = useRef(onAnswer);
+  answerRef.current = onAnswer;
+  useEffect(() => {
+    abandonRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        answerRef.current('reject');
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="hostkey-title"
+        aria-describedby="hostkey-desc"
+        className={`bg-plinky-900 border rounded-xl shadow-2xl max-w-lg w-full p-6 text-slate-100 ${
+          changed ? 'border-rose-500/80 ring-1 ring-rose-500/40' : 'border-amber-500/60'
+        }`}
+      >
+        <div className="flex items-start space-x-3 mb-4">
+          <div className={`p-2.5 rounded-lg border ${
+            changed ? 'bg-rose-500/15 border-rose-500/40 text-rose-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+          }`}>
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 id="hostkey-title" className="text-base font-semibold text-white">
+              {changed ? 'This server\'s host key has changed' : 'New host: check its key'}
+            </h3>
+            <p id="hostkey-desc" className="text-xs text-slate-300 mt-1 leading-relaxed">
+              {changed ? (
+                <>
+                  The key {prompt.host || 'this server'} offered does not match the one PuTTY saved on an earlier visit.
+                  Either an administrator replaced it, or something is intercepting the connection.{' '}
+                  <strong className="text-rose-300">Abandon unless you were told the key changed</strong>, and
+                  compare the fingerprint with the administrator first.
+                </>
+              ) : (
+                <>PuTTY has never connected to this server before, so it cannot vouch for it. Compare the fingerprint with one you trust before storing it.</>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2 bg-plinky-950/80 rounded-lg p-3 border border-plinky-800 text-xs mb-5">
+          <div className="flex justify-between gap-3">
+            <span className="text-slate-400">Destination</span>
+            <span className="font-mono text-slate-200 font-semibold">{prompt.host}:{prompt.port}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-slate-400">Key type</span>
+            <span className="font-mono text-slate-200">{prompt.key_type}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block mb-1">{changed ? 'New fingerprint' : 'Fingerprint'}</span>
+            <span className={`font-mono break-all select-all font-semibold ${changed ? 'text-rose-200' : 'text-slate-100'}`}>
+              {prompt.fingerprint}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2 justify-end">
+          {changed ? (
+            <>
+              <button
+                onClick={() => onAnswer('store')}
+                className="px-3 py-2 rounded-lg border border-rose-500/50 text-rose-300 hover:bg-rose-500/10 text-xs font-medium transition-colors"
+              >
+                I expected this: replace the key
+              </button>
+              <button
+                onClick={() => onAnswer('once')}
+                className="px-3 py-2 rounded-lg border border-plinky-700 text-slate-300 hover:bg-plinky-800 text-xs font-medium transition-colors"
+              >
+                Connect once, keep the old key
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => onAnswer('once')}
+                className="px-3 py-2 rounded-lg border border-plinky-700 text-slate-300 hover:bg-plinky-800 text-xs font-medium transition-colors"
+              >
+                Connect once
+              </button>
+              <button
+                onClick={() => onAnswer('store')}
+                className="px-3 py-2 rounded-lg bg-sky-700 hover:brightness-110 text-white text-xs font-medium transition-colors"
+              >
+                Trust and store key
+              </button>
+            </>
+          )}
+          <button
+            ref={abandonRef}
+            onClick={() => onAnswer('reject')}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-plinky-900 ${
+              changed
+                ? 'order-first sm:order-last bg-rose-700 hover:brightness-110 text-white focus-visible:ring-rose-300'
+                : 'order-first bg-plinky-800 hover:bg-plinky-700 text-slate-200 focus-visible:ring-sky-400'
+            }`}
+          >
+            Abandon connection
+          </button>
+        </div>
       </div>
     </div>
   );
