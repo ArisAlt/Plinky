@@ -12,6 +12,8 @@ import {
   stopSessionLog,
   sessionLogStatus,
   detachTerminalSession,
+  backgroundStartOf,
+  targetProtocolOf,
   createOutputAcker,
   writeTerminalInput, 
   resizeTerminal, 
@@ -744,6 +746,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         text.includes('(yes/no') ||
         text.includes('Store key in cache?')
       );
+      // A telnet/raw console (GNS3) has no login messages and often no prompt
+      // until Enter: any output at all means it is connected (T-020).
+      const isConsoleTarget = tab.protocol === 'Telnet' || tab.protocol === 'RAW';
       const isLivePattern = (
         text.includes('Access granted') || 
         text.includes('Last login:') || 
@@ -780,7 +785,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         } else if (isPasswordPrompt) {
           setDetectedPasswordPrompt('login');
         }
-      } else if (isLivePattern) {
+      } else if (isLivePattern || (isConsoleTarget && !reachedLiveRef.current && text.length > 0)) {
         if (!reachedLiveRef.current && live) addEventLog(isLocalSession ? 'Shell ready' : 'Connected', 'success');
         onUpdateTab(tab.id, { status: 'live' });
         setDetectedPasswordPrompt(null);
@@ -820,7 +825,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         tab.hostname,
         tab.port,
         tab.username,
-        (tab as any).logFileName
+        (tab as any).logFileName,
+        targetProtocolOf(tab.protocol)
       ).then(({ started, error }) => {
         if (disposed) {
           // Tab closed while the spawn was in flight: its close ran as a
@@ -880,29 +886,33 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       startFresh();
     };
 
-    // Attempt to reattach to existing session or start a new PTY session
-    attachTerminalSession(tab.id, 0, handleIncomingChunk).then((attachInfo) => {
-      if (disposed) return;
-      if (attachInfo) {
-        isLivePtyRef.current = true;
-        // A host-key prompt raised while this tab was in the background was
-        // broadcast to no listener; the backend still blocks input for it,
-        // so re-show the dialog or the session is stuck.
-        if (attachInfo.pending_prompt) {
-          setPendingPrompt(attachInfo.pending_prompt);
-        }
-        if (attachInfo.replay_data && attachInfo.replay_data.length > 0) {
-          handleIncomingChunk(new Uint8Array(attachInfo.replay_data), false);
-          addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
+    // Attempt to reattach to existing session or start a new PTY session.
+    // A console tab opened in the background (T-020) may still be starting:
+    // wait for it, then attach, instead of starting a second session.
+    (backgroundStartOf(tab.id) ?? Promise.resolve())
+      .then(() => (disposed ? null : attachTerminalSession(tab.id, 0, handleIncomingChunk)))
+      .then((attachInfo) => {
+        if (disposed) return;
+        if (attachInfo) {
+          isLivePtyRef.current = true;
+          // A host-key prompt raised while this tab was in the background was
+          // broadcast to no listener; the backend still blocks input for it,
+          // so re-show the dialog or the session is stuck.
+          if (attachInfo.pending_prompt) {
+            setPendingPrompt(attachInfo.pending_prompt);
+          }
+          if (attachInfo.replay_data && attachInfo.replay_data.length > 0) {
+            handleIncomingChunk(new Uint8Array(attachInfo.replay_data), false);
+            addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
+          } else {
+            addEventLog(`Attached to active session "${tab.sessionName}"`, 'success');
+          }
+          onUpdateTab(tab.id, { status: attachInfo.is_live ? 'live' : 'preauth' });
+          reachedLiveRef.current = attachInfo.is_live;
         } else {
-          addEventLog(`Attached to active session "${tab.sessionName}"`, 'success');
+          startFresh();
         }
-        onUpdateTab(tab.id, { status: attachInfo.is_live ? 'live' : 'preauth' });
-        reachedLiveRef.current = attachInfo.is_live;
-      } else {
-        startFresh();
-      }
-    });
+      });
 
     // A keyboard paste reaches xterm as a DOM paste event on its textarea.
     // When this session paces pastes and the text has several lines, take

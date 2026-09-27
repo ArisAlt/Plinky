@@ -197,7 +197,7 @@ async fn test_sftp_operations_report_real_success_and_real_failure() {
     let fresh = d.join("putty-fresh");
     std::fs::create_dir_all(&fresh).unwrap();
     std::env::set_var("PUTTYDIR", &fresh);
-    let target = ExplicitTarget { hostname: "127.0.0.1".into(), port: sshd.port, username: Some(user.clone()) };
+    let target = ExplicitTarget { hostname: "127.0.0.1".into(), port: sshd.port, username: Some(user.clone()), protocol: Default::default() };
     let err = message(PsftpClient::home_dir("quick-connect", Some(&target), None).await.unwrap_err());
     assert!(err.starts_with(ERR_HOSTKEY), "{err}");
 

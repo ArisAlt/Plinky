@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT } from './services/tauriBridge';
+import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest } from './services/tauriBridge';
+import { tabForOpenRequest, debounce } from './services/cliOpen';
 import { TitleBar } from './components/layout/TitleBar';
 import { StatusBar } from './components/layout/StatusBar';
 import { SessionExplorer } from './components/sidebar/SessionExplorer';
@@ -67,6 +68,9 @@ export const App: React.FC = () => {
     handle.addEventListener('pointerup', up);
   };
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  // Console tabs from the command line (T-020) open only after startup has
+  // restored the saved layout, which replaces the tab list.
+  const [startupDone, setStartupDone] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
@@ -197,6 +201,8 @@ export const App: React.FC = () => {
         hostname: t.hostname,
         port: t.port,
         username: t.username,
+        // A GNS3 console reconnects as telnet, not SSH to a telnet port.
+        protocol: t.protocol as TerminalTab['protocol'],
       }));
       setTabs(restoredTabs);
       setActiveTabId(savedLayout.activeTabId || restoredTabs[0]?.id || null);
@@ -205,7 +211,48 @@ export const App: React.FC = () => {
     // auto-connected to the first saved session, which meant the app
     // silently picked a session for you on every fresh start instead of
     // waiting for you to choose one.
+    setStartupDone(true);
   };
+
+  // One tab per console asked for on the command line (T-020). All but the
+  // tab that is shown start their session now: a session used to start only
+  // when its tab's view appeared, so after GNS3's "open all consoles" only
+  // the last console connected.
+  const openCliTabs = (requests: OpenRequest[]) => {
+    if (requests.length === 0) return;
+    const stamp = Date.now();
+    const newTabs = requests.map((r, i) =>
+      tabForOpenRequest(r, `tab-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}`));
+    // A start that fails shows at once. One that works stays "connecting"
+    // until the tab is opened and its output (replayed) shows it connected:
+    // the dot says only what is known.
+    newTabs.slice(0, -1).forEach(t => {
+      void startSessionInBackground(t).then(started => {
+        if (started) return;
+        setTabs(prev => prev.map(x => (x.id === t.id && x.status === 'connecting' ? { ...x, status: 'disconnected' } : x)));
+      });
+    });
+    setTabs(prev => [...prev, ...newTabs]);
+    setActiveTabId(newTabs[newTabs.length - 1].id);
+    setActiveView('sessions');
+  };
+
+  useEffect(() => {
+    if (!startupDone) return;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    const drain = () => { void takeOpenRequests().then(reqs => { if (!disposed) openCliTabs(reqs); }); };
+    // A burst of launches (twenty consoles) becomes one update.
+    const nudge = debounce(drain, 60);
+    void listenOpenRequests(nudge).then(u => {
+      if (disposed) { u?.(); return; }
+      unlisten = u;
+      // Anything queued before this page listened: the first launch's own
+      // console, and launches that arrived while it was loading.
+      drain();
+    });
+    return () => { disposed = true; unlisten?.(); nudge.cancel(); };
+  }, [startupDone]);
 
   const handleCwdChange = (tabId: string, cwd: string) => {
     setTabCwds(prev => (prev[tabId] === cwd ? prev : { ...prev, [tabId]: cwd }));

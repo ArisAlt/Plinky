@@ -847,3 +847,22 @@ async fn a_session_log_is_on_disk_while_the_session_is_still_running() {
     assert!(registry.log_status("log-live").is_none());
     let _ = registry.close_session("log-live");
 }
+
+/// GNS3 opens consoles as `--telnet host port`: an explicit telnet or raw
+/// target must start Live, or it sits in PreAuth -- skipped by broadcast and
+/// cut off after 8 KiB of output. A saved session still decides by its own
+/// protocol, since plink -loads it.
+#[test]
+fn explicit_telnet_and_raw_targets_start_live_but_ssh_waits_for_auth() {
+    use plinky_core::session::manager::starts_live;
+    use plinky_core::transport::plink::TargetProtocol;
+    assert!(starts_live(None, Some(TargetProtocol::Telnet)));
+    assert!(starts_live(None, Some(TargetProtocol::Raw)));
+    assert!(!starts_live(None, Some(TargetProtocol::Ssh)));
+    assert!(!starts_live(None, None));
+    assert!(starts_live(Some("telnet"), None));
+    assert!(starts_live(Some("serial"), Some(TargetProtocol::Ssh)), "a saved session's protocol wins");
+    assert!(!starts_live(Some("ssh"), Some(TargetProtocol::Telnet)), "a saved SSH session is -loaded as SSH");
+    assert!(!starts_live(Some(""), None), "PuTTY's default protocol is SSH");
+}
+

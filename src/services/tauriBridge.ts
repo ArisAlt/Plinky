@@ -546,6 +546,85 @@ export async function vaultSendSecret(sessionId: string, key: string, field: 'lo
   await invoke('vault_send_secret', { sessionId, key, field });
 }
 
+/** How plink reaches a target that isn't a saved session (T-020). */
+export type TargetProtocol = 'ssh' | 'telnet' | 'raw';
+
+/** A tab's protocol as plink needs it for an explicit target. */
+export function targetProtocolOf(protocol?: string): TargetProtocol | undefined {
+  switch (protocol) {
+    case 'Telnet': return 'telnet';
+    case 'RAW': return 'raw';
+    case 'SSH': return 'ssh';
+    default: return undefined;
+  }
+}
+
+/** A console tab asked for on the command line (GNS3: --telnet host port). */
+export interface OpenRequest {
+  protocol: TargetProtocol;
+  host: string;
+  port: number;
+  title?: string | null;
+  user?: string | null;
+}
+
+/** Console tabs queued by launches of Plinky (the first one's and forwarded ones); drains the queue. */
+export async function takeOpenRequests(): Promise<OpenRequest[]> {
+  if (!isTauriEnvironment()) return [];
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<OpenRequest[]>('take_open_requests');
+  } catch (e) {
+    console.warn('Failed to take open requests:', e);
+    return [];
+  }
+}
+
+/** Called when another launch has queued console tabs. */
+export async function listenOpenRequests(onNudge: () => void): Promise<(() => void) | null> {
+  if (!isTauriEnvironment()) return null;
+  try {
+    const { listen } = await import('@tauri-apps/api/event');
+    return await listen('cli:open', () => onNudge());
+  } catch (e) {
+    console.warn('Failed to listen for cli:open:', e);
+    return null;
+  }
+}
+
+// Sessions started for tabs that aren't on screen yet, by tab id. A tab's
+// view waits for its entry before attaching, so it never starts a second
+// session under the same id.
+const backgroundStarts = new Map<string, Promise<void>>();
+
+/**
+ * Starts a tab's session before its view exists (T-020): only the shown tab
+ * mounts a terminal view, and the view is what used to start the session,
+ * so after GNS3's "open all consoles" only the last console connected. The
+ * session runs detached into scrollback; the tab attaches (and replays it)
+ * when it's first shown.
+ */
+export function startSessionInBackground(tab: {
+  id: string; sessionName: string; hostname?: string; port?: number; username?: string; protocol?: string;
+}): Promise<boolean> {
+  let started = false;
+  const start = (async () => {
+    const r = await startTerminalSession(
+      tab.id, tab.sessionName, false, 120, 32, () => {},
+      tab.hostname, tab.port, tab.username, undefined, targetProtocolOf(tab.protocol),
+    );
+    started = r.started;
+    if (r.started) await detachTerminalSession(tab.id);
+  })().finally(() => backgroundStarts.delete(tab.id));
+  backgroundStarts.set(tab.id, start);
+  return start.then(() => started);
+}
+
+/** The in-flight background start for a tab, if any. */
+export function backgroundStartOf(tabId: string): Promise<void> | undefined {
+  return backgroundStarts.get(tabId);
+}
+
 export async function startTerminalSession(
   sessionId: string,
   sessionName: string,
@@ -556,7 +635,8 @@ export async function startTerminalSession(
   hostname?: string,
   port?: number,
   username?: string,
-  logFileName?: string
+  logFileName?: string,
+  protocol?: TargetProtocol
 ): Promise<{ started: boolean; error?: string }> {
   if (isTauriEnvironment()) {
     try {
@@ -577,6 +657,7 @@ export async function startTerminalSession(
         port,
         username,
         logFileName: logFileName || null,
+        protocol: protocol ?? null,
       });
       return { started: true };
     } catch (e) {

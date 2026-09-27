@@ -1,3 +1,5 @@
+mod cli;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{ipc::{Channel, InvokeResponseBody}, Emitter, Manager, State};
@@ -179,6 +181,8 @@ async fn start_terminal_session(
     port: Option<u16>,
     username: Option<String>,
     log_file_name: Option<String>,
+    // For a target that isn't a saved session: GNS3 consoles are telnet.
+    protocol: Option<plinky_core::transport::plink::TargetProtocol>,
 ) -> Result<(), String> {
     let putty_log = if is_local || log_file_name.as_deref().is_some_and(|n| !n.is_empty()) {
         None
@@ -189,7 +193,7 @@ async fn start_terminal_session(
     };
     spawn_terminal_session(
         &registry, &vault_state, session_id.clone(), session_name, is_local, cols, rows, on_data,
-        hostname, port, username, log_file_name,
+        hostname, port, username, log_file_name, protocol,
     )
     .await?;
     if let Some((path, mode)) = putty_log {
@@ -217,6 +221,7 @@ async fn spawn_terminal_session(
     port: Option<u16>,
     username: Option<String>,
     log_file_name: Option<String>,
+    protocol: Option<plinky_core::transport::plink::TargetProtocol>,
 ) -> Result<(), String> {
     let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
     forward_output(rx, on_data);
@@ -253,7 +258,7 @@ async fn spawn_terminal_session(
         let is_ssh = saved
             .as_ref()
             .map(|s| s.protocol.is_empty() || s.protocol.eq_ignore_ascii_case("ssh"))
-            .unwrap_or(true);
+            .unwrap_or(protocol.unwrap_or_default() == plinky_core::transport::plink::TargetProtocol::Ssh);
         let has_username = match &saved {
             Some(s) => !s.user_name.is_empty(),
             None => username.as_deref().is_some_and(|u| !u.is_empty()),
@@ -296,6 +301,7 @@ async fn spawn_terminal_session(
                 hostname: h,
                 port: port.unwrap_or(22),
                 username,
+                protocol: protocol.unwrap_or_default(),
             });
         registry
             .create_plink_session_with_login(&session_id, &session_name, explicit_target, login, log_file_name, cols, rows, tx)
@@ -721,6 +727,7 @@ async fn sftp_target(
             hostname: h,
             port: port.unwrap_or(22),
             username,
+            protocol: Default::default(), // SFTP is SSH
         });
     (target, vault_pwd, locked)
 }
@@ -1277,6 +1284,18 @@ fn copy_dir_all(from: &std::path::Path, to: &std::path::Path) -> std::io::Result
     Ok(())
 }
 
+/// Console tabs waiting to be opened (T-020): the first launch's own
+/// arguments, then whatever later launches forward. Kept here until the
+/// page takes them, rather than sent in an event: GNS3's "open all
+/// consoles" starts twenty launches within milliseconds, and the ones that
+/// arrive while the page is still loading would reach no listener.
+struct OpenRequests(std::sync::Mutex<Vec<cli::OpenRequest>>);
+
+#[tauri::command]
+fn take_open_requests(state: State<OpenRequests>) -> Vec<cli::OpenRequest> {
+    std::mem::take(&mut *state.0.lock().unwrap())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -1311,9 +1330,28 @@ pub fn run() {
         }
     }
 
+    let startup_requests = cli::parse_args(&std::env::args().collect::<Vec<_>>());
+
     tauri::Builder::default()
+        // First: a second launch (GNS3 runs the console command once per
+        // device) hands its arguments to this window as new tabs and exits,
+        // instead of opening another Plinky.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let requests = cli::parse_args(&argv);
+            if !requests.is_empty() {
+                app.state::<OpenRequests>().0.lock().unwrap().extend(requests);
+                // Only a nudge: the page takes the queue when it hears it,
+                // and on its own once it is ready.
+                let _ = app.emit("cli:open", ());
+            }
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(OpenRequests(std::sync::Mutex::new(startup_requests)))
         .manage(registry)
         .manage(VaultState::new())
         .manage(PasteJobs::default())
@@ -1334,6 +1372,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            take_open_requests,
             paste_paced,
             cancel_paste,
             send_break,

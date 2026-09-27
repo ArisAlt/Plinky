@@ -45,6 +45,9 @@ connection itself, to PuTTY.
 - **Work with network gear.** Serial console sessions with USB adapter
   detection and Send Break, and slow line-by-line paste for devices that drop
   characters.
+- **Use it as GNS3's console.** Set GNS3's custom console command to
+  `plinky --telnet {host} {port} --title "{name}"` and every device opens as
+  a tab in one Plinky window.
 - **Save time.** Reusable command snippets with fill-in values, highlighted IPs
   and keywords, clickable links, and point-and-click cursor editing.
 - **Keep a record.** Log any session straight to a file of your choice as it

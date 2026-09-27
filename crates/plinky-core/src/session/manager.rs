@@ -36,6 +36,19 @@ pub struct PromptEvent {
     pub prompt: HostKeyPromptInfo,
 }
 
+/// Whether a plink session skips the SSH pre-auth gate: a saved session by
+/// its own protocol, else an explicit target by its protocol. Only SSH has
+/// a host-key prompt and an "Access granted" marker to wait for.
+pub fn starts_live(
+    saved_protocol: Option<&str>,
+    explicit: Option<crate::transport::plink::TargetProtocol>,
+) -> bool {
+    match saved_protocol {
+        Some(p) => !p.is_empty() && !p.eq_ignore_ascii_case("ssh"),
+        None => explicit.is_some_and(|p| p != crate::transport::plink::TargetProtocol::Ssh),
+    }
+}
+
 pub struct ActiveSession {
     pub id: String,
     pub name: String,
@@ -342,6 +355,7 @@ impl SessionRegistry {
     ) -> Result<()> {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let flow = Arc::new(FlowGate::new(OUTPUT_WINDOW));
+        let explicit_target_protocol = explicit_target.as_ref().map(|t| t.protocol);
         let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx, flow.clone())?;
         let log_file = log_file_name
             .as_deref()
@@ -487,13 +501,14 @@ impl SessionRegistry {
         // never prints the marker, so they sat in PreAuth forever: skipped by
         // sync broadcast, and force-closed once device output passed the
         // 8 KiB cap (one `show running-config`). Every byte on those is device
-        // output from the start, so they begin Live. Explicit targets (Quick
-        // Connect) are always SSH, so only a saved non-SSH session qualifies.
+        // output from the start, so they begin Live. A saved session decides
+        // by its own protocol (plink -loads it); otherwise the explicit
+        // target does -- GNS3 opens device consoles as `--telnet host port`.
         let mut state_machine = PreAuthStateMachine::new();
-        let saved_protocol = putty_compat::sessions::read_session(session_name)
-            .map(|s| s.protocol)
-            .unwrap_or_default();
-        if !saved_protocol.is_empty() && !saved_protocol.eq_ignore_ascii_case("ssh") {
+        if starts_live(
+            putty_compat::sessions::read_session(session_name).ok().map(|s| s.protocol).as_deref(),
+            explicit_target_protocol,
+        ) {
             state_machine.force_live();
         }
 

@@ -13,6 +13,18 @@ pub struct PuttyInfo {
     pub reason: Option<String>,
 }
 
+/// The protocol of an explicit target. GNS3 opens device consoles as
+/// `--telnet host port` (a console server's port), so a target isn't
+/// always SSH.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TargetProtocol {
+    #[default]
+    Ssh,
+    Telnet,
+    Raw,
+}
+
 /// Direct connection target used when a session name doesn't resolve to a
 /// persisted PuTTY session file (see spawn_session).
 #[derive(Debug, Clone)]
@@ -20,6 +32,7 @@ pub struct ExplicitTarget {
     pub hostname: String,
     pub port: u16,
     pub username: Option<String>,
+    pub protocol: TargetProtocol,
 }
 
 /// A vault password for plink to log in with by itself (SSH only).
@@ -195,13 +208,30 @@ impl PlinkTransport {
             // Note: -agent is intentionally omitted per Claude architecture review:
             // -load already applies the session's own AgentFwd configuration.
         } else if let Some(target) = explicit_target {
-            if let Some(user) = target.username.as_deref().filter(|u| !u.is_empty()) {
-                args.push(format!("{user}@{}", target.hostname));
-            } else {
-                args.push(target.hostname.clone());
+            match target.protocol {
+                TargetProtocol::Ssh => {
+                    if let Some(user) = target.username.as_deref().filter(|u| !u.is_empty()) {
+                        args.push(format!("{user}@{}", target.hostname));
+                    } else {
+                        args.push(target.hostname.clone());
+                    }
+                }
+                // No user@ prefix: a console asks for its own login, if any.
+                TargetProtocol::Telnet => {
+                    args.push("-telnet".to_string());
+                    args.push(target.hostname.clone());
+                }
+                TargetProtocol::Raw => {
+                    args.push("-raw".to_string());
+                    args.push(target.hostname.clone());
+                }
             }
             args.push("-P".to_string());
             args.push(target.port.to_string());
+            // -t is an SSH option (a remote pty); telnet and raw have none.
+            if target.protocol != TargetProtocol::Ssh {
+                return args;
+            }
         } else {
             // No saved session and nothing explicit to connect with -- fall
             // back to -load so plink's own "no hostname specified" error
@@ -355,6 +385,7 @@ mod tests {
             hostname: "203.0.113.5".to_string(),
             port: 2222,
             username: Some("someone".to_string()),
+            protocol: TargetProtocol::Ssh,
         };
         let args = PlinkTransport::build_args("Saved Server", true, Some(&target));
         assert_eq!(args, vec!["-load", "Saved Server", "-t"]);
@@ -370,6 +401,7 @@ mod tests {
             hostname: "192.0.2.10".to_string(),
             port: 22,
             username: Some("ops".to_string()),
+            protocol: TargetProtocol::Ssh,
         };
         let args = PlinkTransport::build_args("Quick (192.0.2.10:22)", false, Some(&target));
         assert_eq!(args, vec!["ops@192.0.2.10", "-P", "22", "-t"]);
@@ -381,6 +413,7 @@ mod tests {
             hostname: "192.0.2.10".to_string(),
             port: 2200,
             username: None,
+            protocol: TargetProtocol::Ssh,
         };
         let args = PlinkTransport::build_args("Quick (192.0.2.10:2200)", false, Some(&target));
         assert_eq!(args, vec!["192.0.2.10", "-P", "2200", "-t"]);
@@ -392,6 +425,7 @@ mod tests {
             hostname: "192.0.2.10".to_string(),
             port: 22,
             username: Some(String::new()),
+            protocol: TargetProtocol::Ssh,
         };
         let args = PlinkTransport::build_args("Quick (192.0.2.10:22)", false, Some(&target));
         assert_eq!(args, vec!["192.0.2.10", "-P", "22", "-t"]);
@@ -404,5 +438,38 @@ mod tests {
         // FATAL ERROR handling instead of hanging with no target.
         let args = PlinkTransport::build_args("Orphaned Name", false, None);
         assert_eq!(args, vec!["-load", "Orphaned Name", "-t"]);
+    }
+
+    #[test]
+    fn telnet_target_uses_minus_telnet_and_no_pty_flag() {
+        // GNS3: `plinky --telnet 127.0.0.1 5000`. -t is SSH-only, and a
+        // user@ prefix means nothing to a console port.
+        let target = ExplicitTarget {
+            hostname: "127.0.0.1".to_string(),
+            port: 5000,
+            username: Some("ignored".to_string()),
+            protocol: TargetProtocol::Telnet,
+        };
+        let args = PlinkTransport::build_args("R1", false, Some(&target));
+        assert_eq!(args, vec!["-telnet", "127.0.0.1", "-P", "5000"]);
+    }
+
+    #[test]
+    fn raw_target_uses_minus_raw() {
+        let target = ExplicitTarget {
+            hostname: "192.0.2.9".to_string(),
+            port: 2001,
+            username: None,
+            protocol: TargetProtocol::Raw,
+        };
+        let args = PlinkTransport::build_args("console", false, Some(&target));
+        assert_eq!(args, vec!["-raw", "192.0.2.9", "-P", "2001"]);
+    }
+
+    #[test]
+    fn target_protocol_reads_lowercase_names() {
+        let p: TargetProtocol = serde_json::from_str("\"telnet\"").unwrap();
+        assert_eq!(p, TargetProtocol::Telnet);
+        assert_eq!(TargetProtocol::default(), TargetProtocol::Ssh);
     }
 }

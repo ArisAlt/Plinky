@@ -622,6 +622,7 @@ mod tests {
             hostname: "192.168.1.100".to_string(),
             port: 2222,
             username: Some("root".to_string()),
+            protocol: Default::default(),
         };
         let args = PsftpClient::build_psftp_args("unsaved_quick", false, Some(&target), None);
         assert_eq!(args, vec!["-batch", "root@192.168.1.100", "-P", "2222"]);

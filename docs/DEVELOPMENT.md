@@ -144,6 +144,26 @@ cargo test --workspace
 cargo deny check
 ```
 
+### Command Line (GNS3 consoles)
+Plinky opens console tabs from its launch arguments. A second launch hands
+them to the window that is already running (single instance) and exits.
+
+```bash
+plinky --telnet HOST PORT [--title NAME]   # a telnet console, e.g. a GNS3 device
+plinky --raw HOST PORT [--title NAME]      # a raw TCP console
+plinky --ssh [USER@]HOST[:PORT] [--title NAME]
+```
+
+- Several targets may be given at once; `--title` applies to the target
+  before it (or, first on the line, to the next one).
+- IPv6 hosts may be bracketed: `--telnet [::1] 5000`, `--ssh ops@[2001:db8::1]:22`.
+- Arguments are untrusted: hosts or users starting with `-` are refused (plink
+  would read them as options), titles lose control characters and are capped
+  at 80 characters, anything unrecognised is ignored.
+- GNS3 (Preferences → General → Console applications → Custom):
+  Linux `plinky --telnet {host} {port} --title "{name}"`,
+  Windows `"C:\Program Files\Plinky\Plinky.exe" --telnet %h %p --title "%d"`.
+
 ### Local Packaging & AppImage Notice
 ```bash
 # Development desktop launch

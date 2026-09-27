@@ -8,6 +8,8 @@ export interface SavedTab {
   hostname: string;
   port: number;
   username?: string;
+  /** For a tab that isn't a saved session: a GNS3 console is telnet. */
+  protocol?: string;
 }
 
 export interface LayoutState {
@@ -42,6 +44,7 @@ export function saveLayout(
         hostname: t.hostname,
         port: t.port,
         username: t.username,
+        protocol: t.protocol,
       })),
       timestamp: Date.now(),
     };
