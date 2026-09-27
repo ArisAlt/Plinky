@@ -33,6 +33,36 @@ import {
 
 export const App: React.FC = () => {
   const [sessions, setSessions] = useState<PuttySession[]>([]);
+  // The session tree's width, dragged by its right edge and remembered. It
+  // was a fixed 256 px: long session names had nowhere to go.
+  const SIDEBAR_MIN = 200;
+  const SIDEBAR_MAX = 480;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('plinky_sidebar_width'));
+      if (saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX) return saved;
+    } catch { /* storage unavailable: default width */ }
+    return 256;
+  });
+  const startSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    let width = startWidth;
+    const move = (ev: PointerEvent) => {
+      width = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth + ev.clientX - startX));
+      setSidebarWidth(width);
+    };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      try { localStorage.setItem('plinky_sidebar_width', String(width)); } catch { /* not remembered */ }
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  };
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
@@ -381,7 +411,7 @@ export const App: React.FC = () => {
       {/* Main Workspace (Sidebar + Workbench Viewport) */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: PuTTY Session Explorer Sidebar */}
-        <div className="w-64 flex-shrink-0 flex flex-col h-full">
+        <div className="relative flex-shrink-0 flex flex-col h-full" style={{ width: sidebarWidth }}>
           <SessionExplorer
             sessions={sessions}
             tabs={tabs}
@@ -392,6 +422,28 @@ export const App: React.FC = () => {
             onEditSession={handleEditSession}
             onMoveToFolder={handleMoveSessionToFolder}
           />
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize session list"
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={SIDEBAR_MIN}
+            aria-valuemax={SIDEBAR_MAX}
+            tabIndex={0}
+            onPointerDown={startSidebarResize}
+            onDoubleClick={() => { setSidebarWidth(256); try { localStorage.removeItem('plinky_sidebar_width'); } catch { /* ignore */ } }}
+            onKeyDown={(e) => {
+              const step = e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0;
+              if (!step) return;
+              e.preventDefault();
+              const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, sidebarWidth + step));
+              setSidebarWidth(next);
+              try { localStorage.setItem('plinky_sidebar_width', String(next)); } catch { /* not remembered */ }
+            }}
+            className="absolute top-0 -right-1 w-2 h-full cursor-col-resize z-10 group/resize focus:outline-none"
+          >
+            <div className="mx-auto h-full w-px bg-transparent group-hover/resize:bg-sky-500/60 group-focus/resize:bg-sky-500/60 transition-colors" />
+          </div>
         </div>
 
         {/* Center: Main IDE Canvas */}
@@ -547,15 +599,28 @@ export const App: React.FC = () => {
                 {tabs.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
                     <Terminal className="w-8 h-8 text-slate-600" />
-                    <span>No active terminal sessions</span>
-                    <button
-                      onClick={() => {
-                        if (sessions.length > 0) handleConnectSession(sessions[0]);
-                      }}
-                      className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition"
-                    >
-                      Connect to {sessions[0]?.name || 'Server'}
-                    </button>
+                    <span className="text-slate-400">No open terminals</span>
+                    {/* This connected to sessions[0], whichever session loaded
+                        first ("Connect to access-sw-11"): a one-click way to
+                        open the wrong device. It now points at the list. */}
+                    {sessions.length > 0 ? (
+                      <>
+                        <span>Pick a session on the left, or press Ctrl+Shift+O to search.</span>
+                        <button
+                          onClick={() => window.dispatchEvent(new Event('plinky:focus-session-search'))}
+                          className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors"
+                        >
+                          Open a session
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => { setNewSessionFolder(undefined); setIsNewSessionOpen(true); }}
+                        className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors"
+                      >
+                        New session
+                      </button>
+                    )}
                   </div>
                 ) : layoutMode === 'single' ? (
                   <div className="flex-1 relative w-full h-full overflow-hidden">

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { PuttySession, TerminalTab } from '../../types/session';
 import {
   Folder,
+  FolderOpen,
+  ChevronRight,
   FolderInput,
   FolderPlus,
   Terminal,
@@ -10,8 +12,6 @@ import {
   HardDrive,
   Tag,
   Pencil,
-  List,
-  LayoutList,
   Trash2,
   X,
   Lock,
@@ -96,14 +96,102 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [folderError, setFolderError] = useState<string | null>(null);
   const [folderBusy, setFolderBusy] = useState(false);
   const [folderVersion, setFolderVersion] = useState(0);
-  const [density, setDensity] = useState<'compact' | 'comfortable'>(() => {
-    return (localStorage.getItem('plinky_session_tree_density') as 'compact' | 'comfortable') || 'comfortable';
-  });
+  const searchRef = React.useRef<HTMLInputElement>(null);
+  const treeRef = React.useRef<HTMLDivElement>(null);
 
-  const toggleDensity = () => {
-    const next = density === 'comfortable' ? 'compact' : 'comfortable';
-    setDensity(next);
-    localStorage.setItem('plinky_session_tree_density', next);
+  // Ctrl+Shift+O: jump to the session search from anywhere, even a focused
+  // terminal. Bare Ctrl+letters belong to the shell (Ctrl+K kills the line);
+  // Ctrl+Shift is where terminal emulators keep their own shortcuts.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        e.stopPropagation();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    // The empty workspace's "Open a session" button asks for the same.
+    const focusSearch = () => { searchRef.current?.focus(); searchRef.current?.select(); };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('plinky:focus-session-search', focusSearch);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('plinky:focus-session-search', focusSearch);
+    };
+  }, []);
+
+  /** Tree rows and folder headers in the order they are drawn. */
+  const treeItems = (): HTMLElement[] =>
+    Array.from(treeRef.current?.querySelectorAll<HTMLElement>('[data-tree-item]') ?? []);
+
+  const focusItem = (el: HTMLElement | undefined) => {
+    if (!el) return;
+    el.focus();
+    el.scrollIntoView?.({ block: 'nearest' });
+  };
+
+  // Keyboard tree: Up/Down move, Right opens a folder (or steps into it),
+  // Left closes it (or steps out to its parent), Enter connects a session,
+  // F2 edits a session or renames a folder, Home/End jump. The tree was
+  // mouse-only: double-click was the only way to connect.
+  const onTreeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = treeItems();
+    const current = (e.target as HTMLElement).closest<HTMLElement>('[data-tree-item]');
+    if (!current || (e.target as HTMLElement).tagName === 'INPUT') return;
+    const i = items.indexOf(current);
+    const folderPath = current.dataset.folderPath;
+    const sessionName = current.dataset.sessionRow;
+    const session = sessionName !== undefined ? sessions.find(x => x.name === sessionName) : undefined;
+    switch (e.key) {
+      case 'ArrowDown': e.preventDefault(); focusItem(items[i + 1]); break;
+      case 'ArrowUp': e.preventDefault(); focusItem(items[i - 1]); break;
+      case 'Home': e.preventDefault(); focusItem(items[0]); break;
+      case 'End': e.preventDefault(); focusItem(items[items.length - 1]); break;
+      case 'ArrowRight':
+        if (folderPath !== undefined) {
+          e.preventDefault();
+          // While searching, folders are always shown open: just move.
+          if (!searching && collapsedFolders[folderPath]) toggleFolder(folderPath);
+          else focusItem(items[i + 1]);
+        }
+        break;
+      case 'ArrowLeft': {
+        e.preventDefault();
+        if (folderPath !== undefined && !searching && !collapsedFolders[folderPath]) {
+          toggleFolder(folderPath);
+          break;
+        }
+        const parent = folderPath !== undefined
+          ? parentPath(folderPath)
+          : session ? sessionFolder(session) : '';
+        if (parent) focusItem(items.find(el => el.dataset.folderPath === parent));
+        break;
+      }
+      case 'Enter':
+        if (session) { e.preventDefault(); onConnectSession(session, true); }
+        break;
+      case 'ContextMenu':
+      case 'F10': {
+        if (e.key === 'F10' && !e.shiftKey) break;
+        e.preventDefault();
+        const r = current.getBoundingClientRect();
+        const at = { x: r.left + 24, y: r.bottom };
+        if (session) { setFolderMenu(null); setContextMenu({ ...at, session }); }
+        else if (folderPath !== undefined) {
+          const node = findFolderNode(folderPath);
+          if (node) { setContextMenu(null); setFolderMenu({ ...at, node }); }
+        }
+        break;
+      }
+      case 'F2':
+        e.preventDefault();
+        if (session) onEditSession(session);
+        else if (folderPath !== undefined && folderPath !== DEFAULT_FOLDER) {
+          setFolderEdit({ mode: 'rename', path: folderPath, value: lastSegment(folderPath) });
+        }
+        break;
+    }
   };
 
   React.useEffect(() => {
@@ -113,8 +201,17 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       setMoveSubmenuOpen(false);
       setNewFolderInput('');
     };
+    // Escape closes an open menu. It didn't: a folder menu stayed up and a
+    // right-click on a session opened a second menu on top of it.
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleOutsideClick();
+    };
     window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+      window.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   const updateCollapsed = (next: Record<string, boolean>) => {
@@ -133,6 +230,19 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   // names, nested by path.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const tree = React.useMemo(() => buildFolderTree(getUserFolders(), sessions), [sessions, folderVersion]);
+
+  /** The folder node at `path`, for opening its menu from the keyboard. */
+  const findFolderNode = (path: string): FolderNode | undefined => {
+    const walk = (nodes: FolderNode[]): FolderNode | undefined => {
+      for (const n of nodes) {
+        if (n.path === path) return n;
+        const hit = walk(n.children);
+        if (hit) return hit;
+      }
+      return undefined;
+    };
+    return walk(tree);
+  };
   const allFolderPaths = React.useMemo(() => collectFolderPaths(tree), [tree]);
 
   // A collapsed key whose folder is gone would collapse whichever folder
@@ -282,12 +392,41 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     }
   };
 
+  /** Default port per protocol: a row shows the port only when it differs. */
+  const DEFAULT_PORTS: Record<string, number> = { SSH: 22, Telnet: 23, Rlogin: 513 };
+
+  /** The row's second line: where the session goes, in the fewest characters. */
+  const sessionTarget = (session: PuttySession): string => {
+    if (session.protocol === 'Serial') {
+      const line = session.extra?.SerialLine || session.hostname;
+      const speed = session.extra?.SerialSpeed;
+      return line ? (speed ? `${line} @ ${speed}` : line) : 'No serial line set';
+    }
+    if (!session.hostname) return session.name === 'Local Shell' ? 'Local shell' : 'No host set';
+    const def = DEFAULT_PORTS[session.protocol];
+    return session.port && session.port !== def ? `${session.hostname}:${session.port}` : session.hostname;
+  };
+
+  // One dense row (owner decision after the impeccable critique). The two
+  // densities cost either the names ("we...", "ac..." in compact view, so
+  // web-prod-1 and web-prod-2 looked the same) or the list (comfortable
+  // cards fit 6 of 12 sessions in a 900 px window). The name now gets the
+  // width: the host sits under it in a quieter tone, a protocol chip shows
+  // only when it isn't SSH, and the actions float over the row's end on
+  // hover or keyboard focus instead of reserving space.
   const renderSession = (session: PuttySession) => {
     const openTab = tabs.find(t => t.sessionName === session.name);
     const isActiveTab = !!openTab && openTab.id === activeTabId;
-    return density === 'compact' ? (
+    const target = sessionTarget(session);
+    const tags = session.tags && session.tags.length > 0 ? session.tags.join(', ') : '';
+    return (
       <div
         key={session.name}
+        data-session-row={session.name}
+        data-tree-item
+        role="treeitem"
+        tabIndex={-1}
+        aria-label={`${session.name}, ${target}${openTab ? ', open' : ''}`}
         draggable
         onDragStart={(e) => {
           setDragging({ kind: 'session', session });
@@ -302,127 +441,47 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          setFolderMenu(null);
           setContextMenu({ x: e.clientX, y: e.clientY, session });
         }}
-        title={openTab ? 'Double-click, or right-click -> Connect, to open another tab. Drag to move between folders.' : 'Double-click, or right-click -> Connect. Drag to move between folders.'}
-        className={`group flex items-center justify-between px-2 py-1 rounded border cursor-pointer transition select-none text-xs ${
+        className={`group relative flex items-center gap-2 pl-1.5 pr-1.5 py-1 rounded cursor-pointer select-none transition-colors outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
           isActiveTab
-            ? 'bg-sky-500/10 border-sky-500/60'
-            : openTab
-            ? 'bg-plinky-800/50 border-plinky-700 hover:border-sky-500/50'
-            : 'bg-plinky-950/40 hover:bg-plinky-800/80 border-plinky-800/50 hover:border-sky-500/40'
+            ? 'bg-sky-500/15'
+            : 'hover:bg-plinky-800/70'
         }`}
       >
-        <div className="flex items-center space-x-1.5 flex-1 min-w-0">
-          {openTab ? (
+        {/* Status slot: fixed width so names line up whether or not a tab is open. */}
+        <span className="w-1.5 shrink-0 flex justify-center" aria-hidden={!openTab}>
+          {openTab && (
             <span
-              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400' : 'bg-emerald-500/60'}`}
-              title={isActiveTab ? 'Connected -- this is the active tab' : 'Connected -- open in another tab'}
+              className={`h-1.5 w-1.5 rounded-full ${isActiveTab ? 'bg-emerald-400' : 'bg-emerald-500/50'}`}
+              title={isActiveTab ? 'Open in the active tab' : 'Open in another tab'}
             />
-          ) : (
-            <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
           )}
-          <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition">
-            {session.name}
-          </span>
-          {session.extra?.PlinkyVaultKey && (
-            <span title={`Encrypted Vault Credential: ${session.extra.PlinkyVaultKey}`} className="inline-flex items-center">
-              <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-            </span>
-          )}
-          <span className="truncate max-w-[100px] font-mono text-[10px] text-slate-500">
-            {session.hostname
-              ? `${session.hostname}:${session.port}`
-              : session.name === 'Local Shell' ? 'Local' : 'no host'}
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-1 shrink-0 ml-1">
-          {session.protocol === 'SSH' && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenSftp(session);
-              }}
-              title="Open Dual-Pane SFTP"
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-emerald-400 hover:bg-emerald-500/20 transition"
-            >
-              <HardDrive className="w-2.5 h-2.5" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditSession(session);
-            }}
-            title="Edit Session Settings"
-            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-700 transition"
-          >
-            <Pencil className="w-2.5 h-2.5" />
-          </button>
-          {getProtocolBadge(session.protocol)}
-        </div>
-      </div>
-    ) : (
-    <div
-      key={session.name}
-      draggable
-      onDragStart={(e) => {
-        setDragging({ kind: 'session', session });
-        e.dataTransfer.setData('text/plain', session.name);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragEnd={() => {
-        setDragging(null);
-        setDragOverFolder(null);
-      }}
-      onDoubleClick={() => onConnectSession(session, true)}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenu({ x: e.clientX, y: e.clientY, session });
-      }}
-      title={openTab ? 'Double-click, or right-click -> Connect, to open another tab. Drag to move between folders.' : 'Double-click, or right-click -> Connect. Drag to move between folders.'}
-      className={`group flex flex-col p-2 rounded border cursor-pointer transition select-none shadow-xs ${
-        isActiveTab
-          ? 'bg-sky-500/10 border-sky-500/60'
-          : openTab
-          ? 'bg-plinky-800/50 border-plinky-700 hover:border-sky-500/50'
-          : 'bg-plinky-950/60 hover:bg-plinky-800/90 border-plinky-800/70 hover:border-sky-500/50'
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-1.5 flex-1 min-w-0">
-          {openTab ? (
-            <span
-              className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActiveTab ? 'bg-emerald-400' : 'bg-emerald-500/60'}`}
-              title={isActiveTab ? 'Connected -- this is the active tab' : 'Connected -- open in another tab'}
-            />
-          ) : (
-            <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-          )}
-          <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition">
-            {session.name}
-          </span>
-          {session.extra?.PlinkyVaultKey && (
-            <span title={`Encrypted Vault Credential: ${session.extra.PlinkyVaultKey}`} className="inline-flex items-center">
-              <Lock className="w-3 h-3 text-amber-400 shrink-0" />
-            </span>
-          )}
-        </div>
-        {getProtocolBadge(session.protocol)}
-      </div>
-
-      <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-400">
-        <span className="truncate max-w-[120px] font-mono text-[10px]">
-          {session.hostname
-            ? `${session.hostname}:${session.port}`
-            : session.name === 'Local Shell' ? 'Local Shell' : 'No host set'}
         </span>
 
-        <div className="flex items-center space-x-1">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className={`text-xs font-medium truncate ${isActiveTab ? 'text-sky-100' : 'text-slate-100'}`}>
+              {session.name}
+            </span>
+            {session.extra?.PlinkyVaultKey && (
+              <Lock
+                className="w-2.5 h-2.5 text-amber-400/90 shrink-0"
+                aria-label="Password saved in the vault"
+              />
+            )}
+          </div>
+          <div className="font-mono text-[10.5px] leading-tight text-slate-500 truncate">
+            {target}
+            {tags && <span className="font-sans text-slate-600"> · {tags}</span>}
+          </div>
+        </div>
+
+        {session.protocol !== 'SSH' && getProtocolBadge(session.protocol)}
+
+        {/* Actions: over the row's end, visible on hover or keyboard focus. */}
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex group-focus-within:flex items-center gap-0.5 pl-3 bg-gradient-to-l from-plinky-800 via-plinky-800 to-transparent rounded-r">
           {session.protocol === 'SSH' && (
             <button
               type="button"
@@ -430,8 +489,8 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                 e.stopPropagation();
                 onOpenSftp(session);
               }}
-              title="Open Dual-Pane SFTP"
-              className="p-1 rounded bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 transition"
+              aria-label={`Open SFTP for ${session.name}`}
+              className="p-1 rounded text-emerald-400 hover:bg-emerald-500/20"
             >
               <HardDrive className="w-3 h-3" />
             </button>
@@ -442,25 +501,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               e.stopPropagation();
               onEditSession(session);
             }}
-            title="Edit Session Settings"
-            className="p-1 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-400 hover:text-slate-200 border border-plinky-700 transition"
+            aria-label={`Edit ${session.name}`}
+            className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-plinky-700"
           >
             <Pencil className="w-3 h-3" />
           </button>
         </div>
       </div>
-
-      {session.tags && session.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {session.tags.map(t => (
-            <span key={t} className="flex items-center space-x-0.5 text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400">
-              <Tag className="w-2 h-2 text-slate-500" />
-              <span>{t}</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
     );
   };
 
@@ -525,14 +572,24 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             {...dropHandlers(node.path)}
             aria-expanded={!isCollapsed}
             data-folder-path={node.path}
-            title={dragging ? `Drop to move into "${displayPath(node.path)}"` : 'Right-click for folder actions. Drag to move.'}
-            className={`w-full flex items-center space-x-1.5 px-1 py-1 rounded text-xs font-medium transition text-left ${
+            data-tree-item
+            role="treeitem"
+            tabIndex={-1}
+            className={`w-full flex items-center space-x-1.5 px-1 py-1 rounded text-xs font-medium transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
               dragOverFolder === node.path
                 ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/50'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/50'
             }`}
           >
-            <Folder className={`w-3.5 h-3.5 shrink-0 transition-transform ${isCollapsed ? '-rotate-90 text-slate-500' : 'text-sky-400'}`} />
+            {/* The chevron turns; the folder only opens or closes. Rotating
+                the folder itself made a collapsed one read as a file. */}
+            <ChevronRight
+              aria-hidden="true"
+              className={`w-3 h-3 shrink-0 text-slate-500 transition-transform duration-150 ${isCollapsed ? '' : 'rotate-90'}`}
+            />
+            {isCollapsed
+              ? <Folder aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-500" />
+              : <FolderOpen aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-sky-400" />}
             <span className="flex-1 truncate">{node.name}</span>
             <span className="text-[10px] text-slate-500 font-mono">({total})</span>
             {total === 0 && !isDefault && (
@@ -551,7 +608,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         )}
 
         {!isCollapsed && (
-          <div className={`ml-3 pl-2 border-l border-plinky-800/80 ${density === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}`}>
+          <div className={`ml-3 pl-2 border-l border-plinky-800/80 space-y-px`}>
             {addingSub && renderFolderEditor(folderEdit)}
             {node.children.map(renderFolder)}
             {isEmpty && !addingSub ? (
@@ -594,19 +651,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       <div className="px-3 py-2.5 border-b border-plinky-800 flex items-center justify-between gap-1">
         <div className="flex items-center space-x-1.5 min-w-0">
           <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          {/* "PuTTY Sessions" never fit the 256 px sidebar: it showed as
+              "PUTTY SESS...". The whole app is about PuTTY sessions. */}
           <span className="font-semibold text-xs tracking-wider uppercase text-slate-300 truncate whitespace-nowrap">
-            PuTTY Sessions
+            Sessions
           </span>
         </div>
         <div className="flex items-center space-x-1 shrink-0">
-          <button
-            onClick={toggleDensity}
-            title={density === 'compact' ? 'Switch to Comfortable View (Cards)' : 'Switch to Compact View (List)'}
-            aria-label="Toggle view density"
-            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition shrink-0"
-          >
-            {density === 'compact' ? <LayoutList className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
-          </button>
           <button
             onClick={() => setIsAddingFolder(v => !v)}
             title="Create New Folder"
@@ -674,9 +725,25 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search sessions or tags..."
+            ref={searchRef}
+            placeholder="Search sessions or tags"
+            aria-label="Search sessions"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter opens the first match; Down steps into the tree.
+              if (e.key === 'Enter') {
+                const first = treeItems().find(el => el.dataset.sessionRow !== undefined);
+                const match = first && sessions.find(x => x.name === first.dataset.sessionRow);
+                if (match) { e.preventDefault(); onConnectSession(match, true); }
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                focusItem(treeItems()[0]);
+              } else if (e.key === 'Escape' && searchQuery) {
+                e.preventDefault();
+                setSearchQuery('');
+              }
+            }}
             className="w-full pl-8 pr-3 py-1 bg-plinky-950 border border-plinky-700/80 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
           />
         </div>
@@ -692,7 +759,16 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       )}
 
       {/* Session Tree */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+      <div
+        ref={treeRef}
+        role="tree"
+        aria-label="Sessions"
+        tabIndex={0}
+        onKeyDown={onTreeKeyDown}
+        // Tabbing in lands on the tree; hand focus to its first item.
+        onFocus={(e) => { if (e.target === e.currentTarget) focusItem(treeItems()[0]); }}
+        className="flex-1 overflow-y-auto p-2 space-y-3 outline-none"
+      >
         {visibleTree.map(renderFolder)}
 
         {dragging?.kind === 'folder' && parentPath(dragging.path) !== '' && (
@@ -730,12 +806,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       </div>
 
       {/* Quick Status Bar */}
-      <div className="p-2 border-t border-plinky-800 bg-plinky-950/50 flex items-center justify-between text-[11px] text-slate-400">
-        <span>{sessions.length} PuTTY sessions</span>
-        <span className="text-emerald-400 flex items-center space-x-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          <span>Native PuTTY</span>
-        </span>
+      {/* The footer's green "Native PuTTY" dot never changed: a status light
+          with no status. The count stays; the search shortcut replaces it. */}
+      <div className="px-2 py-1.5 border-t border-plinky-800 bg-plinky-950/50 flex items-center justify-between text-[11px] text-slate-500">
+        <span>{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}</span>
+        <kbd className="font-mono text-[10px] text-slate-500">Ctrl+Shift+O</kbd>
       </div>
 
       {/* Folder Context Menu */}
@@ -869,6 +944,8 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       {/* Custom Context Menu */}
       {contextMenu && (
         <div
+          role="menu"
+          aria-label={`Session ${contextMenu.session.name}`}
           style={{ 
             position: 'fixed', 
             left: Math.min(contextMenu.x, window.innerWidth - 180), 

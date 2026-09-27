@@ -69,7 +69,7 @@ describe('SessionExplorer Component', () => {
       />
     );
 
-    const searchInput = screen.getByPlaceholderText('Search sessions or tags...');
+    const searchInput = screen.getByLabelText('Search sessions');
     fireEvent.change(searchInput, { target: { value: 'Prod' } });
 
     expect(screen.getByText('Prod-WebServer')).toBeDefined();
@@ -98,7 +98,7 @@ describe('SessionExplorer Component', () => {
 
     // 2. Single click on a session card does NOT trigger connect (prevents accidental connects)
     const firstSessionText = screen.getByText('Default Settings');
-    const firstCard = firstSessionText.closest('div[class*="group flex flex-col"]');
+    const firstCard = firstSessionText.closest('[data-session-row]');
     expect(firstCard).not.toBeNull();
     if (firstCard) {
       fireEvent.click(firstCard);
@@ -107,7 +107,7 @@ describe('SessionExplorer Component', () => {
 
     // 3. Double click on a session card connects it (forceNew = true)
     const secondSessionText = screen.getByText('Prod-WebServer');
-    const secondCard = secondSessionText.closest('div[class*="group flex flex-col"]');
+    const secondCard = secondSessionText.closest('[data-session-row]');
     expect(secondCard).not.toBeNull();
     if (secondCard) {
       fireEvent.doubleClick(secondCard);
@@ -124,13 +124,19 @@ describe('SessionExplorer Component', () => {
     }
   });
 
-  it('toggles between comfortable cards and compact list density, persisting to localStorage', () => {
-    localStorage.clear();
+  // Impeccable critique, owner decision: one dense row. Compact view cut
+  // names to "we..." (web-prod-1 and web-prod-2 looked the same); the card
+  // view fit 6 of 12 sessions. The row keeps the name whole, puts the host
+  // under it, and shows a protocol chip only when it isn't SSH.
+  it('shows each session as one row: full name, host underneath, no SSH chip', () => {
     const onConnect = vi.fn();
-
+    const serial: PuttySession = {
+      name: 'console-sw-lab', protocol: 'Serial', hostname: '', port: 0,
+      extra: { SerialLine: '/dev/ttyUSB0', SerialSpeed: '9600' },
+    };
     render(
       <SessionExplorer
-        sessions={mockSessions}
+        sessions={[...mockSessions, serial]}
         tabs={[]}
         activeTabId={null}
         onConnectSession={onConnect}
@@ -141,28 +147,20 @@ describe('SessionExplorer Component', () => {
       />
     );
 
-    // Initial state: comfortable cards
-    expect(screen.getByText('Default Settings').closest('div[class*="group flex flex-col"]')).not.toBeNull();
+    // Default port hidden, a non-default one shown; tags follow the host.
+    expect(screen.getByText('localhost')).toBeDefined();
+    expect(screen.getByText('192.168.1.100:2222')).toBeDefined();
+    expect(screen.getByText(/web, frontend/)).toBeDefined();
+    // A serial row says which line and speed; only non-SSH rows get a chip.
+    expect(screen.getByText('/dev/ttyUSB0 @ 9600')).toBeDefined();
+    expect(screen.queryAllByText('SSH')).toHaveLength(0);
+    expect(screen.getAllByText('COM').length).toBeGreaterThan(0);
+    // There is no density toggle any more.
+    expect(screen.queryByLabelText('Toggle view density')).toBeNull();
 
-    // Click density toggle button
-    const toggleBtn = screen.getByLabelText('Toggle view density');
-    fireEvent.click(toggleBtn);
-
-    // Switched to compact mode: should have single-line item (flex items-center)
-    expect(localStorage.getItem('plinky_session_tree_density')).toBe('compact');
-    const compactItem = screen.getByText('Default Settings').closest('div[class*="group flex items-center"]');
-    expect(compactItem).not.toBeNull();
-
-    // Double-click works in compact mode too
-    if (compactItem) {
-      fireEvent.doubleClick(compactItem);
-      expect(onConnect).toHaveBeenCalledWith(mockSessions[0], true);
-    }
-
-    // Click toggle button again: switches back to comfortable
-    fireEvent.click(toggleBtn);
-    expect(localStorage.getItem('plinky_session_tree_density')).toBe('comfortable');
-    expect(screen.getByText('Default Settings').closest('div[class*="group flex flex-col"]')).not.toBeNull();
+    const row = screen.getByText('Prod-WebServer').closest('[data-session-row]') as HTMLElement;
+    fireEvent.doubleClick(row);
+    expect(onConnect).toHaveBeenCalledWith(mockSessions[1], true);
   });
 });
 

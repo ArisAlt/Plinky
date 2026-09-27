@@ -194,4 +194,66 @@ describe('SessionExplorer nested folders', () => {
       ['site1-jump', 'Home/Site 1'],
     ]);
   });
+
+  // Impeccable critique: the tree was mouse-only; double-click was the only
+  // way to connect.
+  describe('keyboard', () => {
+    const row = (name: string) => document.querySelector(`[data-session-row="${name}"]`) as HTMLElement;
+
+    it('moves with the arrows, connects with Enter, edits with F2', () => {
+      const props = renderExplorer();
+      folderHeader('Corp 1/Site 1/Site 1 Production').focus();
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(row('db-prod'));
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(row('web-prod'));
+      fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+      expect(props.onConnectSession).toHaveBeenCalledWith(sessions[1], true);
+      fireEvent.keyDown(document.activeElement!, { key: 'F2' });
+      expect(props.onEditSession).toHaveBeenCalledWith(sessions[1]);
+    });
+
+    it('Left closes a folder, and from a session steps out to its folder', () => {
+      renderExplorer();
+      row('db-prod').focus();
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' });
+      const production = folderHeader('Corp 1/Site 1/Site 1 Production');
+      expect(document.activeElement).toBe(production);
+      fireEvent.keyDown(production, { key: 'ArrowLeft' });
+      expect(production.getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelector('[data-session-row="db-prod"]')).toBeNull();
+      fireEvent.keyDown(folderHeader('Corp 1/Site 1/Site 1 Production'), { key: 'ArrowRight' });
+      expect(folderHeader('Corp 1/Site 1/Site 1 Production').getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('while searching, Left steps out to the parent folder (folders stay open)', () => {
+      renderExplorer();
+      fireEvent.change(screen.getByLabelText('Search sessions'), { target: { value: 'prod' } });
+      const site1 = folderHeader('Corp 1/Site 1');
+      site1.focus();
+      fireEvent.keyDown(site1, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(folderHeader('Corp 1'));
+    });
+
+    it('Enter in the search box opens the first match', () => {
+      const props = renderExplorer();
+      const search = screen.getByLabelText('Search sessions');
+      fireEvent.change(search, { target: { value: 'laptop' } });
+      fireEvent.keyDown(search, { key: 'Enter' });
+      expect(props.onConnectSession).toHaveBeenCalledWith(sessions[3], true);
+    });
+  });
+
+  // A folder menu stayed open (Escape did nothing) and a right-click on a
+  // session opened a second menu on top of it.
+  it('shows one menu at a time, and Escape closes it', () => {
+    renderExplorer();
+    fireEvent.contextMenu(folderHeader('Corp 1'));
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
+    fireEvent.contextMenu(document.querySelector('[data-session-row="laptop"]')!);
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
+    expect(screen.getByRole('menu').getAttribute('aria-label')).toBe('Session laptop');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryAllByRole('menu')).toHaveLength(0);
+  });
 });
