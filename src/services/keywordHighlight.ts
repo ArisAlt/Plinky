@@ -1,4 +1,4 @@
-import type { Terminal, IDisposable, IMarker } from '@xterm/xterm';
+import type { Terminal, IDisposable, IMarker, ITheme } from '@xterm/xterm';
 
 /**
  * Keyword highlighting for network-device output (T-017): interface
@@ -81,8 +81,39 @@ export class KeywordHighlighter {
   private nextLine = 0;
   private enabled: boolean;
 
+  /** Rule colour -> the scheme's own colour for it. The rules name fixed
+   *  colours; drawn as they are, amber #fbbf24 and cyan #22d3ee were
+   *  unreadable on a light scheme and clashed with every other one. */
+  private colourMap: Record<string, string> = {};
+
   constructor(private term: Terminal, enabled = true) {
     this.enabled = enabled;
+  }
+
+  /** Takes the scheme's ANSI colours: the bright ones on a dark scheme,
+   *  the normal ones on a light scheme, where bright ones are too pale. */
+  setTheme(theme: ITheme, light = false) {
+    const pick = (normal?: string, bright?: string) => (light ? normal : bright ?? normal);
+    const m: Record<string, string | undefined> = {
+      [RED]: pick(theme.red, theme.brightRed),
+      [AMBER]: pick(theme.yellow, theme.brightYellow),
+      [GREEN]: pick(theme.green, theme.brightGreen),
+      [CYAN]: pick(theme.cyan, theme.brightCyan),
+      [VIOLET]: pick(theme.magenta, theme.brightMagenta),
+    };
+    this.colourMap = Object.fromEntries(Object.entries(m).filter(([, v]) => !!v)) as Record<string, string>;
+    // Highlights already drawn keep the old scheme's colours (cyan IPs on a
+    // white terminal): redraw what is on screen.
+    if (this.enabled && this.items.length > 0) {
+      this.clear();
+      const buf = this.term.buffer.active;
+      this.nextLine = Math.max(0, buf.baseY + buf.cursorY - MAX_LINES_PER_SCAN);
+      this.scan();
+    }
+  }
+
+  colourFor(ruleColour: string): string {
+    return this.colourMap[ruleColour] ?? ruleColour;
   }
 
   get count(): number {
@@ -130,7 +161,7 @@ export class KeywordHighlighter {
           marker,
           x: h.start,
           width: h.end - h.start,
-          foregroundColor: h.color,
+          foregroundColor: this.colourFor(h.color),
           layer: 'top',
         });
         if (deco) this.items.push({ marker, deco });

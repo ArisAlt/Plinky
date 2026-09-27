@@ -1,45 +1,51 @@
 import React from 'react';
 import { TerminalTab } from '../../types/session';
-import { Radio, ShieldCheck, Terminal, Wifi } from 'lucide-react';
+import { Radio, ShieldCheck, Terminal } from 'lucide-react';
 
 interface StatusBarProps {
   tabs: TerminalTab[];
   activeTabId: string | null;
+  broadcastOpen?: boolean;
+  onToggleBroadcast?: () => void;
 }
 
-export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
+const CHANNEL_CHIP: Record<'A' | 'B' | 'C' | 'D', string> = {
+  A: 'bg-ch-a/20 text-ch-a border border-ch-a/30',
+  B: 'bg-ch-b/20 text-ch-b border border-ch-b/30',
+  C: 'bg-ch-c/20 text-ch-c border border-ch-c/30',
+  D: 'bg-ch-d/20 text-ch-d border border-ch-d/30',
+};
+
+export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId, broadcastOpen, onToggleBroadcast }) => {
+  const liveCount = tabs.filter(t => t.status === 'live').length;
   const activeTab = tabs.find(t => t.id === activeTabId);
 
-  // Group tabs by channel
+  // Live tabs only: a dead tab still assigned to A counted as a receiver,
+  // though broadcasts reach live sessions only.
   const channelCount = tabs.reduce<Record<string, number>>((acc, t) => {
-    if (t.syncChannel !== 'none') {
+    if (t.syncChannel !== 'none' && t.status === 'live') {
       acc[t.syncChannel] = (acc[t.syncChannel] || 0) + 1;
     }
     return acc;
   }, {});
 
   return (
-    <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between text-meta text-slate-400 select-none tabular-nums">
-      {/* Left: Active Session & Transport Status */}
-      <div className="flex items-center space-x-3">
-        <div className="flex items-center space-x-1.5 text-slate-400">
-          <Wifi className="w-3 h-3" />
-          <span>Plink Transport: Ready</span>
-        </div>
-
-        <span className="text-plinky-700">|</span>
-
-        <div className="flex items-center space-x-1 text-slate-300">
+    <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between gap-3 text-meta text-slate-400 select-none tabular-nums whitespace-nowrap overflow-hidden">
+      {/* Left. "Plink Transport: Ready" was a fixed string that never
+          changed; "Active Tabs" counted dead tabs. */}
+      <div className="flex items-center space-x-3 min-w-0">
+        <div className="flex items-center space-x-1 text-slate-300 whitespace-nowrap">
           <Terminal className="w-3 h-3 text-sky-400" />
-          <span>Active Tabs: {tabs.length}</span>
+          <span>{tabs.length} {tabs.length === 1 ? 'tab' : 'tabs'}{tabs.length ? ` · ${liveCount} live` : ''}</span>
         </div>
 
         {activeTab && (
           <>
-            <span className="text-plinky-700">|</span>
-            <span className="text-slate-300">
+            <span className="text-plinky-600">|</span>
+            <span className="text-slate-300 truncate min-w-0">
               Current: <strong className="text-sky-300">{activeTab.sessionName}</strong>
-              {activeTab.hostname ? ` (${activeTab.hostname}${activeTab.port ? `:${activeTab.port}` : ''})` : ''}
+              {activeTab.hostname && !activeTab.sessionName.includes(activeTab.hostname)
+                ? ` (${activeTab.hostname}${activeTab.port ? `:${activeTab.port}` : ''})` : ''}
             </span>
           </>
         )}
@@ -48,9 +54,17 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
       {/* Right: Sync Broadcast & Free Type Mode Status */}
       <div className="flex items-center space-x-3">
         {/* Sync Input Channels Breakdown */}
-        <div className="flex items-center space-x-1.5">
-          <Radio className="w-3 h-3 text-sky-400" />
-          <span>Sync:</span>
+        <div className="flex items-center space-x-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            onClick={onToggleBroadcast}
+            aria-pressed={!!broadcastOpen}
+            title="Show or hide the broadcast bar (Ctrl+Shift+B)"
+            className={`flex items-center space-x-1 px-1 rounded hover:bg-plinky-800 ${broadcastOpen ? 'text-sky-300' : 'text-slate-400'}`}
+          >
+            <Radio className="w-3 h-3" />
+            <span>Broadcast</span>
+          </button>
           {(['A', 'B', 'C', 'D'] as const).map(ch => {
             const count = channelCount[ch] || 0;
             return (
@@ -58,13 +72,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
                 key={ch}
                 className={`px-1 py-px rounded text-meta font-bold ${
                   count > 0
-                    ? ch === 'A'
-                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                      : ch === 'B'
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : ch === 'C'
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                    ? CHANNEL_CHIP[ch]
                     : 'text-plinky-muted'
                 }`}
               >
@@ -74,23 +82,13 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
           })}
         </div>
 
-        <span className="text-plinky-700">|</span>
-
-        {/* Free Type Mode Indicator */}
-        <div className="flex items-center space-x-1">
-          <span>FreeType:</span>
-          <span className={`font-semibold ${activeTab?.freeTypeMode ? 'text-sky-400' : 'text-plinky-muted'}`}>
-            {activeTab?.freeTypeMode ? 'ON' : 'OFF'}
-          </span>
-        </div>
-
-        <span className="text-plinky-700">|</span>
+        <span className="text-plinky-600">|</span>
 
         {/* Design doc R3: plink verifies host keys; Plinky never reads them
             out of terminal text. "R3 Safe (Zero Hostkey Scrape)" was that
             shorthand, meaningless to a user. */}
         <div
-          className="flex items-center space-x-1 text-slate-400"
+          className="hidden lg:flex items-center space-x-1 text-slate-400 whitespace-nowrap"
           title="PuTTY verifies every server's host key. Plinky only shows you the fingerprint and passes on your answer."
         >
           <ShieldCheck className="w-3 h-3 text-sky-400" />

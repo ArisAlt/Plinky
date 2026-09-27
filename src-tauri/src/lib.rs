@@ -73,6 +73,33 @@ fn inspect_ppk(path: String) -> Result<PpkHeader, String> {
         .map_err(|e| format!("Failed to parse PPK header for '{path}': {e}"))
 }
 
+/// Forgets one cached host key (PuTTY's sshhostkeys line, or its registry
+/// value on Windows); the next connection to that host asks again.
+#[tauri::command]
+fn remove_putty_hostkey(key_type: String, hostname: String, port: u16) -> Result<bool, String> {
+    putty_compat::remove_host_key(&key_type, &hostname, port)
+        .map_err(|e| format!("Failed to remove the host key for {hostname}:{port}: {e}"))
+}
+
+/// Asks for a .ppk file. The Host Keys screen's "Inspect .ppk" used a
+/// hard-coded example path, so it could never inspect a real key.
+#[tauri::command]
+async fn pick_ppk_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Inspect a PuTTY private key")
+        .add_filter("PuTTY private key", &["ppk"])
+        .pick_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx.await.map_err(|_| "The file dialog closed unexpectedly".to_string())? else {
+        return Ok(None);
+    };
+    Ok(Some(picked.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned()))
+}
+
 /// Largest message sent to the page at once.
 const COALESCE_MAX: usize = 256 * 1024;
 
@@ -1315,6 +1342,8 @@ pub fn run() {
             read_putty_session,
             write_putty_session,
             delete_putty_session,
+            remove_putty_hostkey,
+            pick_ppk_file,
             set_session_folders,
             list_putty_hostkeys,
             inspect_ppk,

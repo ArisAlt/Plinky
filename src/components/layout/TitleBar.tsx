@@ -231,7 +231,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Folder className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Sessions</span>
+            <span className="hidden xl:inline">Sessions</span>
           </button>
 
           <button
@@ -245,7 +245,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <HardDrive className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">SFTP Pane</span>
+            <span className="hidden xl:inline">SFTP Pane</span>
           </button>
 
           <button
@@ -259,7 +259,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Network className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">SSH Tunnels</span>
+            <span className="hidden xl:inline">SSH Tunnels</span>
           </button>
 
           <button
@@ -273,7 +273,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Key className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Host Keys</span>
+            <span className="hidden xl:inline">Host Keys</span>
           </button>
 
           <button
@@ -287,7 +287,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Vault</span>
+            <span className="hidden xl:inline">Vault</span>
           </button>
         </div>
       </div>
@@ -322,7 +322,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
         {/* Dropdown Menu */}
         {isDropdownOpen && combinedSuggestions.length > 0 && (
-          <div className="absolute left-0 right-0 top-full mt-1 bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 z-50 text-xs overflow-hidden max-h-72 flex flex-col">
+          <div className="absolute left-0 right-0 top-full mt-1 bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 z-40 text-xs overflow-hidden max-h-72 flex flex-col">
             <div className="overflow-y-auto flex-1">
               {combinedSuggestions.map((item, idx) => {
                 const isSelected = idx === selectedIndex;

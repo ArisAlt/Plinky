@@ -409,14 +409,29 @@ mod io {
             let Some((key_type, port, host)) = parse_host_key_target(&value_name) else {
                 continue;
             };
-            entries.push(HostKeyEntry {
+            entries.push(HostKeyEntry::new(
                 key_type,
-                host: unescape_registry_key(host),
+                unescape_registry_key(host),
                 port,
-                raw_key: String::from_reg_value(&value).map_err(reg_err(host_keys_key))?,
-            });
+                String::from_reg_value(&value).map_err(reg_err(host_keys_key))?,
+            ));
         }
         Ok(entries)
+    }
+
+    /// Deletes one cached key's value; Ok(false) if it wasn't there.
+    pub fn remove_host_key_in(host_keys_key: &str, key_type: &str, host: &str, port: u16) -> Result<bool> {
+        let key = match hkcu().open_subkey_with_flags(host_keys_key, winreg::enums::KEY_SET_VALUE) {
+            Ok(k) => k,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(reg_err(host_keys_key)(e)),
+        };
+        let name = format!("{key_type}@{port}:{}", escape_registry_key(host));
+        match key.delete_value(&name) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(reg_err(host_keys_key)(e)),
+        }
     }
 }
 

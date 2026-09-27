@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession } from './services/tauriBridge';
+import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT } from './services/tauriBridge';
 import { TitleBar } from './components/layout/TitleBar';
 import { StatusBar } from './components/layout/StatusBar';
 import { SessionExplorer } from './components/sidebar/SessionExplorer';
@@ -298,7 +298,40 @@ export const App: React.FC = () => {
   };
 
   // The top bar's SFTP button follows the active tab, not an old pick.
+  const [broadcastOpen, setBroadcastOpenState] = useState(() => {
+    try { return localStorage.getItem('plinky_broadcast_bar') === '1'; } catch { return false; }
+  });
+  const setBroadcastOpen = (open: boolean) => {
+    setBroadcastOpenState(open);
+    try { localStorage.setItem('plinky_broadcast_bar', open ? '1' : '0'); } catch { /* not remembered */ }
+  };
+  const broadcastOpenRef = useRef(broadcastOpen);
+  broadcastOpenRef.current = broadcastOpen;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && !e.altKey && e.code === 'KeyB') {
+        e.preventDefault();
+        e.stopPropagation();
+        setBroadcastOpen(!broadcastOpenRef.current);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  // "View host keys" after a changed-key warning opens the list at that host.
+  const [hostKeyFilter, setHostKeyFilter] = useState('');
+  useEffect(() => {
+    const on = (e: Event) => {
+      setHostKeyFilter((e as CustomEvent<{ host?: string }>).detail?.host ?? '');
+      setActiveView('keys');
+    };
+    window.addEventListener(SHOW_HOST_KEYS_EVENT, on);
+    return () => window.removeEventListener(SHOW_HOST_KEYS_EVENT, on);
+  }, []);
+
   const handleSetActiveView = (view: typeof activeView) => {
+    if (view === 'keys') setHostKeyFilter('');
     if (view === 'sftp') setSftpPinned(null);
     setActiveView(view);
   };
@@ -368,10 +401,10 @@ export const App: React.FC = () => {
 
   const getChannelColor = (ch: SyncChannel) => {
     switch (ch) {
-      case 'A': return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
-      case 'B': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-      case 'C': return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-      case 'D': return 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+      case 'A': return 'text-ch-a bg-ch-a/10 border-ch-a/30';
+      case 'B': return 'text-ch-b bg-ch-b/10 border-ch-b/30';
+      case 'C': return 'text-ch-c bg-ch-c/10 border-ch-c/30';
+      case 'D': return 'text-ch-d bg-ch-d/10 border-ch-d/30';
       default: return 'text-plinky-muted';
     }
   };
@@ -516,7 +549,7 @@ export const App: React.FC = () => {
                         <button
                           onClick={(e) => handleCloseTab(tab.id, e)}
                           title="Close Tab"
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-plinky-800 text-plinky-muted hover:text-slate-200 transition"
+                          className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 rounded hover:bg-plinky-800 text-plinky-muted hover:text-slate-200 transition"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -555,7 +588,7 @@ export const App: React.FC = () => {
                     if (!menuTab) return null;
                     const item = 'w-full text-left px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 transition';
                     return (
-                      <div className="fixed inset-0 z-50" onMouseDown={() => setTabMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTabMenu(null); }}>
+                      <div className="fixed inset-0 z-40" onMouseDown={() => setTabMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTabMenu(null); }}>
                         <div
                           role="menu"
                           aria-label={`Tab ${menuTab.title}`}
@@ -894,7 +927,7 @@ export const App: React.FC = () => {
           )}
 
           {activeView === 'keys' && (
-            <HostKeyManager onClose={() => setActiveView('sessions')} />
+            <HostKeyManager onClose={() => setActiveView('sessions')} initialFilter={hostKeyFilter} />
           )}
 
           {activeView === 'vault' && (
@@ -903,14 +936,23 @@ export const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Multi-Session Broadcast Sync Bar (WindTerm style) */}
-      <SyncBroadcastBar tabs={tabs} />
+      {/* Broadcast bar: on the terminal view only, and only when a tab has a
+          channel or it was opened (Ctrl+Shift+B, status bar). It used to take
+          a permanent row, on the Vault and Host Keys screens too. */}
+      {activeView === 'sessions' && (broadcastOpen || tabs.some(t => t.syncChannel !== 'none')) && (
+        <SyncBroadcastBar tabs={tabs} />
+      )}
 
       <ConfirmHost />
       <TooltipHost />
 
       {/* Application Bottom Status Bar */}
-      <StatusBar tabs={tabs} activeTabId={activeTabId} />
+      <StatusBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        broadcastOpen={broadcastOpen || tabs.some(t => t.syncChannel !== 'none')}
+        onToggleBroadcast={() => setBroadcastOpen(!broadcastOpen)}
+      />
 
       {/* New Session Modal */}
       <NewSessionModal

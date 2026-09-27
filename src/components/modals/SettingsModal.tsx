@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle } from 'lucide-react';
 import { UI_THEMES, applyUiTheme, useUiTheme } from '../../themes/uiThemes';
-import { TERMINAL_THEMES, setTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
+import { TERMINAL_THEMES, MATCH_INTERFACE, setTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
 import { TERMINAL_FONTS } from '../../themes/fonts';
 import { useUiZoom, zoomIn, zoomOut, zoomReset, UI_ZOOM_MIN, UI_ZOOM_MAX } from '../../services/uiZoom';
 import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
@@ -98,12 +98,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }}
       className="fixed inset-0 bg-plinky-950/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
     >
-      <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-[580px] max-w-full shadow-2xl flex flex-col overflow-hidden text-xs text-slate-200">
+      <div role="dialog" aria-modal="true" aria-labelledby="settings-title" className="bg-plinky-900 border border-plinky-700 rounded-lg w-[580px] max-w-full shadow-2xl flex flex-col overflow-hidden text-xs text-slate-200">
         {/* Header */}
         <div className="p-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Settings className="w-4 h-4 text-sky-400" />
-            <h3 className="font-semibold text-slate-100 text-base">Plinky Settings</h3>
+            <h3 id="settings-title" className="font-semibold text-slate-100 text-base">Settings</h3>
           </div>
           <button
             onClick={onClose}
@@ -178,6 +178,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onChange={(e) => setTerminalTheme(e.target.value)}
                 className="w-full px-2.5 py-1.5 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 focus:outline-none focus:border-sky-500 transition"
               >
+                <option value={MATCH_INTERFACE}>Match interface theme</option>
                 {TERMINAL_THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
@@ -313,7 +314,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}
                   >
                     <div className="font-semibold text-meta">Context Menu</div>
-                    <div className="text-meta text-plinky-muted">Show PuTTY action menu</div>
+                    <div className="text-meta text-slate-400">Show PuTTY action menu</div>
                   </button>
 
                   <button
@@ -326,7 +327,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}
                   >
                     <div className="font-semibold text-meta">Paste Clipboard (PuTTY)</div>
-                    <div className="text-meta text-plinky-muted">Right click pastes (Shift+Right for menu)</div>
+                    <div className="text-meta text-slate-400">Right click pastes (Shift+Right for menu)</div>
                   </button>
                 </div>
               </div>
@@ -374,7 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 type="button"
                 onClick={handleResetLayout}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                className="shrink-0 whitespace-nowrap flex items-center space-x-1.5 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
               >
                 {resetDone ? (
                   <>
@@ -402,7 +403,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-slate-200">Delete Vault</p>
-                  <p className="text-meta text-plinky-muted">Permanently deletes the vault and every password saved in it.</p>
+                  <p className="text-meta text-plinky-muted">
+                    {vaultExists
+                      ? 'Permanently deletes the vault and every password saved in it.'
+                      : 'There is no vault yet, so there is nothing to delete.'}
+                  </p>
                 </div>
                 <button
                   type="button"

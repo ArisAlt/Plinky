@@ -6,7 +6,7 @@ pub mod registry;
 pub mod sessions;
 
 pub use errors::{PuttyCompatError, Result};
-pub use hostkeys::{list_host_keys, list_host_keys_from, HostKeyEntry};
+pub use hostkeys::{fingerprint_sha256, list_host_keys, list_host_keys_from, remove_host_key, remove_host_key_from, HostKeyEntry};
 pub use ppk::{looks_like_ppk, read_header, PpkHeader};
 pub use sessions::{
     delete_session, delete_session_in, escape_session_name, list_sessions, list_sessions_in,

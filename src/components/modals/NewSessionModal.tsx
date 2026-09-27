@@ -254,7 +254,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    // Host first, as in PuTTY; the name defaults to the host when left
+    // empty, so a quick save needs one field, not two.
+    const sessionName = name.trim() || hostname.trim() || (protocol === 'Serial' ? serialLine.trim() : '');
+    if (!sessionName) return;
     setVaultSaveError(null);
 
     const isSerial = protocol === 'Serial';
@@ -323,14 +326,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         setTab('jump');
         return;
       }
-      const key = `jump:${name.trim()}`;
+      const key = `jump:${sessionName}`;
       const now = Math.floor(Date.now() / 1000);
       try {
         await vaultSetEntry({
           id: key,
           username: jumpUsername.trim(),
           secret: jumpPassword,
-          notes: `Jump host ${jumpUsername.trim()}@${jumpHost.trim()} for session "${name.trim()}"`,
+          notes: `Jump host ${jumpUsername.trim()}@${jumpHost.trim()} for session "${sessionName}"`,
           created_at: now,
           updated_at: now,
         });
@@ -352,7 +355,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       if (vaultMode === 'link' && selectedVaultKey) {
         extra.PlinkyVaultKey = selectedVaultKey;
       } else if (vaultMode === 'new') {
-        const finalKeyId = vaultKeyId.trim() || `session:${name.trim()}`;
+        const finalKeyId = vaultKeyId.trim() || `session:${sessionName}`;
         if (vaultPassword && vaultState === 'none') {
           setVaultSaveError(NO_VAULT_MESSAGE);
           setTab('credentials');
@@ -367,7 +370,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             // Never trimmed: a password with a leading or trailing space is
             // a different password.
             enable_secret: isNetworkDevice && vaultEnablePassword ? vaultEnablePassword : undefined,
-            notes: `Saved credentials for session "${name.trim()}"`,
+            notes: `Saved credentials for session "${sessionName}"`,
             created_at: now,
             updated_at: now,
           };
@@ -414,7 +417,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     else delete extra.PlinkyAutoLogin;
 
     const session: PuttySession = {
-      name: name.trim(),
+      name: sessionName,
       hostname: finalHostname,
       port: finalPort,
       protocol,
@@ -460,12 +463,12 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       }}
       className="fixed inset-0 bg-plinky-950/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none"
     >
-      <div className="bg-plinky-900 border border-plinky-700 rounded-lg w-[560px] max-w-full shadow-2xl flex flex-col overflow-hidden text-xs max-h-[90vh]">
+      <div role="dialog" aria-modal="true" aria-labelledby="new-session-title" className="bg-plinky-900 border border-plinky-700 rounded-lg w-[560px] max-w-full shadow-2xl flex flex-col overflow-hidden text-xs max-h-[90vh]">
         {/* Header */}
         <div className="p-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2">
             <Terminal className="w-4 h-4 text-sky-400" />
-            <h3 className="font-semibold text-slate-100 text-base">
+            <h3 id="new-session-title" className="font-semibold text-slate-100 text-base">
               {editingSession ? `Edit "${editingSession.name}"` : 'New session'}
             </h3>
           </div>
@@ -520,24 +523,6 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               inside; short screens get less, never more than fits. */}
           <div className="p-4 overflow-y-auto h-[min(440px,calc(100vh-220px))] shrink-0">
             <div data-tab="general" hidden={tab !== 'general'} className="space-y-3">
-              {/* Session Name */}
-              <div className="space-y-1">
-                <label htmlFor="new-session-modal-session-name" className="text-slate-300 font-medium">Session Name *</label>
-                <input id="new-session-modal-session-name"
-                  type="text"
-                  required
-                  placeholder={isSerial ? 'e.g. Cisco Console Cable' : 'e.g. Production Web Server'}
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
-                />
-                {editingSession && name.trim() !== editingSession.name && (
-                  <p className="text-amber-400 text-meta">
-                    Changing the name saves a new session. "{editingSession.name}" stays as it is.
-                  </p>
-                )}
-              </div>
-
               {/* Protocol Selection */}
               <div className="space-y-1">
                 <label htmlFor="new-session-modal-connection-protocol" className="text-slate-300 font-medium">Connection Protocol</label>
@@ -695,6 +680,23 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </div>
                 </>
               )}
+
+              {/* Session name: after the host, as in PuTTY */}
+              <div className="space-y-1">
+                <label htmlFor="new-session-modal-session-name" className="text-slate-300 font-medium">Session name</label>
+                <input id="new-session-modal-session-name"
+                  type="text"
+                  placeholder={(isSerial ? serialLine.trim() : hostname.trim()) || (isSerial ? 'e.g. core-sw1 console' : 'Defaults to the host name')}
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
+                />
+                {editingSession && name.trim() !== editingSession.name && (
+                  <p className="text-amber-400 text-meta">
+                    Changing the name saves a new session. "{editingSession.name}" stays as it is.
+                  </p>
+                )}
+              </div>
 
               {/* Organization & Tags */}
               <div className="grid grid-cols-2 gap-2">

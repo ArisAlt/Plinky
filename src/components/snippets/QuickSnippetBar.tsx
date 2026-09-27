@@ -83,8 +83,8 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
   return (
     <div className="bg-plinky-900 border-t border-plinky-800 text-xs select-none">
       {/* Bar Header / Mini Bar */}
-      <div className="flex items-center justify-between px-3 py-1 bg-plinky-900/90 text-slate-300">
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-between gap-2 px-3 py-1 bg-plinky-900/90 text-slate-300 whitespace-nowrap">
+        <div className="flex items-center space-x-2 min-w-0 overflow-hidden">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center space-x-1 font-semibold text-slate-200 hover:text-white transition"

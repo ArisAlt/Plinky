@@ -1,0 +1,19 @@
+// A next step for plink's fatal errors. "FATAL ERROR: Connection refused"
+// in red was the whole story, with nothing on what to try.
+
+const HINTS: [RegExp, (t: string) => string][] = [
+  [/Connection refused/i, t => `Nothing is listening on ${t}. Check the port, and that the SSH or Telnet service is running there.`],
+  [/timed out/i, t => `No answer from ${t}. Check the address, a firewall in between, or whether a VPN is needed.`],
+  [/No route to host|Network is unreachable/i, t => `${t} can't be reached from this machine. Check the network or VPN.`],
+  [/Host does not exist|Name or service not known|nodename nor servname|No such host/i, () => 'That name doesn’t resolve. Check the spelling, or use the IP address.'],
+  [/Remote side unexpectedly closed|Connection reset/i, t => `${t} closed the connection. The server may limit connections or have restarted.`],
+  [/No supported authentication methods/i, () => 'The server accepts none of the login methods offered. It may need a key (Credentials tab) instead of a password.'],
+];
+
+/** One line to show under a plink FATAL ERROR, or null. */
+export function fatalHint(text: string, host?: string, port?: number): string | null {
+  if (!/FATAL ERROR/.test(text)) return null;
+  const target = host ? `${host}${port ? `:${port}` : ''}` : 'the server';
+  for (const [rx, hint] of HINTS) if (rx.test(text)) return hint(target);
+  return null;
+}

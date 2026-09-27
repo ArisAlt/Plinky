@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ITheme } from '@xterm/xterm';
+import { findUiTheme, getUiTheme, mix, type Palette } from './uiThemes';
 
 // Terminal colour schemes, separate from the interface theme. The list is the
 // defaults of the terminals Plinky's users come from (PuTTY, Windows
@@ -108,9 +109,41 @@ export const TERMINAL_THEMES: TerminalTheme[] = [
       '#969896', '#cc6666', '#b5bd68', '#f0c674', '#81a2be', '#b294bb', '#8abeb7', '#ffffff']),
 ];
 
-export const DEFAULT_TERMINAL_THEME = 'plinky';
-export const findTerminalTheme = (id: string) =>
-  TERMINAL_THEMES.find(t => t.id === id) ?? TERMINAL_THEMES[0];
+// "Match interface": the terminal follows the interface theme. It is the
+// default, so choosing GitHub Light no longer leaves a black terminal slab
+// in a white window. Under the Plinky interface it is exactly the Plinky
+// scheme, so nothing changes for anyone who never touched a theme.
+export const MATCH_INTERFACE = 'match';
+
+const hexA = (c: string, a: number) => {
+  const h = c.replace('#', '');
+  return `rgba(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}, ${a})`;
+};
+
+/** A terminal scheme from an interface palette. */
+export function schemeFromPalette(id: string, name: string, p: Palette, light: boolean): TerminalTheme {
+  // Bright colours step toward the text: lighter on dark themes, darker on
+  // light ones, so they stay readable on the background either way.
+  const bright = (c: string) => mix(c, light ? p.fg : '#ffffff', 0.25);
+  return scheme(id, name,
+    { background: p.bg, foreground: p.fg, cursor: p.accent, selection: hexA(p.accent, 0.3) },
+    [p.surface, p.log_red, p.log_green, p.log_yellow, p.log_blue, p.log_magenta, p.log_cyan, mix(p.fg, p.muted, 0.35),
+      p.muted, bright(p.log_red), bright(p.log_green), bright(p.log_yellow), bright(p.log_blue), bright(p.log_magenta), bright(p.log_cyan), p.fg],
+    light);
+}
+
+function matchInterface(): TerminalTheme {
+  const ui = findUiTheme(getUiTheme());
+  const base = ui.palette
+    ? schemeFromPalette(MATCH_INTERFACE, 'Match interface', ui.palette, ui.light)
+    : { ...TERMINAL_THEMES[0], id: MATCH_INTERFACE, name: 'Match interface' };
+  return base;
+}
+
+export const DEFAULT_TERMINAL_THEME = MATCH_INTERFACE;
+export const findTerminalTheme = (id: string): TerminalTheme =>
+  id === MATCH_INTERFACE ? matchInterface() : (TERMINAL_THEMES.find(t => t.id === id) ?? matchInterface());
+const isKnown = (id: string) => id === MATCH_INTERFACE || TERMINAL_THEMES.some(t => t.id === id);
 
 const KEY = 'plinky_terminal_theme';
 const EVENT = 'plinky:terminal-theme';
@@ -118,7 +151,7 @@ const EVENT = 'plinky:terminal-theme';
 function readSaved(): string {
   try {
     const v = localStorage.getItem(KEY);
-    return v && TERMINAL_THEMES.some(t => t.id === v) ? v : DEFAULT_TERMINAL_THEME;
+    return v && isKnown(v) ? v : DEFAULT_TERMINAL_THEME;
   } catch {
     return DEFAULT_TERMINAL_THEME;
   }
@@ -128,7 +161,7 @@ let current: string | null = null;
 export const getTerminalThemeId = () => (current ??= readSaved());
 
 export function setTerminalTheme(id: string) {
-  current = findTerminalTheme(id).id;
+  current = isKnown(id) ? id : DEFAULT_TERMINAL_THEME;
   try { localStorage.setItem(KEY, current); } catch { /* not remembered */ }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: current }));
 }
@@ -136,10 +169,17 @@ export function setTerminalTheme(id: string) {
 /** The chosen scheme; every terminal pane re-renders with it on change. */
 export function useTerminalTheme(): TerminalTheme {
   const [id, setId] = useState(getTerminalThemeId);
+  // "Match interface" changes with the interface theme too.
+  const [, setUiTick] = useState(0);
   useEffect(() => {
     const on = (e: Event) => setId((e as CustomEvent<string>).detail);
+    const onUi = () => setUiTick(n => n + 1);
     window.addEventListener(EVENT, on);
-    return () => window.removeEventListener(EVENT, on);
+    window.addEventListener('plinky:ui-theme', onUi);
+    return () => {
+      window.removeEventListener(EVENT, on);
+      window.removeEventListener('plinky:ui-theme', onUi);
+    };
   }, []);
   return findTerminalTheme(id);
 }

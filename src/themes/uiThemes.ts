@@ -14,6 +14,9 @@ export const SHADES: Shade[] = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900,
 export const SCALES = ['slate', 'sky', 'emerald', 'amber', 'rose', 'cyan'] as const;
 export const PLINKY_SHADES = ['950', '900', '850', '800', '700', '600', '500', '400', '300', '200', '100', '50', 'muted'] as const;
 export const SINGLES = ['white', 'on-accent', 'on-danger', 'on-warn'] as const;
+/** Broadcast channels A-D. Their own hues: B, C and D were emerald, amber
+ *  and rose, the colours that also meant connected, warning and failed. */
+export const CHANNELS = ['ch-a', 'ch-b', 'ch-c', 'ch-d'] as const;
 
 type Scale = Record<Shade, string>;
 
@@ -35,6 +38,8 @@ export interface UiTheme {
   /** Four colours for the picker's swatch: background, surface, accent, text. */
   swatch: [string, string, string, string];
   vars: Record<string, string>; // --c-* -> "r g b"
+  /** The source palette, for the "Match interface" terminal scheme. */
+  palette?: Palette;
 }
 
 // ── colour maths ─────────────────────────────────────────────────────────────
@@ -97,7 +102,11 @@ const PLINKY: UiTheme = {
   name: 'Plinky',
   light: false,
   swatch: ['#090d16', '#0f172a', '#0ea5e9', '#e2e8f0'],
-  vars: varsOf(PLINKY_NEUTRALS, TW, { white: '#ffffff', 'on-accent': '#ffffff', 'on-danger': '#ffffff', 'on-warn': '#ffffff' }),
+  vars: varsOf(PLINKY_NEUTRALS, TW, {
+    white: '#ffffff', 'on-accent': '#ffffff', 'on-danger': '#ffffff', 'on-warn': '#ffffff',
+    // Tailwind cyan-400, violet-400, orange-400, pink-400.
+    'ch-a': '#22d3ee', 'ch-b': '#a78bfa', 'ch-c': '#fb923c', 'ch-d': '#f472b6',
+  }),
 };
 
 // ── a palette, expanded ──────────────────────────────────────────────────────
@@ -120,7 +129,8 @@ function stateScale(c: string, p: Palette, base500 = c): Scale {
  *  reach AA (Dracula's #915de6 under white was 4.39). */
 function fill(c: string): string {
   const on = readableOn(c);
-  return ensure(c, on, 4.5, on === '#ffffff' ? '#000000' : '#ffffff');
+  // 4.7, not 4.5: a filled button rendered at 4.45 on screen in GitHub Light.
+  return ensure(c, on, 4.7, on === '#ffffff' ? '#000000' : '#ffffff');
 }
 
 export function expandPalette(id: string, name: string, p: Palette): UiTheme {
@@ -152,7 +162,7 @@ export function expandPalette(id: string, name: string, p: Palette): UiTheme {
   scales.amber[700] = fill(scales.amber[700]);
   scales.emerald[700] = fill(scales.emerald[700]);
   return {
-    id, name, light,
+    id, name, light, palette: p,
     swatch: [p.bg, p.surface, p.accent, p.fg],
     vars: varsOf(neutrals, scales, {
       // "white" is the strongest text; near-white on dark themes, the text
@@ -161,6 +171,10 @@ export function expandPalette(id: string, name: string, p: Palette): UiTheme {
       'on-accent': readableOn(sky[700]),
       'on-danger': readableOn(scales.rose[700]),
       'on-warn': readableOn(scales.amber[700]),
+      'ch-a': ensure(p.log_cyan, p.surface, 4.5, p.fg),
+      'ch-b': ensure(p.log_magenta, p.surface, 4.5, p.fg),
+      'ch-c': ensure(mix(p.log_yellow, p.log_red, 0.5), p.surface, 4.5, p.fg),
+      'ch-d': ensure(mix(p.log_magenta, p.log_red, 0.55), p.surface, 4.5, p.fg),
     }),
   };
 }

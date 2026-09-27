@@ -103,10 +103,10 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
   const getTargetBadgeColor = (target: SyncChannel | 'all') => {
     switch (target) {
       case 'all': return 'bg-sky-500/15 text-sky-200 border-sky-500/40';
-      case 'A': return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
-      case 'B': return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-      case 'C': return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-      case 'D': return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+      case 'A': return 'bg-ch-a/20 text-ch-a border-ch-a/40';
+      case 'B': return 'bg-ch-b/20 text-ch-b border-ch-b/40';
+      case 'C': return 'bg-ch-c/20 text-ch-c border-ch-c/40';
+      case 'D': return 'bg-ch-d/20 text-ch-d border-ch-d/40';
       default: return 'bg-slate-800 text-slate-400 border-slate-700';
     }
   };
@@ -155,13 +155,13 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
         <button
           type="submit"
           disabled={!command.trim()}
-          title={armed ? 'Press Enter again to send' : undefined}
+          title={armed ? 'Click again or press Enter to send' : undefined}
           className={`flex items-center space-x-1 px-3 py-1 rounded font-medium whitespace-nowrap tabular-nums disabled:opacity-40 disabled:pointer-events-none transition ${
             armed ? 'bg-amber-500 hover:bg-amber-400 text-amber-950' : 'bg-sky-700 hover:brightness-110 text-on-accent'
           }`}
         >
           <Send className="w-3 h-3" />
-          <span>{armed ? `Enter again: send to ${liveTargets}` : `Send to ${liveTargets}`}</span>
+          <span>{armed ? `Confirm: send to ${liveTargets}` : `Send to ${liveTargets}`}</span>
         </button>
         <span
           role="status"

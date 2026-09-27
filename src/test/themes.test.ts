@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { UI_THEMES, applyUiTheme, initUiTheme, contrast, findUiTheme } from '../themes/uiThemes';
-import { TERMINAL_THEMES, setTerminalTheme, getTerminalThemeId } from '../themes/terminalThemes';
+import { TERMINAL_THEMES, setTerminalTheme, getTerminalThemeId, findTerminalTheme, MATCH_INTERFACE, DEFAULT_TERMINAL_THEME } from '../themes/terminalThemes';
 import { TERMINAL_FONTS, primaryFamily } from '../themes/fonts';
 
 const hexOf = (triplet: string) => '#' + triplet.split(' ').map(n => (+n).toString(16).padStart(2, '0')).join('');
@@ -98,3 +98,32 @@ describe('terminal fonts', () => {
     expect(primaryFamily(TERMINAL_FONTS[2].value)).toBe('Fira Code Variable');
   });
 });
+
+describe('match interface', () => {
+  it('is the default, and under the Plinky interface it is the Plinky scheme exactly', () => {
+    expect(DEFAULT_TERMINAL_THEME).toBe(MATCH_INTERFACE);
+    applyUiTheme('plinky', false);
+    const { background, foreground, red, brightBlue } = findTerminalTheme(MATCH_INTERFACE).theme;
+    expect({ background, foreground, red, brightBlue }).toEqual({
+      background: TERMINAL_THEMES[0].theme.background, foreground: TERMINAL_THEMES[0].theme.foreground,
+      red: TERMINAL_THEMES[0].theme.red, brightBlue: TERMINAL_THEMES[0].theme.brightBlue,
+    });
+  });
+
+  it('under GitHub Light the terminal is light too', () => {
+    // The critique's run: a black terminal slab inside a white window.
+    applyUiTheme('github-light', false);
+    const t = findTerminalTheme(MATCH_INTERFACE);
+    expect(t.theme.background).toBe('#f6f8fa');
+    expect(t.light).toBe(true);
+  });
+
+  for (const ui of UI_THEMES) {
+    it(`${ui.name}: its matched terminal text is readable`, () => {
+      applyUiTheme(ui.id, false);
+      const { theme } = findTerminalTheme(MATCH_INTERFACE);
+      expect(contrast(theme.foreground!, theme.background!)).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+

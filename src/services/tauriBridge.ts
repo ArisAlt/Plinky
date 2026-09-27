@@ -368,22 +368,42 @@ export async function setSessionFolders(changes: [string, string][]): Promise<vo
 
 export async function listPuttyHostKeys(): Promise<HostKeyEntry[]> {
   if (isTauriEnvironment()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<HostKeyEntry[]>('list_putty_hostkeys');
-    } catch (e) {
-      console.warn("Failed to invoke list_putty_hostkeys, using fallback:", e);
-      return DEMO_HOSTKEYS;
-    }
+    // No fallback to the demo keys here: on a trust screen, made-up keys
+    // after a failed read would be worse than the error.
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<HostKeyEntry[]>('list_putty_hostkeys');
   }
   return DEMO_HOSTKEYS;
+}
+
+/** Forgets a cached host key; true if it was there. */
+/** Opens the Host Keys screen, optionally filtered to one host. */
+export const SHOW_HOST_KEYS_EVENT = 'plinky:show-host-keys';
+export function showHostKeys(host?: string) {
+  window.dispatchEvent(new CustomEvent<{ host?: string }>(SHOW_HOST_KEYS_EVENT, { detail: { host } }));
+}
+
+export async function removePuttyHostKey(keyType: string, hostname: string, port: number): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<boolean>('remove_putty_hostkey', { keyType, hostname, port });
+}
+
+/** Opens a file picker for a .ppk; null if cancelled or outside the app. */
+export async function pickPpkFile(): Promise<string | null> {
+  if (!isTauriEnvironment()) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string | null>('pick_ppk_file');
 }
 
 export async function inspectPpk(path: string): Promise<PpkInfo | null> {
   if (isTauriEnvironment()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PpkInfo>('inspect_ppk', { path });
+      // The backend's names (algo, encrypted, fingerprint) differ from the
+      // page's; unmapped, the banner showed "undefined" for all three.
+      const raw = await invoke<{ version: number; algo: string; encrypted: boolean; comment: string; fingerprint: string }>('inspect_ppk', { path });
+      return { path, version: raw.version, algorithm: raw.algo, isEncrypted: raw.encrypted, comment: raw.comment, fingerprintSha256: raw.fingerprint };
     } catch (e) {
       console.warn("Failed to inspect ppk via Tauri:", e);
       return null;

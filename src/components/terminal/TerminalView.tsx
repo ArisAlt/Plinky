@@ -17,6 +17,8 @@ import {
   resizeTerminal, 
   closeTerminalSession,
   answerHostKeyPrompt,
+  listPuttyHostKeys,
+  showHostKeys,
   listenHostKeyPrompts,
   setSyncChannel,
   HostKeyPromptInfo,
@@ -44,6 +46,8 @@ import { shouldTakeHoverFocus } from '../../services/hoverFocus';
 import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import { useTerminalTheme } from '../../themes/terminalThemes';
+import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
+import { fatalHint } from '../../services/fatalHint';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
   Radio,
@@ -95,20 +99,6 @@ interface TerminalViewProps {
   /** The mouse moved into this terminal and it took the keyboard focus. */
   onHoverFocus?: () => void;
 }
-
-// The pane's status dot. It was always green, whatever the session did.
-const STATUS_DOT: Record<TerminalTab['status'], string> = {
-  connecting: 'bg-amber-400 animate-pulse',
-  preauth: 'bg-amber-400',
-  live: 'bg-emerald-400',
-  disconnected: 'bg-rose-500',
-};
-const STATUS_TEXT: Record<TerminalTab['status'], string> = {
-  connecting: 'Connecting',
-  preauth: 'Waiting for login',
-  live: 'Connected',
-  disconnected: 'Disconnected',
-};
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
   tab, 
@@ -268,6 +258,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     return () => clearInterval(t);
   }, [waitingSince]);
   const cancelConnectRef = useRef<() => void>(() => {});
+  // Set when a changed host key was abandoned: the pane then offers the
+  // host keys, not a one-click Reconnect.
+  const [hostKeyMismatch, setHostKeyMismatch] = useState<{ host: string } | null>(null);
   // Esc cancels while waiting, from the terminal itself: nothing is running
   // on the other end to take the key, and moving focus to a Cancel button
   // would leave it nowhere once the password prompt arrives.
@@ -616,6 +609,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     term.open(containerRef.current);
     const highlighter = new KeywordHighlighter(term, tab.activeHighlighting !== false);
     highlighterRef.current = highlighter;
+    highlighter.setTheme(terminalThemeRef.current.theme, !!terminalThemeRef.current.light);
     // Output arrives in many small chunks; decorate them in one pass a few
     // ms later. (setTimeout, not requestAnimationFrame: rAF doesn't run
     // while the window is hidden, and highlights would lag behind output.)
@@ -710,6 +704,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     let unlistenPrompts: (() => void) | null = null;
     listenHostKeyPrompts((event) => {
       if (event.session_id === tab.id) {
+        // The server answered: this is no longer "connecting", and Esc now
+        // belongs to the host-key dialog (it cancelled the connection too,
+        // printing "Connection cancelled" above the mismatch report).
+        setWaitingSince(null);
         setPendingPrompt(event.prompt);
         onUpdateTab(tab.id, { status: 'preauth' });
       }
@@ -760,6 +758,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const isPasswordPrompt = promptKind !== null;
       const answeredAutomatically = autoRespondRef.current(promptKind, recentOutputRef.current);
 
+      const hint = live ? fatalHint(text, tab.hostname, tab.port) : null;
+      if (hint) term.writeln(`\x1b[33m[Plinky: ${hint}]\x1b[0m`);
       if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);
@@ -867,6 +867,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // under the same tab id, in this terminal.
     restartSessionRef.current = async () => {
       if (disposed) return;
+      setHostKeyMismatch(null);
       await closeTerminalSession(tab.id);
       reopenSessionId(tab.id);
       if (disposed) return;
@@ -1083,6 +1084,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   useEffect(() => {
     if (terminalRef.current) terminalRef.current.options.theme = terminalTheme.theme;
+    highlighterRef.current?.setTheme(terminalTheme.theme, !!terminalTheme.light);
   }, [terminalTheme]);
 
   // WindTerm Free Type Mode: Arbitrary cursor placement and delta computation
@@ -1270,15 +1272,41 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   const handleAnswerPrompt = async (answer: 'store' | 'once' | 'reject') => {
+    const prompt = pendingPrompt;
     await answerHostKeyPrompt(tab.id, answer);
     setPendingPrompt(null);
+    if (answer === 'reject' && prompt?.changed) {
+      // Abandoning a changed key used to end like any failed connect: a
+      // generic closed line and a Reconnect button, the easiest thing to
+      // click at the one moment an attacker could be in the middle.
+      const stored = await storedFingerprint(prompt);
+      const where = `${prompt.host}:${prompt.port}`;
+      terminalRef.current?.writeln(
+        `\r\n\x1b[1;31m[Plinky: the host key for ${where} does not match the one PuTTY saved. Connection abandoned.]\x1b[0m` +
+        `\r\n\x1b[31m  Offered: ${prompt.fingerprint || 'unknown'}\x1b[0m` +
+        (stored ? `\r\n\x1b[31m  Saved:   ${stored}\x1b[0m` : '') +
+        `\r\n\x1b[31m  Check the offered fingerprint with the server's administrator before trusting it.\x1b[0m\r\n`
+      );
+      addEventLog(`Host key mismatch for ${where}; connection abandoned`, 'error');
+      setHostKeyMismatch({ host: prompt.host });
+    }
     terminalRef.current?.focus();
   };
 
-  const cycleChannel = () => {
-    const channels: SyncChannel[] = ['none', 'A', 'B', 'C', 'D'];
-    const currentIdx = channels.indexOf(tab.syncChannel);
-    const nextChannel = channels[(currentIdx + 1) % channels.length];
+  // A menu, not a cycle: clicking through Off, A, B, C, D showed nothing
+  // of what came next and meant counting clicks to reach a channel.
+  const [channelMenuOpen, setChannelMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!channelMenuOpen) return;
+    const close = () => setChannelMenuOpen(false);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', onKey, true); };
+  }, [channelMenuOpen]);
+
+  const chooseChannel = (nextChannel: SyncChannel) => {
+    setChannelMenuOpen(false);
     onUpdateTab(tab.id, { syncChannel: nextChannel });
     terminalManager.setSyncChannel(tab.id, nextChannel);
     setSyncChannel(tab.id, nextChannel === 'none' ? null : nextChannel);
@@ -1327,10 +1355,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const getChannelColor = (ch: SyncChannel) => {
     switch (ch) {
-      case 'A': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40';
-      case 'B': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
-      case 'C': return 'bg-amber-500/20 text-amber-400 border-amber-500/40';
-      case 'D': return 'bg-rose-500/20 text-rose-400 border-rose-500/40';
+      case 'A': return 'bg-ch-a/20 text-ch-a border-ch-a/40';
+      case 'B': return 'bg-ch-b/20 text-ch-b border-ch-b/40';
+      case 'C': return 'bg-ch-c/20 text-ch-c border-ch-c/40';
+      case 'D': return 'bg-ch-d/20 text-ch-d border-ch-d/40';
       default: return 'bg-slate-800 text-slate-400 border-slate-700';
     }
   };
@@ -1353,18 +1381,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         }}
       />
       {/* Tab Control Overlay Header */}
-      <div className="relative flex items-center justify-between px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none">
-        <div className="flex items-center space-x-2">
+      <div className="relative flex items-center justify-between gap-3 px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none whitespace-nowrap">
+        <div className="flex items-center space-x-2 min-w-0">
           <span
             role="img"
             aria-label={STATUS_TEXT[tab.status]}
             title={STATUS_TEXT[tab.status]}
             className={`h-2 w-2 rounded-full ${STATUS_DOT[tab.status]}`}
           />
-          <span className="font-semibold text-slate-200">{tab.sessionName}</span>
-          <span className="text-plinky-muted font-mono">
-            {isLocalSession ? '(local shell)' : `(${tab.hostname}:${tab.port})`}
-          </span>
+          <span className="font-semibold text-slate-200 truncate">{tab.sessionName}</span>
+          {/* Quick-connect tabs are named after their target already; the
+              header read "Quick (127.0.0.1:1) (127.0.0.1:1)". */}
+          {(isLocalSession || !tab.sessionName.includes(`${tab.hostname}:${tab.port}`)) && (
+            <span className="text-plinky-muted font-mono truncate">
+              {isLocalSession ? '(local shell)' : `(${tab.hostname}:${tab.port})`}
+            </span>
+          )}
         </div>
 
         {hooksError && (
@@ -1394,7 +1426,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
               {isVaultMenuOpen && (
                 <div 
-                  className="absolute right-0 top-full mt-1.5 z-50 w-56 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in duration-100"
+                  className="absolute right-0 top-full mt-1.5 z-40 w-56 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in duration-100"
                   onClick={e => e.stopPropagation()}
                 >
                   <div className="px-3 py-1 border-b border-plinky-800 flex items-center justify-between">
@@ -1481,14 +1513,43 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </button>
 
           {/* Sync Input Channel Badge */}
-          <button
-            onClick={cycleChannel}
-            title="Click to cycle broadcast sync channel (A, B, C, D, none)"
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-meta font-mono transition-colors ${getChannelColor(tab.syncChannel)}`}
-          >
-            <Radio className="w-3 h-3" />
-            <span>Channel: {tab.syncChannel === 'none' ? 'Off' : tab.syncChannel}</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setChannelMenuOpen(v => !v)}
+              onPointerDown={e => e.stopPropagation()}
+              aria-haspopup="menu"
+              aria-expanded={channelMenuOpen}
+              title="Broadcast channel: commands sent to a channel reach every live tab on it"
+              className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-meta whitespace-nowrap transition-colors ${getChannelColor(tab.syncChannel)}`}
+            >
+              <Radio className="w-3 h-3" />
+              <span>Channel: {tab.syncChannel === 'none' ? 'Off' : tab.syncChannel}</span>
+            </button>
+            {channelMenuOpen && (
+              <div
+                role="menu"
+                aria-label="Broadcast channel"
+                onPointerDown={e => e.stopPropagation()}
+                className="absolute right-0 top-full mt-1 z-40 w-40 py-1 rounded-lg border border-plinky-700 bg-plinky-900 shadow-xl text-xs"
+              >
+                {(['none', 'A', 'B', 'C', 'D'] as const).map(ch => (
+                  <button
+                    key={ch}
+                    role="menuitemradio"
+                    aria-checked={tab.syncChannel === ch}
+                    onClick={() => chooseChannel(ch)}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-plinky-800 ${tab.syncChannel === ch ? 'text-slate-100' : 'text-slate-300'}`}
+                  >
+                    <span className={`w-5 text-center rounded border text-meta font-semibold ${ch === 'none' ? 'border-plinky-700 text-plinky-muted' : getChannelColor(ch)}`}>
+                      {ch === 'none' ? '·' : ch}
+                    </span>
+                    <span className="flex-1">{ch === 'none' ? 'Off' : `Channel ${ch}`}</span>
+                    {tab.syncChannel === ch && <Check className="w-3 h-3 text-sky-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Keyword highlighting toggle (T-017). This used to be a static
               "Regex Hi" label claiming highlighting that didn't exist. */}
@@ -1671,7 +1732,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             </div>
           </div>
         )}
-        {(reconnectIn !== null || tab.status === 'disconnected') && (
+        {hostKeyMismatch && tab.status === 'disconnected' && reconnectIn === null && (
+          <div role="alert" className="absolute bottom-3 left-4 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-rose-500/70 text-rose-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+            <span>Host key changed. Connection abandoned.</span>
+            <button onClick={() => showHostKeys(hostKeyMismatch.host)} className="px-2 py-0.5 rounded border border-rose-500/50 text-rose-200 hover:bg-rose-500/10 text-meta">View host keys</button>
+          </div>
+        )}
+        {!hostKeyMismatch && (reconnectIn !== null || tab.status === 'disconnected') && (
           <div role="status" className="absolute bottom-3 left-4 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
             <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
             {reconnectIn !== null ? (
@@ -1757,7 +1825,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {contextMenu && (
           <div
             ref={contextMenuRef}
-            className="fixed z-50 w-52 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-40 w-52 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2180,6 +2248,15 @@ export const HostKeyDialog: React.FC<{
 }> = ({ prompt, onAnswer }) => {
   const changed = !!prompt.changed;
   const abandonRef = useRef<HTMLButtonElement>(null);
+  // The fingerprint PuTTY saved, beside the one offered now: comparing the
+  // two is the whole decision, and only the new one was shown.
+  const [stored, setStored] = useState<string | null>(null);
+  useEffect(() => {
+    if (!changed) return;
+    let live = true;
+    void storedFingerprint(prompt).then(fp => { if (live) setStored(fp); });
+    return () => { live = false; };
+  }, [changed, prompt]);
   // The parent re-renders on every chunk of output; a fresh onAnswer each
   // time must not re-run the effect and yank focus back to Abandon.
   const answerRef = useRef(onAnswer);
@@ -2242,11 +2319,19 @@ export const HostKeyDialog: React.FC<{
             <span className="font-mono text-slate-200">{prompt.key_type}</span>
           </div>
           <div>
-            <span className="text-slate-400 block mb-1">{changed ? 'New fingerprint' : 'Fingerprint'}</span>
+            <span className="text-slate-400 block mb-1">{changed ? 'Offered now' : 'Fingerprint'}</span>
             <span className={`font-mono break-all select-all font-semibold ${changed ? 'text-rose-200' : 'text-slate-100'}`}>
               {prompt.fingerprint}
             </span>
           </div>
+          {changed && (
+            <div>
+              <span className="text-slate-400 block mb-1">Saved by PuTTY earlier</span>
+              <span className="font-mono break-all select-all text-slate-300">
+                {stored ?? 'Not found in PuTTY\u2019s store'}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2 justify-end">
@@ -2284,10 +2369,10 @@ export const HostKeyDialog: React.FC<{
           <button
             ref={abandonRef}
             onClick={() => onAnswer('reject')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-plinky-900 ${
+            className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-plinky-900 ${
               changed
-                ? 'order-first sm:order-last bg-rose-700 hover:brightness-110 text-on-danger focus-visible:ring-rose-300'
-                : 'order-first bg-plinky-800 hover:bg-plinky-700 text-slate-200 focus-visible:ring-sky-400'
+                ? 'order-first sm:order-last bg-rose-700 hover:brightness-110 text-on-danger focus:ring-rose-300'
+                : 'order-first bg-plinky-800 hover:bg-plinky-700 text-slate-200 focus:ring-sky-400'
             }`}
           >
             Abandon connection
@@ -2297,3 +2382,16 @@ export const HostKeyDialog: React.FC<{
     </div>
   );
 };
+
+/** The fingerprint PuTTY has saved for this prompt's host, port and key
+ *  type; the prompt names the type as the server does ("ssh-rsa"), the
+ *  cache as PuTTY does ("rsa2"). */
+export async function storedFingerprint(prompt: HostKeyPromptInfo): Promise<string | null> {
+  const cacheType = ({ 'ssh-rsa': 'rsa2', 'ssh-dss': 'dss' } as Record<string, string>)[prompt.key_type] ?? prompt.key_type;
+  try {
+    const keys = await listPuttyHostKeys();
+    return keys.find(k => k.hostname === prompt.host && k.port === prompt.port && k.keyType === cacheType)?.fingerprint ?? null;
+  } catch {
+    return null;
+  }
+}

@@ -53,7 +53,7 @@ describe('SettingsModal Component', () => {
       />
     );
 
-    expect(screen.getByText('Plinky Settings')).toBeDefined();
+    expect(screen.getByText('Settings')).toBeDefined();
 
     // Change cursor style to underline
     const underlineBtn = screen.getByRole('button', { name: /underline/i });

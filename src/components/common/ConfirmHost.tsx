@@ -62,7 +62,7 @@ export const ConfirmHost: React.FC = () => {
           <button
             ref={cancelRef}
             onClick={() => answer(false)}
-            className="px-3 py-1.5 rounded border border-plinky-700 text-slate-200 hover:bg-plinky-800 text-xs outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            className="px-3 py-1.5 rounded border border-plinky-700 text-slate-200 hover:bg-plinky-800 text-xs outline-none focus:ring-2 focus:ring-sky-400"
           >
             Cancel
           </button>

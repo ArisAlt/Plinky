@@ -26,8 +26,8 @@ export const GLOW_MS = 1200;
 /** Glow colour for a pane, by its sync channel (matches the channel badges),
  *  from the interface theme's variables so it follows the theme. */
 export function glowColor(channel: string, alpha = 1): string {
-  const scale = ({ A: 'cyan', B: 'emerald', C: 'amber', D: 'rose' } as Record<string, string>)[channel] ?? 'sky';
-  return `rgb(var(--c-${scale}-400) / ${alpha})`;
+  const v = ({ A: 'ch-a', B: 'ch-b', C: 'ch-c', D: 'ch-d' } as Record<string, string>)[channel] ?? 'sky-400';
+  return `rgb(var(--c-${v}) / ${alpha})`;
 }
 
 /** The ids lit by the latest broadcast; each clears GLOW_MS after it was sent. */

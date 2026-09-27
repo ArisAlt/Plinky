@@ -45,6 +45,7 @@ import {
 } from '../../services/folderTree';
 import { setSessionFolders, deletePuttySession, readPuttySession, writePuttySession, copyName } from '../../services/tauriBridge';
 import { askConfirm } from '../../services/confirm';
+import { STATUS_DOT, STATUS_TEXT, bestStatus } from '../../services/sessionStatus';
 
 interface SessionExplorerProps {
   sessions: PuttySession[];
@@ -447,8 +448,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   // only when it isn't SSH, and the actions float over the row's end on
   // hover or keyboard focus instead of reserving space.
   const renderSession = (session: PuttySession) => {
-    const openTab = tabs.find(t => t.sessionName === session.name);
-    const isActiveTab = !!openTab && openTab.id === activeTabId;
+    const sessionTabs = tabs.filter(t => t.sessionName === session.name);
+    const isActiveTab = sessionTabs.some(t => t.id === activeTabId);
+    const status = bestStatus(sessionTabs);
     const target = sessionTarget(session);
     const tags = session.tags && session.tags.length > 0 ? session.tags.join(', ') : '';
     return (
@@ -458,7 +460,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         data-tree-item
         role="treeitem"
         tabIndex={-1}
-        aria-label={`${session.name}, ${target}${openTab ? ', open' : ''}`}
+        aria-label={`${session.name}, ${target}${status ? `, ${STATUS_TEXT[status].toLowerCase()}` : ''}`}
         draggable
         onDragStart={(e) => {
           setDragging({ kind: 'session', session });
@@ -483,11 +485,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         }`}
       >
         {/* Status slot: fixed width so names line up whether or not a tab is open. */}
-        <span className="w-1.5 shrink-0 flex justify-center" aria-hidden={!openTab}>
-          {openTab && (
+        <span className="w-1.5 shrink-0 flex justify-center" aria-hidden>
+          {status && (
             <span
-              className={`h-1.5 w-1.5 rounded-full ${isActiveTab ? 'bg-emerald-400' : 'bg-emerald-500/50'}`}
-              title={isActiveTab ? 'Open in the active tab' : 'Open in another tab'}
+              className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`}
+              title={`${STATUS_TEXT[status]}${sessionTabs.length > 1 ? ` (${sessionTabs.length} tabs)` : ''}`}
             />
           )}
         </span>
@@ -821,6 +823,12 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <div className="flex flex-col items-center text-center py-10 px-4 space-y-3">
             <Terminal className="w-8 h-8 text-slate-600" />
             <div className="text-xs text-slate-400">No sessions yet</div>
+            {/* A PuTTY user's first question: where did my sessions go?
+                Plinky reads PuTTY's own store, so they appear here as soon
+                as PuTTY has any. */}
+            <p className="text-meta text-plinky-muted max-w-[16rem]">
+              Plinky shows the sessions saved in PuTTY {/Windows/i.test(navigator.userAgent) ? '(in the Windows registry)' : '(in ~/.putty/sessions)'}. Save one in PuTTY or here and it appears in both.
+            </p>
             <button
               onClick={() => onCreateSession()}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 hover:border-sky-500/50 transition"
@@ -861,7 +869,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               left: Math.min(folderMenu.x, window.innerWidth - 200),
               top: Math.min(folderMenu.y, window.innerHeight - 200),
             }}
-            className="z-50 w-48 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none"
+            className="z-40 w-48 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
@@ -984,7 +992,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             left: Math.min(contextMenu.x, window.innerWidth - 180), 
             top: Math.min(contextMenu.y, window.innerHeight - 150) 
           }}
-          className="z-50 w-44 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          className="z-40 w-44 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
@@ -1085,9 +1093,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               }
               setContextMenu(null);
             }}
-            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition text-left"
+            className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-plinky-800 transition text-left"
           >
-            <Tag className="w-3.5 h-3.5 text-plinky-muted" />
+            <Tag className="w-3.5 h-3.5 text-slate-400" />
             <span>Copy Hostname</span>
           </button>
           <button

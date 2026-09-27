@@ -164,7 +164,7 @@ describe('the broadcast bar', () => {
       render(<SyncBroadcastBar tabs={[live('tab-1'), live('tab-2'), live('tab-3')]} />);
       type('reload');
       expect(send).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /Enter again: send to 3/ })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Confirm: send to 3/ })).toBeTruthy();
       // Left alone, the arm lapses: a stray Enter later starts over.
       act(() => { vi.advanceTimersByTime(ARM_MS + 1); });
       type('reload');

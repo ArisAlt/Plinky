@@ -35,6 +35,8 @@ export default {
         'on-accent': v('on-accent'),
         'on-danger': v('on-danger'),
         'on-warn': v('on-warn'),
+        // Broadcast channels A-D, hues of their own.
+        'ch-a': v('ch-a'), 'ch-b': v('ch-b'), 'ch-c': v('ch-c'), 'ch-d': v('ch-d'),
       },
       // Linux renders small unhinted text soft. The scale starts one step
       // up from the stock one: 12px meta, 13px body, 14px names.

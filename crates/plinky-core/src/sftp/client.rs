@@ -20,6 +20,14 @@ pub const ERR_HOSTKEY: &str = "[hostkey] ";
 /// below are psftp 0.85's, measured against a real sshd.
 fn describe_failure(stdout: &str, stderr: &str) -> String {
     let all = format!("{stdout}\n{stderr}");
+    // A changed key fails the same way as a new one in batch mode, after
+    // PuTTY's breach warning. It used to get the new-key text, "accept its
+    // key": the wrong advice at the one moment it matters.
+    if all.contains("host key does not match") || all.contains("POTENTIAL SECURITY BREACH") {
+        return format!(
+            "{ERR_HOSTKEY}This server's host key has changed since PuTTY saved it. Nothing was transferred. Don't accept the new key until its fingerprint is confirmed with the server's administrator; see Host Keys."
+        );
+    }
     if all.contains("Cannot confirm a host key in batch mode") {
         return format!(
             "{ERR_HOSTKEY}This server's host key isn't trusted yet. Open the session in a terminal tab once and accept its key, then try again."
@@ -641,3 +649,24 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod describe_failure_tests {
+    use super::*;
+
+    // Verbatim plink/psftp 0.81 batch output for a swapped server key.
+    const CHANGED: &str = "WARNING - POTENTIAL SECURITY BREACH!\nThe host key does not match the one Plink has cached for\nthis server:\n  127.0.0.1 (port 2230)\nThe new ssh-ed25519 key fingerprint is:\n  ssh-ed25519 255 SHA256:3O68y3/hYcPWT0PvUA6iAW4Hke8MxUWDn1JMiSW6EGo\nConnection abandoned.\nFATAL ERROR: Cannot confirm a host key in batch mode\n";
+
+    #[test]
+    fn a_changed_key_is_never_described_as_one_to_accept() {
+        let m = describe_failure("", CHANGED);
+        assert!(m.starts_with(ERR_HOSTKEY));
+        assert!(m.contains("has changed"), "{m}");
+        assert!(!m.contains("accept its key"), "{m}");
+    }
+
+    #[test]
+    fn a_new_key_still_says_to_accept_it_in_a_terminal() {
+        let m = describe_failure("", "The host key is not cached for this server:\nFATAL ERROR: Cannot confirm a host key in batch mode\n");
+        assert!(m.contains("isn't trusted yet"), "{m}");
+    }
+}

@@ -66,7 +66,7 @@ describe('NewSessionModal Component', () => {
     expect(screen.getByText('New session')).toBeDefined();
 
     // Fill in standard SSH session
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), {
       target: { value: 'Web-01' },
     });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), {
@@ -112,7 +112,7 @@ describe('NewSessionModal Component', () => {
     });
 
     // Fill Session name
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Cisco Console Cable/i), {
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), {
       target: { value: 'Cisco-Switch-Console' },
     });
 
@@ -146,7 +146,7 @@ describe('NewSessionModal Component', () => {
     );
 
     // Fill in target server
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), {
       target: { value: 'Internal-DB' },
     });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), {
@@ -197,7 +197,7 @@ describe('NewSessionModal Component', () => {
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
     await waitFor(() => expect(mockVaultIsUnlocked).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Core-Router' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Core-Router' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.1.50' } });
     fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
     fireEvent.change(screen.getByPlaceholderText(/bastion\.internal/i), { target: { value: 'jump.corp.com' } });
@@ -223,7 +223,7 @@ describe('NewSessionModal Component', () => {
     const onSave = vi.fn();
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
     await waitFor(() => expect(mockVaultIsUnlocked).toHaveBeenCalled());
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Core-Router' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Core-Router' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.1.50' } });
     fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
     fireEvent.change(screen.getByPlaceholderText(/bastion\.internal/i), { target: { value: 'jump.corp.com' } });
@@ -296,7 +296,7 @@ describe('NewSessionModal Component', () => {
     );
 
     // Session name & host
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), {
       target: { value: 'Cisco-Core-Router' },
     });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), {
@@ -353,7 +353,7 @@ describe('NewSessionModal Component', () => {
 
   // Fills in a new session with "Save credentials in Encrypted Vault" ticked.
   const fillVaultSession = (password: string, enable?: string) => {
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Core-SW' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Core-SW' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.168.1.2' } });
     fireEvent.click(screen.getByLabelText(/Save credentials in Encrypted Vault/i));
     if (password) {
@@ -408,7 +408,7 @@ describe('NewSessionModal Component', () => {
       />
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), {
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), {
       target: { value: 'Switch-01' },
     });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), {
@@ -453,7 +453,7 @@ describe('NewSessionModal Component', () => {
   it('saves the automation opt-ins, and "log in automatically" only for Telnet/serial', async () => {
     const onSave = vi.fn();
     const { unmount } = render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'SW1' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'SW1' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.2' } });
     expect(screen.queryByLabelText(/Log in automatically/i)).toBeNull(); // SSH logs in by itself
     fireEvent.click(screen.getByLabelText(/Send enable password automatically/i));
@@ -465,7 +465,7 @@ describe('NewSessionModal Component', () => {
 
     const onSave2 = vi.fn();
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave2} />);
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Old-SW' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Old-SW' } });
     fireEvent.change(screen.getByDisplayValue(/SSH/i), { target: { value: 'Telnet' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.3' } });
     fireEvent.click(screen.getByLabelText(/Log in automatically/i));
@@ -479,7 +479,7 @@ describe('NewSessionModal Component', () => {
     const onSave = vi.fn();
     const bastion = { name: 'Bastion-1', hostname: '203.0.113.5', port: 2222, protocol: 'SSH' as const, username: 'jumper' };
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} savedSessions={[bastion]} />);
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Inner' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Inner' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.9' } });
     fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
     fireEvent.change(screen.getByDisplayValue(/Select a saved bastion host/i), { target: { value: 'Bastion-1' } });
@@ -552,7 +552,7 @@ describe('NewSessionModal Component', () => {
     const listener = (e: Event) => heard.push((e as CustomEvent).detail);
     window.addEventListener('plinky:session-saved', listener);
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Console-SW' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Console-SW' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.5' } });
     fireEvent.change(screen.getByLabelText('Paste line delay in milliseconds'), { target: { value: '250' } });
     fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
@@ -580,7 +580,7 @@ describe('NewSessionModal Component', () => {
     const listener = (e: Event) => heard.push((e as CustomEvent).detail);
     window.addEventListener('plinky:session-saved', listener);
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'Edge' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'Edge' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.0.0.1' } });
     fireEvent.change(screen.getByLabelText('Keepalive interval in seconds'), { target: { value: '90' } });
     fireEvent.click(screen.getByLabelText(/TCP keepalives/i));
@@ -622,7 +622,7 @@ describe('the session editor tabs (T-014)', () => {
   it('keeps what was typed on every tab when switching between them', () => {
     const onSave = vi.fn();
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'edge-01' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'edge-01' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.44' } });
     fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
     expect(panel('general').hidden).toBe(true);
@@ -649,7 +649,7 @@ describe('the session editor tabs (T-014)', () => {
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
     // Save with no name: the browser flags the (hidden) name field invalid.
-    fireEvent.invalid(screen.getByPlaceholderText(/e\.g\. Production Web Server/i));
+    fireEvent.invalid(screen.getByLabelText(/^Session name$/i));
     expect(panel('general').hidden).toBe(false);
   });
 
@@ -675,7 +675,7 @@ describe('a new session from a folder (T-010)', () => {
     const onSave = vi.fn();
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} initialFolder="Corp 1/Site 1" />);
     expect((screen.getByPlaceholderText('e.g. Staging or Network') as HTMLInputElement).value).toBe('Corp 1/Site 1');
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'site1-core' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'site1-core' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.5' } });
     fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     expect(onSave.mock.calls[0][0].folder).toBe('Corp 1/Site 1');
@@ -695,7 +695,7 @@ describe('a new session from a folder (T-010)', () => {
 
 describe('saving a password when there is no vault yet', () => {
   const fillSession = () => {
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Production Web Server/i), { target: { value: 'core-sw1' } });
+    fireEvent.change(screen.getByLabelText(/^Session name$/i), { target: { value: 'core-sw1' } });
     fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.5' } });
     fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
     fireEvent.click(screen.getByLabelText(/Save credentials in Encrypted Vault/i));
@@ -756,4 +756,19 @@ describe('saving a password when there is no vault yet', () => {
       expect(unnamed()).toEqual([]);
     }
   });
+
+  it('host comes first, and an empty name defaults to the host', async () => {
+    // PuTTY asks for the host first; a quick save needed a name too.
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    const host = screen.getByPlaceholderText(/192\.0\.2\.10/i);
+    const nameField = screen.getByLabelText(/^Session name$/i);
+    expect(host.compareDocumentPosition(nameField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(host, { target: { value: 'core-sw1.example.test' } });
+    expect((nameField as HTMLInputElement).placeholder).toBe('core-sw1.example.test');
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0]).toMatchObject({ name: 'core-sw1.example.test', hostname: 'core-sw1.example.test' });
+  });
 });
+

@@ -9,7 +9,16 @@ vi.mock('@xterm/addon-search', () => ({ SearchAddon: class {} }));
 vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }));
 vi.mock('@xterm/addon-unicode11', () => ({ Unicode11Addon: class {} }));
 
-import { HostKeyDialog } from '../components/terminal/TerminalView';
+vi.mock('../services/tauriBridge', async (orig) => ({
+  ...(await orig<typeof import('../services/tauriBridge')>()),
+  listPuttyHostKeys: async () => [
+    { keyType: 'rsa2', hostname: '127.0.0.1', port: 2230, rawKey: '', fingerprint: 'SHA256:savedRSA' },
+    { keyType: 'ssh-ed25519', hostname: '127.0.0.1', port: 2230, rawKey: '', fingerprint: 'SHA256:savedED' },
+    { keyType: 'ssh-ed25519', hostname: '127.0.0.1', port: 22, rawKey: '', fingerprint: 'SHA256:otherPort' },
+  ],
+}));
+
+import { HostKeyDialog, storedFingerprint } from '../components/terminal/TerminalView';
 
 const base = {
   host: '127.0.0.1',
@@ -46,4 +55,17 @@ describe('host key dialog', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onAnswer).toHaveBeenCalledWith('reject');
   });
+
+  it('a changed key shows the saved fingerprint beside the offered one', async () => {
+    render(<HostKeyDialog prompt={{ ...base, changed: true }} onAnswer={() => {}} />);
+    expect(await screen.findByText('SHA256:savedED')).toBeTruthy();
+    expect(screen.getByText('Saved by PuTTY earlier')).toBeTruthy();
+  });
+
+  it('matches the saved key by host, port and PuTTY\'s name for the type', async () => {
+    // The prompt says "ssh-rsa"; PuTTY's cache says "rsa2".
+    expect(await storedFingerprint({ ...base, key_type: 'ssh-rsa' })).toBe('SHA256:savedRSA');
+    expect(await storedFingerprint({ ...base, port: 2231 })).toBeNull();
+  });
 });
+

@@ -56,10 +56,10 @@
 }
 
 :root {
-  --channel-A: rgb(var(--c-cyan-500));
-  --channel-B: rgb(var(--c-emerald-500));
-  --channel-C: rgb(var(--c-amber-500));
-  --channel-D: rgb(var(--c-rose-500));
+  --channel-A: rgb(var(--c-ch-a));
+  --channel-B: rgb(var(--c-ch-b));
+  --channel-C: rgb(var(--c-ch-c));
+  --channel-D: rgb(var(--c-ch-d));
   /* Native controls and their popups (dropdown lists, number spinners)
      render dark instead of with the light desktop theme. */
   color-scheme: dark; /* uiThemes sets light for light themes */
@@ -78,6 +78,12 @@ select:not([multiple]) {
   background-position: right 0.5rem center;
   background-size: 0.9rem;
   padding-right: 1.75rem;
+}
+
+/* Native checkboxes, radios and range sliders drew in the desktop's light
+   style inside the themed dialogs. accent-color takes the theme's accent. */
+input[type="checkbox"], input[type="radio"], input[type="range"] {
+  accent-color: rgb(var(--c-sky-500, 14 165 233));
 }
 
 select option {

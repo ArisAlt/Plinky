@@ -36,3 +36,25 @@ describe('network keyword highlighting', () => {
     expect(words('warning: link flapping')).toEqual([['warning', AMBER], ['flapping', AMBER]]);
   });
 });
+
+import { KeywordHighlighter } from '../services/keywordHighlight';
+import type { Terminal } from '@xterm/xterm';
+
+describe('highlight colours follow the terminal scheme', () => {
+  const RULE_AMBER = '#fbbf24', RULE_CYAN = '#22d3ee';
+  const scheme = { yellow: '#9a6700', brightYellow: '#ffe07a', cyan: '#1b7c83', brightCyan: '#7ee7ff' };
+
+  it('a light scheme gets its normal colours: bright ones are too pale on white', () => {
+    // Fixed amber #fbbf24 on a white terminal was about 1.7:1.
+    const h = new KeywordHighlighter({} as Terminal);
+    h.setTheme(scheme, true);
+    expect(h.colourFor(RULE_AMBER)).toBe('#9a6700');
+    expect(h.colourFor(RULE_CYAN)).toBe('#1b7c83');
+  });
+
+  it('a dark scheme gets its bright colours', () => {
+    const h = new KeywordHighlighter({} as Terminal);
+    h.setTheme(scheme, false);
+    expect(h.colourFor(RULE_AMBER)).toBe('#ffe07a');
+  });
+});
