@@ -206,7 +206,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <span className="font-bold text-sm tracking-wide text-white">PLINKY</span>
           {(puttyVersion || puttyMissing) && (
             <span
-              className={`text-[11px] px-1.5 py-0.5 rounded tabular-nums border ${
+              className={`text-meta px-1.5 py-0.5 rounded tabular-nums border ${
                 puttyMissing
                   ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
                   : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
@@ -314,7 +314,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             type="submit"
             disabled={!quickHost.trim()}
             title="Quick Connect via plink"
-            className="p-1.5 rounded bg-sky-700 hover:brightness-110 text-white disabled:opacity-40 disabled:pointer-events-none transition"
+            className="p-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent disabled:opacity-40 disabled:pointer-events-none transition"
           >
             <Play className="w-3 h-3 fill-current" />
           </button>
@@ -344,7 +344,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       )}
                       <div className="flex flex-col min-w-0 truncate">
                         <span className="font-mono text-xs truncate">{item.label}</span>
-                        <span className="text-[11px] text-plinky-muted truncate">{item.subtext}</span>
+                        <span className="text-meta text-plinky-muted truncate">{item.subtext}</span>
                       </div>
                     </div>
 
@@ -366,11 +366,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
             {history.length > 0 && (
               <div className="p-1.5 border-t border-plinky-800 bg-plinky-950/60 flex items-center justify-between">
-                <span className="text-[11px] text-plinky-muted font-medium px-1">Quick Connect History</span>
+                <span className="text-meta text-plinky-muted font-medium px-1">Quick Connect History</span>
                 <button
                   type="button"
                   onClick={clearAllHistory}
-                  className="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-rose-400 px-1.5 py-0.5 rounded hover:bg-plinky-800 transition"
+                  className="flex items-center space-x-1 text-meta text-slate-400 hover:text-rose-400 px-1.5 py-0.5 rounded hover:bg-plinky-800 transition"
                 >
                   <Trash2 className="w-2.5 h-2.5" />
                   <span>Clear All</span>
@@ -387,7 +387,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             aria-label="New session"
             title="New session"
           onClick={onNewSession}
-          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
+          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium transition"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="hidden md:inline">New session</span>

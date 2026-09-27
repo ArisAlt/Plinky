@@ -50,6 +50,10 @@ connection itself, to PuTTY.
 - **Keep a record.** Log any session straight to a file of your choice as it
   happens.
 - **Manage tunnels and host keys** from one place.
+- **Make it yours.** Nine interface themes (Dracula, Nord, Tokyo Night,
+  Catppuccin, Gruvbox, GitHub Light and more), sixteen terminal colour
+  schemes from PuTTY's classic look to Solarized, and popular programming
+  fonts built in, so they work offline.
 
 ---
 

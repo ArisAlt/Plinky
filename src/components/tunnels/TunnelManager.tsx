@@ -123,7 +123,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
           )}
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium transition"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Forward</span>
@@ -166,7 +166,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <span
-                  className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold uppercase ${
+                  className={`px-2 py-0.5 rounded text-meta font-mono font-semibold uppercase ${
                     t.type === 'Local'
                       ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                       : t.type === 'Dynamic'
@@ -182,7 +182,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
               </div>
 
               <div className="flex items-center space-x-3">
-                <span className="text-[11px] text-slate-400 font-mono">
+                <span className="text-meta text-slate-400 font-mono">
                   {formatBytes(t.bytesTransferred || 0)} transferred
                 </span>
                 <button
@@ -210,12 +210,12 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
             <div className="flex items-center space-x-3 mt-3 p-2 bg-plinky-950/80 rounded border border-plinky-800 font-mono text-xs">
               <div className="flex items-center space-x-1.5 text-slate-300">
                 <span className="font-semibold text-sky-400">127.0.0.1:{t.srcPort}</span>
-                <span className="text-[11px] text-plinky-muted">(Source)</span>
+                <span className="text-meta text-plinky-muted">(Source)</span>
               </div>
 
               <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
 
-              <div className="flex items-center space-x-1 text-slate-400 px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[11px]">
+              <div className="flex items-center space-x-1 text-slate-400 px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-meta">
                 <ShieldCheck className="w-3 h-3 text-slate-400" />
                 <span>SSH Pipe</span>
               </div>
@@ -228,7 +228,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
                 ) : (
                   <>
                     <span className="font-semibold text-slate-200">{t.destHost}:{t.destPort}</span>
-                    <span className="text-[11px] text-plinky-muted">(Remote)</span>
+                    <span className="text-meta text-plinky-muted">(Remote)</span>
                   </>
                 )}
               </div>
@@ -267,7 +267,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
                     onClick={() => setNewType(type)}
                     className={`py-1 rounded text-xs border ${
                       newType === type
-                        ? 'bg-sky-700 text-white border-sky-500'
+                        ? 'bg-sky-700 text-on-accent border-sky-500'
                         : 'bg-plinky-950 text-slate-300 border-plinky-700 hover:border-slate-500'
                     }`}
                   >
@@ -319,7 +319,7 @@ export const TunnelManager: React.FC<TunnelManagerProps> = ({ sessionName, onClo
               </button>
               <button
                 onClick={handleAddTunnel}
-                className="px-3 py-1 rounded bg-sky-700 text-white hover:brightness-110 font-medium text-xs"
+                className="px-3 py-1 rounded bg-sky-700 text-on-accent hover:brightness-110 font-medium text-xs"
               >
                 Create Tunnel
               </button>

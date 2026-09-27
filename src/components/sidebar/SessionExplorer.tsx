@@ -416,11 +416,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const getProtocolBadge = (protocol: string) => {
     switch (protocol) {
       case 'SSH':
-        return <span className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-plinky-800 text-slate-300">SSH</span>;
+        return <span className="px-1.5 py-0.5 rounded text-meta font-mono bg-plinky-800 text-slate-300">SSH</span>;
       case 'Serial':
-        return <span className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-plinky-800 text-slate-300">COM</span>;
+        return <span className="px-1.5 py-0.5 rounded text-meta font-mono bg-plinky-800 text-slate-300">COM</span>;
       default:
-        return <span className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-slate-700 text-slate-300">{protocol}</span>;
+        return <span className="px-1.5 py-0.5 rounded text-meta font-mono bg-slate-700 text-slate-300">{protocol}</span>;
     }
   };
 
@@ -494,7 +494,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 min-w-0">
-            <span className={`text-[13px] font-medium truncate ${isActiveTab ? 'text-sky-100' : 'text-slate-100'}`}>
+            <span className={`text-sm font-medium truncate ${isActiveTab ? 'text-sky-100' : 'text-slate-100'}`}>
               {session.name}
             </span>
             {session.extra?.PlinkyVaultKey && (
@@ -504,7 +504,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               />
             )}
           </div>
-          <div className="font-mono text-[11px] leading-tight text-plinky-muted truncate">
+          <div className="font-mono text-meta leading-tight text-plinky-muted truncate">
             {target}
             {tags && <span className="font-sans text-plinky-muted"> · {tags}</span>}
           </div>
@@ -560,11 +560,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             else if (e.key === 'Escape') setFolderEdit(null);
           }}
           onBlur={() => { if (!folderBusy) setFolderEdit(null); }}
-          className={`w-full bg-plinky-900 border rounded px-1.5 py-0.5 text-[11px] text-slate-200 placeholder-plinky-muted focus:outline-none ${
+          className={`w-full bg-plinky-900 border rounded px-1.5 py-0.5 text-meta text-slate-200 placeholder-plinky-muted focus:outline-none ${
             error && edit.value ? 'border-rose-500/70' : 'border-plinky-700 focus:border-sky-500'
           }`}
         />
-        {error && edit.value && <div role="alert" className="text-[11px] text-rose-400 px-0.5">{error}</div>}
+        {error && edit.value && <div role="alert" className="text-meta text-rose-400 px-0.5">{error}</div>}
       </div>
     );
   };
@@ -607,7 +607,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             data-tree-item
             role="treeitem"
             tabIndex={-1}
-            className={`w-full flex items-center space-x-1.5 px-1 py-1 rounded text-[13px] font-medium transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
+            className={`w-full flex items-center space-x-1.5 px-1 py-1 rounded text-sm font-medium transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
               dragOverFolder === node.path
                 ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/50'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/50'
@@ -623,7 +623,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               ? <Folder aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-plinky-muted" />
               : <FolderOpen aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-sky-400" />}
             <span className="flex-1 truncate">{node.name}</span>
-            <span className="text-[11px] text-plinky-muted tabular-nums">({total})</span>
+            <span className="text-meta text-plinky-muted tabular-nums">({total})</span>
             {total === 0 && !isDefault && (
               <span
                 onClick={(e) => {
@@ -646,7 +646,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             {isEmpty && !addingSub ? (
               <div
                 {...dropHandlers(node.path)}
-                className={`py-2 px-2 my-1 text-center rounded border border-dashed transition text-[11px] ${
+                className={`py-2 px-2 my-1 text-center rounded border border-dashed transition text-meta ${
                   dragOverFolder === node.path
                     ? 'bg-sky-500/20 border-sky-400 text-sky-200'
                     : 'border-plinky-800/80 text-plinky-muted hover:border-slate-700'
@@ -685,7 +685,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
           {/* "PuTTY Sessions" never fit the 256 px sidebar: it showed as
               "PUTTY SESS...". The whole app is about PuTTY sessions. */}
-          <span className="font-semibold text-[11px] tracking-wider uppercase text-slate-300 truncate whitespace-nowrap">
+          <span className="font-semibold text-meta tracking-wider uppercase text-slate-300 truncate whitespace-nowrap">
             Sessions
           </span>
         </div>
@@ -734,7 +734,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <button
               onClick={submitCreateFolder}
               disabled={!createFolderName.trim() || !!createFolderError}
-              className="px-2 py-0.5 rounded bg-sky-700 hover:brightness-110 disabled:opacity-40 text-white text-[11px] font-medium"
+              className="px-2 py-0.5 rounded bg-sky-700 hover:brightness-110 disabled:opacity-40 text-on-accent text-meta font-medium"
             >
               Add
             </button>
@@ -748,7 +748,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          {createFolderError && <div role="alert" className="text-[11px] text-rose-400">{createFolderError}</div>}
+          {createFolderError && <div role="alert" className="text-meta text-rose-400">{createFolderError}</div>}
         </div>
       )}
 
@@ -783,7 +783,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       </div>
 
       {folderError && (
-        <div role="alert" className="mx-2 mt-2 px-2 py-1.5 rounded border border-rose-500/40 bg-rose-500/10 text-[11px] text-rose-300 flex items-start gap-1.5">
+        <div role="alert" className="mx-2 mt-2 px-2 py-1.5 rounded border border-rose-500/40 bg-rose-500/10 text-meta text-rose-300 flex items-start gap-1.5">
           <span className="flex-1">{folderError}</span>
           <button onClick={() => setFolderError(null)} aria-label="Dismiss" className="text-rose-300/70 hover:text-rose-200">
             <X className="w-3 h-3" />
@@ -807,7 +807,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         {dragging?.kind === 'folder' && parentPath(dragging.path) !== '' && (
           <div
             {...dropHandlers('')}
-            className={`py-2 px-2 text-center rounded border border-dashed transition text-[11px] ${
+            className={`py-2 px-2 text-center rounded border border-dashed transition text-meta ${
               dragOverFolder === ''
                 ? 'bg-sky-500/20 border-sky-400 text-sky-200'
                 : 'border-plinky-700 text-plinky-muted'
@@ -841,9 +841,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       {/* Quick Status Bar */}
       {/* The footer's green "Native PuTTY" dot never changed: a status light
           with no status. The count stays; the search shortcut replaces it. */}
-      <div className="px-2 py-1.5 border-t border-plinky-800 bg-plinky-950/50 flex items-center justify-between text-[11px] text-plinky-muted">
+      <div className="px-2 py-1.5 border-t border-plinky-800 bg-plinky-950/50 flex items-center justify-between text-meta text-plinky-muted">
         <span>{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}</span>
-        <kbd className="font-mono text-[11px] text-plinky-muted">Ctrl+Shift+O</kbd>
+        <kbd className="font-mono text-meta text-plinky-muted">Ctrl+Shift+O</kbd>
       </div>
 
       {/* Folder Context Menu */}
@@ -864,7 +864,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             className="z-50 w-48 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-3 py-1 text-[11px] text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
+            <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
               {displayPath(node.path)}
             </div>
             <button
@@ -947,7 +947,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <div className="text-slate-400">
               Every session in "{displayPath(confirmConnect.path)}" and its subfolders opens in a new tab:
             </div>
-            <ul className="max-h-40 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-0.5 bg-plinky-950/60 rounded p-2">
+            <ul className="max-h-40 overflow-y-auto font-mono text-meta text-slate-300 space-y-0.5 bg-plinky-950/60 rounded p-2">
               {confirmConnect.sessions.map(s => (
                 <li key={s.name} className="truncate">{s.name}</li>
               ))}
@@ -965,7 +965,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                   for (const s of confirmConnect.sessions) onConnectSession(s, true);
                   setConfirmConnect(null);
                 }}
-                className="px-3 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium"
+                className="px-3 py-1 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium"
               >
                 Open {confirmConnect.sessions.length}
               </button>
@@ -987,7 +987,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           className="z-50 w-44 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-3 py-1 text-[11px] text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
+          <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
             {contextMenu.session.name}
           </div>
           <button
@@ -1047,7 +1047,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                         setContextMenu(null);
                         setMoveSubmenuOpen(false);
                       }}
-                      className="w-full flex items-center px-4 py-1 text-[11px] text-slate-300 hover:text-white hover:bg-sky-600/20 transition text-left truncate"
+                      className="w-full flex items-center px-4 py-1 text-meta text-slate-300 hover:text-white hover:bg-sky-600/20 transition text-left truncate"
                     >
                       {displayPath(f)}
                     </button>
@@ -1072,9 +1072,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
                   }}
                   aria-label="New folder name"
                   placeholder="Folder name, Enter to create"
-                  className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-[11px] text-slate-200 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
+                  className="w-full bg-plinky-900 border border-plinky-700 rounded px-1.5 py-0.5 text-meta text-slate-200 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
                 />
-                {moveInputError && <div role="alert" className="text-[11px] text-rose-400 pt-0.5">{moveInputError}</div>}
+                {moveInputError && <div role="alert" className="text-meta text-rose-400 pt-0.5">{moveInputError}</div>}
               </div>
             </div>
           )}

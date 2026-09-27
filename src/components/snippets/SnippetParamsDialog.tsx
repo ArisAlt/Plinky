@@ -50,7 +50,7 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
 
         {params.map((p, i) => (
           <label key={p.name} className="block">
-            <span className="block text-[11px] text-slate-400 mb-1 font-mono">{p.name}</span>
+            <span className="block text-meta text-slate-400 mb-1 font-mono">{p.name}</span>
             <input
               autoFocus={i === 0}
               value={values[p.name] ?? ''}
@@ -61,8 +61,8 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
         ))}
 
         <div>
-          <span className="block text-[11px] text-plinky-muted mb-1">Sends{target ? ` to ${target}` : ''}</span>
-          <pre data-testid="snippet-preview" className="bg-slate-950 border border-slate-800 rounded p-2 font-mono text-[11px] text-slate-300 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+          <span className="block text-meta text-plinky-muted mb-1">Sends{target ? ` to ${target}` : ''}</span>
+          <pre data-testid="snippet-preview" className="bg-slate-950 border border-slate-800 rounded p-2 font-mono text-meta text-slate-300 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
             {command.replace(/\n$/, '')}
           </pre>
         </div>
@@ -75,7 +75,7 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
             type="submit"
             disabled={missing.length > 0}
             title={missing.length > 0 ? `Needs a value for ${missing.join(', ')}` : undefined}
-            className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium disabled:opacity-40 disabled:pointer-events-none"
+            className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium disabled:opacity-40 disabled:pointer-events-none"
           >
             <Play className="w-3 h-3" />
             <span>Run</span>

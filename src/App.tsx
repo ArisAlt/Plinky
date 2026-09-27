@@ -9,6 +9,7 @@ import { SftpDualPane } from './components/sftp/SftpDualPane';
 import { TunnelManager } from './components/tunnels/TunnelManager';
 import { HostKeyManager } from './components/keys/HostKeyManager';
 import { VaultManager } from './components/vault/VaultManager';
+import { DEFAULT_TERMINAL_FONT, loadTerminalFont } from './themes/fonts';
 import { ConfirmHost } from './components/common/ConfirmHost';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
@@ -81,10 +82,27 @@ export const App: React.FC = () => {
   // The folder a new session starts in, when created from a folder's menu.
   const [newSessionFolder, setNewSessionFolder] = useState<string | undefined>(undefined);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
-    '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono Variable", "JetBrains Mono", "DejaVu Sans Mono", monospace'
-  );
-  const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
+  // Font and size were forgotten at every restart. Saved now; 14px by
+  // default, one step up from 13, which read soft on Linux.
+  const [terminalFontFamily, setFontFamilyState] = useState<string>(() => {
+    try { return localStorage.getItem('plinky_terminal_font') || DEFAULT_TERMINAL_FONT; } catch { return DEFAULT_TERMINAL_FONT; }
+  });
+  const [terminalFontSize, setFontSizeState] = useState<number>(() => {
+    try {
+      const n = Number(localStorage.getItem('plinky_terminal_font_size'));
+      return n >= 8 && n <= 32 ? n : 14;
+    } catch { return 14; }
+  });
+  const setTerminalFontFamily = (stack: string) => {
+    try { localStorage.setItem('plinky_terminal_font', stack); } catch { /* not remembered */ }
+    // Load the face first: xterm measures its cell when the option changes,
+    // and a face still downloading would be measured as the fallback.
+    void loadTerminalFont(stack, terminalFontSize).then(() => setFontFamilyState(stack));
+  };
+  const setTerminalFontSize = (n: number) => {
+    try { localStorage.setItem('plinky_terminal_font_size', String(n)); } catch { /* not remembered */ }
+    setFontSizeState(n);
+  };
   const [terminalCursorStyle, setTerminalCursorStyle] = useState<'block' | 'bar' | 'underline'>('bar');
   // The session picked with a session's SFTP button. Without one, SFTP
   // follows the active terminal tab. (It used to default to a hardcoded
@@ -489,7 +507,7 @@ export const App: React.FC = () => {
 
                         {/* Channel Badge Indicator */}
                         {tab.syncChannel !== 'none' && (
-                          <span className={`px-1 py-px rounded border text-[11px] font-bold tabular-nums ${getChannelColor(tab.syncChannel)}`}>
+                          <span className={`px-1 py-px rounded border text-meta font-bold tabular-nums ${getChannelColor(tab.syncChannel)}`}>
                             {tab.syncChannel}
                           </span>
                         )}
@@ -614,7 +632,7 @@ export const App: React.FC = () => {
                         <span>Pick a session on the left, or press Ctrl+Shift+O to search.</span>
                         <button
                           onClick={() => window.dispatchEvent(new Event('plinky:focus-session-search'))}
-                          className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition-colors"
+                          className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium transition-colors"
                         >
                           Open a session
                         </button>

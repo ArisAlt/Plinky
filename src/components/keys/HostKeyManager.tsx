@@ -53,7 +53,7 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleSimulateInspectKey}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium transition"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Inspect .ppk Key</span>
@@ -95,7 +95,7 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
 
         <div className="border border-plinky-800 rounded-lg overflow-hidden bg-plinky-900/60">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-plinky-900 text-slate-400 text-[11px] border-b border-plinky-800">
+            <thead className="bg-plinky-900 text-slate-400 text-meta border-b border-plinky-800">
               <tr>
                 <th className="py-2 px-3 font-medium">Hostname</th>
                 <th className="py-2 px-3 font-medium w-16">Port</th>
@@ -109,8 +109,8 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
                 <tr key={idx} className="hover:bg-plinky-800/40 transition">
                   <td className="py-2 px-3 font-medium text-slate-200">{hk.hostname}</td>
                   <td className="py-2 px-3 text-slate-400">{hk.port}</td>
-                  <td className="py-2 px-3 text-sky-400 text-[11px]">{hk.keyType}</td>
-                  <td className="py-2 px-3 text-slate-300 text-[11px] truncate max-w-xs">
+                  <td className="py-2 px-3 text-sky-400 text-meta">{hk.keyType}</td>
+                  <td className="py-2 px-3 text-slate-300 text-meta truncate max-w-xs">
                     {hk.fingerprint || 'Verified in PuTTY store'}
                   </td>
                   <td className="py-2 px-3 text-center">

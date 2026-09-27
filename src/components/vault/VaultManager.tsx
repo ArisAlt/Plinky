@@ -411,7 +411,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
           </div>
           <div>
             <h1 className="text-sm font-semibold text-white tracking-wide">Plinky Credential Vault</h1>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-meta text-slate-400">
               AES-256-GCM encryption, key derived with Argon2id
             </p>
           </div>
@@ -492,7 +492,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
 
             <form onSubmit={handleCreateVault} className="space-y-3 pt-2">
               <div>
-                <label htmlFor="vault-manager-master-password" className="block text-[11px] font-medium text-slate-300 mb-1">Master Password</label>
+                <label htmlFor="vault-manager-master-password" className="block text-meta font-medium text-slate-300 mb-1">Master Password</label>
                 <input id="vault-manager-master-password"
                   type="password"
                   value={masterPassword}
@@ -503,7 +503,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
               </div>
 
               <div>
-                <label htmlFor="vault-manager-confirm-master-password" className="block text-[11px] font-medium text-slate-300 mb-1">Confirm Master Password</label>
+                <label htmlFor="vault-manager-confirm-master-password" className="block text-meta font-medium text-slate-300 mb-1">Confirm Master Password</label>
                 <input id="vault-manager-confirm-master-password"
                   type="password"
                   value={confirmPassword}
@@ -526,7 +526,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={loading || !masterPassword}
-                  className="flex-1 py-2 bg-sky-700 hover:brightness-110 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
+                  className="flex-1 py-2 bg-sky-700 hover:brightness-110 disabled:opacity-40 text-on-accent font-medium text-xs rounded transition flex items-center justify-center space-x-1"
                 >
                   <Lock className="w-3.5 h-3.5" />
                   <span>Create & Encrypt Vault</span>
@@ -559,7 +559,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
 
             <form onSubmit={handleUnlockVault} className="space-y-3 pt-2">
               <div>
-                <label htmlFor="vault-manager-master-password-2" className="block text-[11px] font-medium text-slate-300 mb-1">Master Password</label>
+                <label htmlFor="vault-manager-master-password-2" className="block text-meta font-medium text-slate-300 mb-1">Master Password</label>
                 <input id="vault-manager-master-password-2"
                   type="password"
                   value={masterPassword}
@@ -583,7 +583,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={loading || !masterPassword}
-                  className="flex-1 py-2 bg-sky-700 hover:brightness-110 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
+                  className="flex-1 py-2 bg-sky-700 hover:brightness-110 disabled:opacity-40 text-on-accent font-medium text-xs rounded transition flex items-center justify-center space-x-1"
                 >
                   <Unlock className="w-3.5 h-3.5" />
                   <span>Unlock Credential Vault</span>
@@ -604,7 +604,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
 
               <button
                 onClick={() => (showAddForm ? resetForm() : setShowAddForm(true))}
-                className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white text-xs font-medium transition"
+                className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent text-xs font-medium transition"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{showAddForm ? 'Cancel' : 'Add Credential'}</span>
@@ -617,7 +617,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 <h3 className="text-sm font-semibold text-white">{editingId ? `Edit Credential` : 'Add New Credential'}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Key / Session Identifier</label>
+                    <label className="block text-meta text-slate-400 mb-1">Key / Session Identifier</label>
                     <input
                       type="text"
                       value={newId}
@@ -631,7 +631,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                   </div>
 
                   <div>
-                    <label htmlFor="vault-manager-username-optional" className="block text-[11px] text-slate-400 mb-1">Username (Optional)</label>
+                    <label htmlFor="vault-manager-username-optional" className="block text-meta text-slate-400 mb-1">Username (Optional)</label>
                     <input id="vault-manager-username-optional"
                       type="text"
                       value={newUsername}
@@ -643,7 +643,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Secret / Password / Passphrase</label>
+                  <label className="block text-meta text-slate-400 mb-1">Secret / Password / Passphrase</label>
                   <input
                     type="password"
                     value={newSecret}
@@ -670,7 +670,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
 
                 {isNetworkDevice && (
                   <div className="p-2.5 bg-plinky-950/60 border border-plinky-700 rounded space-y-1 animate-in fade-in duration-100">
-                    <label className="block text-[11px] text-slate-300 font-medium">
+                    <label className="block text-meta text-slate-300 font-medium">
                       Enable Password (Privileged Secret)
                     </label>
                     <input
@@ -681,14 +681,14 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                       placeholder={editingId ? 'Leave empty to keep the current enable password' : 'e.g. Cisco enable secret...'}
                       className="w-full px-2.5 py-1.5 bg-plinky-950 border border-plinky-700 rounded text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
                     />
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-meta text-slate-400">
                       Used for privileged exec elevation (e.g. Cisco `enable` command) on network switches and routers.
                     </p>
                   </div>
                 )}
 
                 <div>
-                  <label htmlFor="vault-manager-notes-optional" className="block text-[11px] text-slate-400 mb-1">Notes (Optional)</label>
+                  <label htmlFor="vault-manager-notes-optional" className="block text-meta text-slate-400 mb-1">Notes (Optional)</label>
                   <input id="vault-manager-notes-optional"
                     type="text"
                     value={newNotes}
@@ -708,7 +708,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                   </button>
                   <button
                     type="submit"
-                    className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white text-xs font-medium transition"
+                    className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent text-xs font-medium transition"
                   >
                     {editingId ? 'Save Changes' : 'Save Secret'}
                   </button>
@@ -736,13 +736,13 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           <Key className="w-3.5 h-3.5 text-sky-400" />
                           <span className="font-mono font-medium text-xs text-white">{entry.id}</span>
                           {entry.username && (
-                            <span className="text-[11px] px-1.5 py-px rounded bg-plinky-800 text-slate-400 font-mono">
+                            <span className="text-meta px-1.5 py-px rounded bg-plinky-800 text-slate-400 font-mono">
                               {entry.username}
                             </span>
                           )}
                           {entry.has_enable_secret && (
                             <span 
-                              className="text-[11px] px-1.5 py-px rounded bg-plinky-800 text-slate-300 border border-plinky-700 font-mono font-medium"
+                              className="text-meta px-1.5 py-px rounded bg-plinky-800 text-slate-300 border border-plinky-700 font-mono font-medium"
                               title="Contains enable password for privileged exec"
                             >
                               + Enable Pwd
@@ -750,7 +750,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           )}
                         </div>
                         {entry.notes && (
-                          <p className="text-[11px] text-slate-400 pl-5">{entry.notes}</p>
+                          <p className="text-meta text-slate-400 pl-5">{entry.notes}</p>
                         )}
                         <div className="pl-5 pt-1 flex items-center space-x-2">
                           <span className="font-mono text-xs text-slate-300">
@@ -768,7 +768,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           <button
                             onClick={() => copyEnableToClipboard(entry.id)}
                             title="Copy Enable Password (clears clipboard after 25s)"
-                            className="flex items-center space-x-1 px-2 py-1 rounded bg-plinky-800 border border-plinky-700 hover:bg-plinky-700 text-slate-300 text-[11px] font-mono transition"
+                            className="flex items-center space-x-1 px-2 py-1 rounded bg-plinky-800 border border-plinky-700 hover:bg-plinky-700 text-slate-300 text-meta font-mono transition"
                           >
                             {isEnableCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Shield className="w-3 h-3 text-slate-400" />}
                             <span>Enable</span>
@@ -840,7 +840,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
             vault master password; enable passwords go in an "Enable password" field.
           </p>
           <label className="block space-y-1">
-            <span className="text-[11px] text-slate-400">Vault master password</span>
+            <span className="text-meta text-slate-400">Vault master password</span>
             <input
               type="password"
               autoFocus
@@ -850,13 +850,13 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
             />
           </label>
           {exportError && (
-            <div role="alert" className="p-2 rounded border border-rose-500/40 bg-rose-950/40 text-rose-300 text-[11px]">{exportError}</div>
+            <div role="alert" className="p-2 rounded border border-rose-500/40 bg-rose-950/40 text-rose-300 text-meta">{exportError}</div>
           )}
           <div className="flex justify-end space-x-2 pt-1">
             <button type="button" onClick={closeExport} disabled={exportBusy} className="px-3 py-1.5 rounded bg-plinky-800 hover:bg-plinky-700 disabled:opacity-40">
               Cancel
             </button>
-            <button type="submit" disabled={!exportPassword || exportBusy} className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white disabled:opacity-40">
+            <button type="submit" disabled={!exportPassword || exportBusy} className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent disabled:opacity-40">
               {exportBusy ? 'Exporting…' : 'Choose file and export'}
             </button>
           </div>

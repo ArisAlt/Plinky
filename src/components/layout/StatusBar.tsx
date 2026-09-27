@@ -19,7 +19,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
   }, {});
 
   return (
-    <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between text-[11px] text-slate-400 select-none tabular-nums">
+    <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between text-meta text-slate-400 select-none tabular-nums">
       {/* Left: Active Session & Transport Status */}
       <div className="flex items-center space-x-3">
         <div className="flex items-center space-x-1.5 text-slate-400">
@@ -56,7 +56,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
             return (
               <span
                 key={ch}
-                className={`px-1 py-px rounded text-[11px] font-bold ${
+                className={`px-1 py-px rounded text-meta font-bold ${
                   count > 0
                     ? ch === 'A'
                       ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'

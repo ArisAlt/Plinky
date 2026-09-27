@@ -23,15 +23,11 @@ export function announceBroadcast(ids: string[]) {
 /** How long a receiving pane or tab stays lit. */
 export const GLOW_MS = 1200;
 
-/** Glow colour for a pane, by its sync channel (matches the channel badges). */
-export function glowColor(channel: string): string {
-  switch (channel) {
-    case 'A': return '#22d3ee';
-    case 'B': return '#34d399';
-    case 'C': return '#fbbf24';
-    case 'D': return '#fb7185';
-    default: return '#818cf8'; // reached only by ALL TABS
-  }
+/** Glow colour for a pane, by its sync channel (matches the channel badges),
+ *  from the interface theme's variables so it follows the theme. */
+export function glowColor(channel: string, alpha = 1): string {
+  const scale = ({ A: 'cyan', B: 'emerald', C: 'amber', D: 'rose' } as Record<string, string>)[channel] ?? 'sky';
+  return `rgb(var(--c-${scale}-400) / ${alpha})`;
 }
 
 /** The ids lit by the latest broadcast; each clears GLOW_MS after it was sent. */

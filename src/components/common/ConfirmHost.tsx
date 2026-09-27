@@ -68,8 +68,8 @@ export const ConfirmHost: React.FC = () => {
           </button>
           <button
             onClick={() => answer(true)}
-            className={`px-3 py-1.5 rounded text-xs font-medium text-white hover:brightness-110 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-plinky-900 ${
-              req.danger ? 'bg-rose-700 focus-visible:ring-rose-300' : 'bg-sky-700 focus-visible:ring-sky-300'
+            className={`px-3 py-1.5 rounded text-xs font-medium hover:brightness-110 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-plinky-900 ${
+              req.danger ? 'bg-rose-700 text-on-danger focus-visible:ring-rose-300' : 'bg-sky-700 text-on-accent focus-visible:ring-sky-300'
             }`}
           >
             {req.confirmLabel}

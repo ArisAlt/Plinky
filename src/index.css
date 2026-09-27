@@ -56,13 +56,13 @@
 }
 
 :root {
-  --channel-A: #06b6d4;
-  --channel-B: #10b981;
-  --channel-C: #f59e0b;
-  --channel-D: #f43f5e;
+  --channel-A: rgb(var(--c-cyan-500));
+  --channel-B: rgb(var(--c-emerald-500));
+  --channel-C: rgb(var(--c-amber-500));
+  --channel-D: rgb(var(--c-rose-500));
   /* Native controls and their popups (dropdown lists, number spinners)
      render dark instead of with the light desktop theme. */
-  color-scheme: dark;
+  color-scheme: dark; /* uiThemes sets light for light themes */
 }
 
 /* WebKitGTK (the Linux app's webview) draws <select> with the GTK theme and
@@ -81,8 +81,8 @@ select:not([multiple]) {
 }
 
 select option {
-  background-color: #090d16;
-  color: #e2e8f0;
+  background-color: rgb(var(--c-plinky-950, 9 13 22));
+  color: rgb(var(--c-slate-200, 226 232 240));
 }
 
 body {
@@ -91,8 +91,16 @@ body {
   overflow: hidden;
   user-select: none;
   font-family: 'Inter Variable', Inter, system-ui, -apple-system, sans-serif;
-  background-color: #090d16;
-  color: #f1f5f9;
+  /* The fallbacks paint the first frame before the theme script runs. */
+  background-color: rgb(var(--c-plinky-950, 9 13 22));
+  color: rgb(var(--c-slate-100, 241 245 249));
+  /* Text looked fuzzy on Linux. The page forced grayscale smoothing
+     (Tailwind's "antialiased"), which throws away the desktop's own
+     subpixel setting; "auto" leaves it to the system. Inter's optical-size
+     axis (font-optical-sizing, on by default) opens small text up. */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  font-optical-sizing: auto;
 }
 
 /* Custom Scrollbars */
@@ -102,34 +110,34 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: rgb(var(--c-plinky-900));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgb(var(--c-plinky-700));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgb(var(--c-plinky-600));
 }
 
 /* Dockview Theme Overrides for Sleek Modern Look */
 .dockview-theme-dark {
-  --dv-paneview-header-border-color: #1e293b;
-  --dv-separator-border: #1e293b;
-  --dv-tabs-and-actions-container-background-color: #0f172a;
-  --dv-activegroup-visiblepanel-tab-background-color: #1e293b;
-  --dv-activegroup-hiddenpanel-tab-background-color: #0f172a;
-  --dv-inactivegroup-visiblepanel-tab-background-color: #1e293b;
-  --dv-inactivegroup-hiddenpanel-tab-background-color: #0f172a;
-  --dv-tab-divider-color: #1e293b;
-  --dv-activegroup-visiblepanel-tab-color: #38bdf8;
-  --dv-activegroup-hiddenpanel-tab-color: #94a3b8;
-  --dv-inactivegroup-visiblepanel-tab-color: #cbd5e1;
-  --dv-inactivegroup-hiddenpanel-tab-color: #64748b;
-  --dv-drag-over-background-color: rgba(56, 189, 248, 0.15);
-  --dv-drag-over-border-color: #38bdf8;
+  --dv-paneview-header-border-color: rgb(var(--c-plinky-800));
+  --dv-separator-border: rgb(var(--c-plinky-800));
+  --dv-tabs-and-actions-container-background-color: rgb(var(--c-plinky-900));
+  --dv-activegroup-visiblepanel-tab-background-color: rgb(var(--c-plinky-800));
+  --dv-activegroup-hiddenpanel-tab-background-color: rgb(var(--c-plinky-900));
+  --dv-inactivegroup-visiblepanel-tab-background-color: rgb(var(--c-plinky-800));
+  --dv-inactivegroup-hiddenpanel-tab-background-color: rgb(var(--c-plinky-900));
+  --dv-tab-divider-color: rgb(var(--c-plinky-800));
+  --dv-activegroup-visiblepanel-tab-color: rgb(var(--c-sky-400));
+  --dv-activegroup-hiddenpanel-tab-color: rgb(var(--c-slate-400));
+  --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--c-slate-300));
+  --dv-inactivegroup-hiddenpanel-tab-color: rgb(var(--c-plinky-muted));
+  --dv-drag-over-background-color: rgb(var(--c-sky-400) / 0.15);
+  --dv-drag-over-border-color: rgb(var(--c-sky-400));
 }
 
 /* xterm.js Canvas Customization */

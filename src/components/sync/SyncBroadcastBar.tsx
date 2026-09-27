@@ -123,7 +123,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
             <button
               key={target}
               onClick={() => { setBroadcastTarget(target); disarm(); }}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition ${
+              className={`px-2 py-0.5 rounded text-meta font-semibold border transition ${
                 broadcastTarget === target
                   ? getTargetBadgeColor(target) + ' font-bold shadow-xs'
                   : 'bg-plinky-950 text-slate-400 border-plinky-700 hover:text-slate-200'
@@ -157,7 +157,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
           disabled={!command.trim()}
           title={armed ? 'Press Enter again to send' : undefined}
           className={`flex items-center space-x-1 px-3 py-1 rounded font-medium whitespace-nowrap tabular-nums disabled:opacity-40 disabled:pointer-events-none transition ${
-            armed ? 'bg-amber-500 hover:bg-amber-400 text-amber-950' : 'bg-sky-700 hover:brightness-110 text-white'
+            armed ? 'bg-amber-500 hover:bg-amber-400 text-amber-950' : 'bg-sky-700 hover:brightness-110 text-on-accent'
           }`}
         >
           <Send className="w-3 h-3" />
@@ -166,7 +166,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
         <span
           role="status"
           aria-live="polite"
-          className={`text-[11px] whitespace-nowrap ${result?.ok ? 'text-emerald-400' : 'text-amber-400'}`}
+          className={`text-meta whitespace-nowrap ${result?.ok ? 'text-emerald-400' : 'text-amber-400'}`}
         >
           {result?.text}
         </span>
@@ -197,7 +197,7 @@ export const SyncBroadcastBar: React.FC<SyncBroadcastBarProps> = ({ tabs }) => {
               </div>
             </div>
 
-            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 max-h-40 overflow-y-auto mb-4 whitespace-pre">
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-meta text-slate-300 max-h-40 overflow-y-auto mb-4 whitespace-pre">
               {pendingConfirmation.command}
             </div>
 
