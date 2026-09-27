@@ -475,7 +475,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     if (!containerRef.current) return;
 
     // Initialize xterm.js instance with modern dark theme
-    const defaultFontStack = '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono", "FiraCode Nerd Font", "Fira Code", "DejaVu Sans Mono", monospace';
+    const defaultFontStack = '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono Variable", "JetBrains Mono", "DejaVu Sans Mono", monospace';
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: cursorStyle || (isFreeType ? 'bar' : 'block'),
@@ -1292,7 +1292,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         <div className="flex items-center space-x-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
           <span className="font-semibold text-slate-200">{tab.sessionName}</span>
-          <span className="text-slate-500 font-mono">
+          <span className="text-plinky-muted font-mono">
             {isLocalSession ? '(local shell)' : `(${tab.hostname}:${tab.port})`}
           </span>
         </div>
@@ -1329,7 +1329,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 >
                   <div className="px-3 py-1 border-b border-plinky-800 flex items-center justify-between">
                     <span className="font-semibold text-slate-200 text-[11px]">Vault Credentials</span>
-                    <span className="text-[10px] text-amber-400 font-mono truncate max-w-[100px]" title={vaultKey}>
+                    <span className="text-[11px] text-amber-400 font-mono truncate max-w-[100px]" title={vaultKey}>
                       {vaultKey}
                     </span>
                   </div>
@@ -1337,7 +1337,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   {!isVaultUnlocked ? (
                     <div className="p-2.5 text-center space-y-1.5">
                       <p className="text-[11px] text-slate-400">Vault is currently locked.</p>
-                      <p className="text-[10px] text-slate-500">Unlock it with Vault in the top bar to send saved passwords.</p>
+                      <p className="text-[11px] text-plinky-muted">Unlock it with Vault in the top bar to send saved passwords.</p>
                     </div>
                   ) : (
                     <div className="py-1">
@@ -1431,7 +1431,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             className={`flex items-center space-x-1 px-1.5 py-0.5 rounded border text-[11px] transition ${
               tab.activeHighlighting !== false
                 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/20'
-                : 'bg-slate-800/60 text-slate-500 border-slate-700 hover:text-slate-300'
+                : 'bg-slate-800/60 text-plinky-muted border-slate-700 hover:text-slate-300'
             }`}
           >
             <Sparkles className="w-3 h-3" />
@@ -1487,11 +1487,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 }
               }
             }}
-            className="w-44 bg-plinky-950 border border-plinky-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-hidden focus:border-sky-500"
+            className="w-44 bg-plinky-950 border border-plinky-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
           />
 
           {/* Search Result Counter */}
-          <span className="text-[10px] font-mono text-slate-400 px-1 min-w-[50px] text-center">
+          <span className="text-[11px] font-mono text-slate-400 px-1 min-w-[50px] text-center">
             {searchStats ? `${searchStats.index + 1}/${searchStats.total}` : (searchQuery ? '0/0' : '')}
           </span>
 
@@ -1515,8 +1515,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <button
             onClick={() => setCaseSensitive(!caseSensitive)}
             title="Match Case"
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
-              caseSensitive ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-slate-500 border-transparent hover:text-slate-300'
+            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border transition ${
+              caseSensitive ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-plinky-muted border-transparent hover:text-slate-300'
             }`}
           >
             Aa
@@ -1524,8 +1524,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <button
             onClick={() => setWholeWord(!wholeWord)}
             title="Match Whole Word"
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
-              wholeWord ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-slate-500 border-transparent hover:text-slate-300'
+            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border transition ${
+              wholeWord ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-plinky-muted border-transparent hover:text-slate-300'
             }`}
           >
             \b
@@ -1533,8 +1533,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <button
             onClick={() => setIsRegex(!isRegex)}
             title="Use Regular Expression"
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
-              isRegex ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-slate-500 border-transparent hover:text-slate-300'
+            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border transition ${
+              isRegex ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'text-plinky-muted border-transparent hover:text-slate-300'
             }`}
           >
             .*
@@ -1548,7 +1548,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               terminalRef.current?.focus();
             }}
             title="Close Search (Esc)"
-            className="p-1 text-slate-500 hover:text-rose-400 ml-1"
+            className="p-1 text-plinky-muted hover:text-rose-400 ml-1"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -1580,13 +1580,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             {reconnectIn !== null ? (
               <>
                 <span>Connection lost. Reconnecting in {reconnectIn} s</span>
-                <button onClick={reconnectNow} className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px]">Reconnect now</button>
+                <button onClick={reconnectNow} className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-amber-950 text-[11px]">Reconnect now</button>
                 <button onClick={cancelAutoReconnect} className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-200 text-[11px]">Cancel</button>
               </>
             ) : (
               <>
                 <span>Disconnected</span>
-                <button onClick={handleManualReconnect} className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px]">Reconnect</button>
+                <button onClick={handleManualReconnect} className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-amber-950 text-[11px]">Reconnect</button>
               </>
             )}
           </div>
@@ -1624,7 +1624,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             >
               <span>{detectedPasswordPrompt === 'enable' ? 'Send enable password' : 'Send password'}</span>
             </button>
-            <span className="text-[10px] text-amber-300/70 font-mono truncate max-w-[140px]" title={vaultKey}>{vaultKey}</span>
+            <span className="text-[11px] text-amber-300/70 font-mono truncate max-w-[140px]" title={vaultKey}>{vaultKey}</span>
             <button
               onClick={() => setDetectedPasswordPrompt(null)}
               className="p-0.5 text-slate-400 hover:text-white rounded"
@@ -1695,7 +1695,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             {vaultKey && (
               <>
                 <div className="border-t border-plinky-800 my-1" />
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400/80 flex items-center space-x-1">
+                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-400/80 flex items-center space-x-1">
                   <Shield className="w-3 h-3 text-amber-400" />
                   <span>Vault ({vaultKey})</span>
                 </div>
@@ -1706,7 +1706,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   }}
                   disabled={!isVaultUnlocked}
                   className={`w-full flex items-center space-x-2 px-3 py-1.5 text-left transition ${
-                    isVaultUnlocked ? 'hover:bg-amber-600/30 text-amber-200' : 'text-slate-500 cursor-not-allowed'
+                    isVaultUnlocked ? 'hover:bg-amber-600/30 text-amber-200' : 'text-plinky-muted cursor-not-allowed'
                   }`}
                 >
                   <Key className="w-3.5 h-3.5 text-amber-400" />
@@ -1720,7 +1720,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                     }}
                     disabled={!isVaultUnlocked}
                     className={`w-full flex items-center space-x-2 px-3 py-1.5 text-left transition ${
-                      isVaultUnlocked ? 'hover:bg-emerald-600/30 text-emerald-200' : 'text-slate-500 cursor-not-allowed'
+                      isVaultUnlocked ? 'hover:bg-emerald-600/30 text-emerald-200' : 'text-plinky-muted cursor-not-allowed'
                     }`}
                   >
                     <Shield className="w-3.5 h-3.5 text-emerald-400" />
@@ -1910,11 +1910,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
               <div className="flex-1 overflow-y-auto p-4 bg-slate-950/90 font-mono text-[11px] space-y-1 select-text">
                 {eventLogs.length === 0 ? (
-                  <div className="text-slate-500 italic">No events logged yet.</div>
+                  <div className="text-plinky-muted italic">No events logged yet.</div>
                 ) : (
                   eventLogs.map((log) => (
                     <div key={log.id} className="flex space-x-2 leading-relaxed">
-                      <span className="text-slate-500 select-none">[{log.time}]</span>
+                      <span className="text-plinky-muted select-none">[{log.time}]</span>
                       <span
                         className={
                           log.level === 'error'
@@ -1957,7 +1957,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   </button>
                   <button
                     onClick={() => setIsEventLogOpen(false)}
-                    className="px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition"
+                    className="px-4 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white text-xs font-medium transition"
                   >
                     Close
                   </button>
@@ -2051,12 +2051,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                     className={`px-3 py-1.5 rounded font-medium transition ${
                       isLogging
                         ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-emerald-700 hover:brightness-110 text-white'
                     }`}
                   >
                     {isLogging ? 'Stop Logging' : 'Start Logging…'}
                   </button>
-                  <span className="text-slate-500 text-[10px]">
+                  <span className="text-plinky-muted text-[11px]">
                     {isLogging ? 'Written to disk as it arrives.' : 'Asks where to save, then writes as output arrives.'}
                   </span>
                 </div>
@@ -2111,7 +2111,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 </button>
                 <button
                   onClick={() => handleAnswerPrompt('store')}
-                  className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-sm transition-colors"
+                  className="px-3 py-2 rounded-lg bg-emerald-700 hover:brightness-110 text-white text-xs font-medium shadow-sm transition-colors"
                 >
                   Store Key in Cache & Connect
                 </button>

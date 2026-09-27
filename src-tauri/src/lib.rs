@@ -1377,6 +1377,9 @@ mod tests {
         assert!(has("windows", "main"));
         assert!(has("permissions", "core:event:allow-listen"));
         assert!(has("permissions", "core:event:allow-unlisten"));
+        // The interface size setting (Settings, Ctrl+Shift+=/-/0) calls
+        // setZoom on the webview; without this grant it silently does nothing.
+        assert!(has("permissions", "core:webview:allow-set-webview-zoom"));
     }
     use super::{find_session_entry_for, session_url_for_entry_with, vault_key_candidates};
     use plinky_core::{Vault, VaultEntry};

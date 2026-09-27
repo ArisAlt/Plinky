@@ -19,7 +19,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
   }, {});
 
   return (
-    <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between text-[11px] text-slate-400 select-none font-mono">
+    <footer className="h-6 bg-plinky-950 border-t border-plinky-800 px-3 flex items-center justify-between text-[11px] text-slate-400 select-none tabular-nums">
       {/* Left: Active Session & Transport Status */}
       <div className="flex items-center space-x-3">
         <div className="flex items-center space-x-1.5 text-emerald-400">
@@ -55,7 +55,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
             return (
               <span
                 key={ch}
-                className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+                className={`px-1 py-px rounded text-[11px] font-bold ${
                   count > 0
                     ? ch === 'A'
                       ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
@@ -64,7 +64,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
                       : ch === 'C'
                       ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                       : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                    : 'text-slate-600'
+                    : 'text-plinky-muted'
                 }`}
               >
                 {ch}:{count}
@@ -78,7 +78,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId }) => {
         {/* Free Type Mode Indicator */}
         <div className="flex items-center space-x-1">
           <span>FreeType:</span>
-          <span className={`font-semibold ${activeTab?.freeTypeMode ? 'text-sky-400' : 'text-slate-500'}`}>
+          <span className={`font-semibold ${activeTab?.freeTypeMode ? 'text-sky-400' : 'text-plinky-muted'}`}>
             {activeTab?.freeTypeMode ? 'ON' : 'OFF'}
           </span>
         </div>

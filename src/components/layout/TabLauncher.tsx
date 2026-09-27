@@ -123,9 +123,9 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
       <button key={`${item.recent ? 'r' : 's'}:${s.name}`} role="option" aria-selected={active} className={base} onMouseEnter={() => setIndex(i)} onClick={() => choose(item)}>
         {item.recent
           ? <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-          : <Server className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />}
+          : <Server className="w-3.5 h-3.5 text-plinky-muted flex-shrink-0" />}
         <span className="truncate flex-1">{s.name}</span>
-        {host && <span className="text-[10px] text-slate-500 font-mono truncate max-w-[110px]">{host}</span>}
+        {host && <span className="text-[11px] text-plinky-muted font-mono truncate max-w-[110px]">{host}</span>}
       </button>
     );
   };
@@ -143,7 +143,7 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
       onKeyDown={onKeyDown}
     >
       <div className="relative mb-1">
-        <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+        <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-plinky-muted" />
         <input
           autoFocus
           value={query}
@@ -155,8 +155,8 @@ export const TabLauncher: React.FC<TabLauncherProps> = ({
       <div role="listbox" className="max-h-80 overflow-y-auto space-y-0.5">
         {items.map((item, i) => (
           <React.Fragment key={i}>
-            {i === firstRecent && <div className="px-2.5 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wider text-slate-500">Recent</div>}
-            {i === firstSession && <div className="px-2.5 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wider text-slate-500">Sessions</div>}
+            {i === firstRecent && <div className="px-2.5 pt-1.5 pb-0.5 text-[11px] uppercase tracking-wider text-plinky-muted">Recent</div>}
+            {i === firstSession && <div className="px-2.5 pt-1.5 pb-0.5 text-[11px] uppercase tracking-wider text-plinky-muted">Sessions</div>}
             {item.kind === 'new' && <div className="border-t border-plinky-800 my-1" />}
             {row(item, i)}
           </React.Fragment>

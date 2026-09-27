@@ -370,7 +370,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
   });
 
   const renderBreadcrumbs = (path: string | null, onSelect: (p: string) => void) => {
-    if (!path || localSep(path) === '\\') return <div className="text-[11px] font-mono text-slate-500 truncate">{path}</div>;
+    if (!path || localSep(path) === '\\') return <div className="text-[11px] font-mono text-plinky-muted truncate">{path}</div>;
     const parts = path.split('/').filter(Boolean);
     return (
       <div className="flex items-center space-x-1 text-slate-400 overflow-x-auto text-[11px] font-mono py-0.5">
@@ -421,8 +421,8 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
             <span className="truncate">{file.name}</span>
           </td>
           <td className="py-1 px-2 text-slate-400 font-mono text-[11px]">{file.isDir ? '-' : formatSize(file.size)}</td>
-          {side === 'remote' && <td className="py-1 px-2 text-slate-500 font-mono text-[10px]">{file.permissions}</td>}
-          <td className="py-1 px-2 text-slate-500 text-[11px] truncate">{file.modified}</td>
+          {side === 'remote' && <td className="py-1 px-2 text-plinky-muted font-mono text-[11px]">{file.permissions}</td>}
+          <td className="py-1 px-2 text-plinky-muted text-[11px] truncate">{file.modified}</td>
         </tr>
       ));
 
@@ -437,10 +437,10 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
         <div className="flex items-center space-x-2 min-w-0">
           <Server className="w-4 h-4 text-emerald-400 flex-shrink-0" />
           <span className="font-semibold text-slate-200 truncate">SFTP: {sessionName}</span>
-          {hostname && <span className="text-slate-500 font-mono truncate">({username ? `${username}@` : ''}{hostname})</span>}
+          {hostname && <span className="text-plinky-muted font-mono truncate">({username ? `${username}@` : ''}{hostname})</span>}
         </div>
         <div className="flex items-center space-x-2">
-          <div className="flex items-center bg-plinky-950 p-0.5 rounded border border-plinky-800 text-[10px]">
+          <div className="flex items-center bg-plinky-950 p-0.5 rounded border border-plinky-800 text-[11px]">
             {(['dual', 'remote', 'local'] as const).map(mode => (
               <button
                 key={mode}
@@ -485,9 +485,9 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
               <div className="flex items-center justify-between">
                 {renderBreadcrumbs(localPath, p => void loadLocal(p))}
                 <div className="relative flex items-center w-28 flex-shrink-0">
-                  <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+                  <Search className="w-3 h-3 absolute left-1.5 text-plinky-muted" />
                   <input type="text" placeholder="Filter..." value={localFilter} onChange={e => setLocalFilter(e.target.value)}
-                    className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300" />
+                    className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[11px] text-slate-300" />
                 </div>
               </div>
             </div>
@@ -498,7 +498,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
             )}
             <div {...dropOn('local')} className={`flex-1 overflow-y-auto relative ${dragOver === 'local' ? 'outline outline-2 outline-dashed outline-sky-400 -outline-offset-4' : ''}`}>
               <table className="w-full text-left border-collapse">
-                <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
+                <thead className="bg-plinky-900/40 text-plinky-muted text-[11px] sticky top-0">
                   <tr>
                     <th className="py-1 px-2 font-medium">Name</th>
                     <th className="py-1 px-2 font-medium w-20">Size</th>
@@ -563,9 +563,9 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
                     <Trash2 className="w-3.5 h-3.5 text-red-400" />
                   </button>
                   <div className="relative flex items-center w-28">
-                    <Search className="w-3 h-3 absolute left-1.5 text-slate-500" />
+                    <Search className="w-3 h-3 absolute left-1.5 text-plinky-muted" />
                     <input type="text" placeholder="Filter..." value={remoteFilter} onChange={e => setRemoteFilter(e.target.value)}
-                      className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[10px] text-slate-300" />
+                      className="w-full pl-5 pr-1 py-0.5 bg-plinky-950 border border-plinky-700/60 rounded text-[11px] text-slate-300" />
                   </div>
                 </div>
               </div>
@@ -588,7 +588,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
                       placeholder={`Password for ${username ? `${username}@` : ''}${hostname || sessionName}`}
                       className="flex-1 min-w-0 bg-plinky-950 border border-plinky-700 rounded px-2 py-0.5 text-xs text-slate-200"
                     />
-                    <button type="submit" disabled={!passwordDraft} className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40">
+                    <button type="submit" disabled={!passwordDraft} className="px-2 py-0.5 rounded bg-sky-700 hover:brightness-110 text-white disabled:opacity-40">
                       Connect
                     </button>
                   </form>
@@ -598,12 +598,12 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
 
             <div {...dropOn('remote')} className={`flex-1 overflow-y-auto relative ${dragOver === 'remote' ? 'outline outline-2 outline-dashed outline-emerald-400 -outline-offset-4' : ''}`}>
               {remoteLoading && remoteFiles.length === 0 && !remoteError && (
-                <div className="flex items-center justify-center py-8 text-slate-500 space-x-2">
+                <div className="flex items-center justify-center py-8 text-plinky-muted space-x-2">
                   <Loader2 className="w-4 h-4 animate-spin" /><span>Connecting to {hostname || sessionName}…</span>
                 </div>
               )}
               <table className="w-full text-left border-collapse">
-                <thead className="bg-plinky-900/40 text-slate-500 text-[11px] sticky top-0">
+                <thead className="bg-plinky-900/40 text-plinky-muted text-[11px] sticky top-0">
                   <tr>
                     <th className="py-1 px-2 font-medium">Name</th>
                     <th className="py-1 px-2 font-medium w-20">Size</th>
@@ -644,10 +644,10 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
             {failedCount > 0 && <span className="text-red-400">{failedCount} failed</span>}
             {!queueOpen && doneCount > 0 && <span>{doneCount} done</span>}
             {!queueOpen && transfers.length === 0 && (
-              <span className="text-slate-600">Double-click a file, use the arrows, or drag it to the other pane.</span>
+              <span className="text-plinky-muted">Double-click a file, use the arrows, or drag it to the other pane.</span>
             )}
             {queueOpen && transfers.some(t => t.status !== 'transferring') && (
-              <button onClick={() => setTransfers(prev => prev.filter(t => t.status === 'transferring'))} className="text-[10px] hover:text-slate-200">
+              <button onClick={() => setTransfers(prev => prev.filter(t => t.status === 'transferring'))} className="text-[11px] hover:text-slate-200">
                 Clear finished
               </button>
             )}
@@ -656,7 +656,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
         {queueOpen && (
           <div id="sftp-transfer-queue" className="flex-1 overflow-y-auto p-2 space-y-1.5">
             {transfers.length === 0 && (
-              <div className="text-slate-600 text-[11px] text-center pt-3">
+              <div className="text-plinky-muted text-[11px] text-center pt-3">
                 Double-click a file, use the arrows, or drag it to the other pane.
               </div>
             )}
@@ -664,7 +664,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
               <div key={item.id} className="flex items-center space-x-2 text-xs bg-plinky-950 p-1.5 rounded border border-plinky-800/60">
                 {item.direction === 'upload' ? <Upload className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" /> : <Download className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
                 <span className="font-medium text-slate-200 truncate w-40 flex-shrink-0">{item.filename}</span>
-                <span className="font-mono text-[11px] text-slate-500 w-16 flex-shrink-0">{formatSize(item.size)}</span>
+                <span className="font-mono text-[11px] text-plinky-muted w-16 flex-shrink-0">{formatSize(item.size)}</span>
                 <span className={`flex-1 truncate text-[11px] ${item.status === 'failed' ? 'text-red-400 select-text' : 'text-slate-400'}`} title={item.error}>
                   {item.status === 'transferring' ? 'Transferring…' : item.status === 'completed' ? 'Done' : item.error}
                 </span>

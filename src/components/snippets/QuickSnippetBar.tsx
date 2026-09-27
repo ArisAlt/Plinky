@@ -107,7 +107,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                 key={snippet.id}
                 onClick={() => runSnippet(snippet)}
                 title={`Run: ${snippet.command.trim()} on ${activeSessionName || 'active terminal'}`}
-                className="group flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-850 hover:bg-sky-600/30 border border-plinky-750 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-200 transition font-mono whitespace-nowrap"
+                className="group flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-850 hover:bg-sky-600/30 border border-plinky-700 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-200 transition whitespace-nowrap"
               >
                 <Play className="w-2.5 h-2.5 text-sky-400 opacity-60 group-hover:opacity-100" />
                 <span>{snippet.name}</span>
@@ -133,12 +133,12 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
         <div className="p-3 bg-plinky-950/80 border-t border-plinky-800/80 space-y-2 animate-in slide-in-from-bottom-2 duration-150">
           {/* Category Filter Pills */}
           <div className="flex items-center space-x-1.5 border-b border-plinky-800/60 pb-2">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mr-1">Categories:</span>
+            <span className="text-[11px] text-plinky-muted uppercase tracking-wider font-semibold mr-1">Categories:</span>
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition ${
+                className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition ${
                   selectedCategory === cat
                     ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/60'
@@ -159,12 +159,12 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                 className="group relative flex flex-col p-2 rounded-lg bg-plinky-900 border border-plinky-800 hover:border-sky-500/50 hover:bg-plinky-850 cursor-pointer transition shadow-xs"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className={`px-1.5 py-0.2 rounded border text-[9px] font-mono font-medium ${getCategoryColor(snippet.category)}`}>
+                  <span className={`px-1.5 py-px rounded border text-[11px] font-medium ${getCategoryColor(snippet.category)}`}>
                     {snippet.category}
                   </span>
                   <button
                     onClick={(e) => handleDeleteSnippet(snippet.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-rose-400 transition"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-plinky-muted hover:text-rose-400 transition"
                     title="Delete Snippet"
                   >
                     <X className="w-3 h-3" />
@@ -173,7 +173,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                 <span className="font-semibold text-slate-200 text-xs truncate group-hover:text-sky-300 transition">
                   {snippet.name}
                 </span>
-                <span className="font-mono text-[10px] text-slate-500 truncate mt-0.5">
+                <span className="font-mono text-[11px] text-plinky-muted truncate mt-0.5">
                   {snippet.command.trim()}
                 </span>
               </div>
@@ -199,7 +199,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             <div className="flex items-center justify-between mb-4 border-b border-plinky-800 pb-2">
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-semibold">Create Quick Snippet</h3>
+                <h3 className="text-base font-semibold">Create Quick Snippet</h3>
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
@@ -217,7 +217,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                   placeholder="e.g. Restart Nginx"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-hidden focus:border-sky-500"
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
                   required
                 />
               </div>
@@ -227,7 +227,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                 <select
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value as SnippetItem['category'])}
-                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-hidden focus:border-sky-500"
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
                 >
                   <option value="System">System</option>
                   <option value="Docker">Docker</option>
@@ -244,10 +244,10 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                   placeholder="e.g. sudo systemctl restart ${SERVICE:nginx}"
                   value={newCommand}
                   onChange={(e) => setNewCommand(e.target.value)}
-                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden focus:border-sky-500"
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-sky-500"
                   required
                 />
-                <p className="mt-1 text-[10px] text-slate-500 leading-relaxed">
+                <p className="mt-1 text-[11px] text-plinky-muted leading-relaxed">
                   <code className="text-slate-400">{'${NAME}'}</code> asks for a value each time it runs,{' '}
                   <code className="text-slate-400">{'${NAME:default}'}</code> pre-fills it. Values aren't saved.
                   For a shell variable write <code className="text-slate-400">{'$${HOME}'}</code>.
@@ -264,7 +264,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs shadow-xs"
+                  className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium text-xs shadow-xs"
                 >
                   Save Snippet
                 </button>

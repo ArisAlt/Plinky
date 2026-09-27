@@ -53,7 +53,7 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleSimulateInspectKey}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium transition"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-amber-950 font-medium transition"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Inspect .ppk Key</span>
@@ -90,7 +90,7 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose }) => {
       <div className="space-y-2">
         <div className="flex items-center justify-between text-slate-400 text-xs">
           <span>Trusted Servers from PuTTY Store (~/.putty/sshhostkeys / WinReg)</span>
-          <span className="font-mono">{hostKeys.length} host keys</span>
+          <span className="tabular-nums">{hostKeys.length} host keys</span>
         </div>
 
         <div className="border border-plinky-800 rounded-lg overflow-hidden bg-plinky-900/60">

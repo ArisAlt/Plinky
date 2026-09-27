@@ -41,7 +41,7 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
         <div className="flex items-center justify-between border-b border-plinky-800 pb-2">
           <div className="flex items-center space-x-2">
             <Braces className="w-4 h-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">{snippet.name}</h3>
+            <h3 className="text-base font-semibold">{snippet.name}</h3>
           </div>
           <button type="button" onClick={onCancel} aria-label="Cancel" className="p-1 text-slate-400 hover:text-white">
             <X className="w-4 h-4" />
@@ -55,13 +55,13 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
               autoFocus={i === 0}
               value={values[p.name] ?? ''}
               onChange={e => setValues(v => ({ ...v, [p.name]: e.target.value }))}
-              className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden focus:border-sky-500"
+              className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-sky-500"
             />
           </label>
         ))}
 
         <div>
-          <span className="block text-[11px] text-slate-500 mb-1">Sends{target ? ` to ${target}` : ''}</span>
+          <span className="block text-[11px] text-plinky-muted mb-1">Sends{target ? ` to ${target}` : ''}</span>
           <pre data-testid="snippet-preview" className="bg-slate-950 border border-slate-800 rounded p-2 font-mono text-[11px] text-slate-300 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
             {command.replace(/\n$/, '')}
           </pre>
@@ -75,7 +75,7 @@ export const SnippetParamsDialog: React.FC<SnippetParamsDialogProps> = ({ snippe
             type="submit"
             disabled={missing.length > 0}
             title={missing.length > 0 ? `Needs a value for ${missing.join(', ')}` : undefined}
-            className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium disabled:opacity-40 disabled:pointer-events-none"
+            className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium disabled:opacity-40 disabled:pointer-events-none"
           >
             <Play className="w-3 h-3" />
             <span>Run</span>

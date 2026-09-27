@@ -51,7 +51,7 @@
   .animate-in { animation-name: plinky-fade; }
   @keyframes plinky-fade { from { opacity: 0; } }
   button:not(:disabled):active { transform: none; }
-  .animate-pulse, .animate-ping, .animate-spin { animation: none; }
+  .animate-pulse, .animate-ping, .animate-spin, .animate-bounce { animation: none; }
   .free-type-cursor-indicator { transition: none; }
 }
 
@@ -90,7 +90,7 @@ body {
   padding: 0;
   overflow: hidden;
   user-select: none;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter Variable', Inter, system-ui, -apple-system, sans-serif;
   background-color: #090d16;
   color: #f1f5f9;
 }

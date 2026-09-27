@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle } from 'lucide-react';
+import { useUiZoom, zoomIn, zoomOut, zoomReset, UI_ZOOM_MIN, UI_ZOOM_MAX } from '../../services/uiZoom';
 import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
 
 interface SettingsModalProps {
@@ -20,7 +21,7 @@ interface SettingsModalProps {
 
 const AVAILABLE_FONTS = [
   { label: 'MesloLGS Nerd Font (Recommended for Powerlevel10k / Starship)', value: '"MesloLGS Nerd Font", "MesloLGS NF", monospace' },
-  { label: 'JetBrains Mono', value: '"JetBrains Mono", "JetBrainsMono Nerd Font", monospace' },
+  { label: 'JetBrains Mono (built in)', value: '"JetBrains Mono Variable", "JetBrains Mono", "JetBrainsMono Nerd Font", monospace' },
   { label: 'Fira Code', value: '"Fira Code", "FiraCode Nerd Font", monospace' },
   { label: 'FantasqueSansM Nerd Font', value: '"FantasqueSansM Nerd Font", monospace' },
   { label: 'DejaVu Sans Mono', value: '"DejaVu Sans Mono", monospace' },
@@ -42,6 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onChangeRightClickAction,
   onResetLayout,
 }) => {
+  const uiZoom = useUiZoom();
   const [puttyInfo, setPuttyInfo] = useState<PuttyDetectInfo | null>(null);
   const [resetDone, setResetDone] = useState(false);
   // Delete vault: two warnings, then delete (owner request).
@@ -103,10 +105,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Settings className="w-4 h-4 text-sky-400" />
-            <h3 className="font-semibold text-slate-100 text-sm">Plinky Settings</h3>
+            <h3 className="font-semibold text-slate-100 text-base">Plinky Settings</h3>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close settings"
             className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 transition"
           >
             <X className="w-4 h-4" />
@@ -115,6 +118,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Content */}
         <div className="p-4 space-y-5 overflow-y-auto max-h-[75vh]">
+          {/* Section: Interface size */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-slate-300 font-semibold">Interface size</div>
+                <div className="text-[11px] text-plinky-muted">Ctrl+Shift+= / Ctrl+Shift+- · Ctrl+Shift+0 resets</div>
+              </div>
+              <div className="flex items-center gap-1" role="group" aria-label="Interface size">
+                <button type="button" onClick={zoomOut} disabled={uiZoom <= UI_ZOOM_MIN} aria-label="Smaller interface"
+                  className="w-7 h-7 rounded border border-plinky-700 bg-plinky-950 text-slate-200 hover:border-sky-500 disabled:opacity-40">−</button>
+                <span className="w-12 text-center tabular-nums text-slate-200" aria-live="polite">{Math.round(uiZoom * 100)}%</span>
+                <button type="button" onClick={zoomIn} disabled={uiZoom >= UI_ZOOM_MAX} aria-label="Larger interface"
+                  className="w-7 h-7 rounded border border-plinky-700 bg-plinky-950 text-slate-200 hover:border-sky-500 disabled:opacity-40">+</button>
+                <button type="button" onClick={zoomReset} disabled={uiZoom === 1}
+                  className="ml-1 px-2 h-7 rounded text-slate-400 hover:text-slate-200 hover:bg-plinky-800 disabled:opacity-40">Reset</button>
+              </div>
+            </div>
+          </div>
+
           {/* Section: Terminal Appearance */}
           <div className="space-y-3">
             <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
@@ -191,7 +213,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
                 <div className="select-none">
                   <span className="text-slate-200 font-medium block">Copy on select (Classic PuTTY)</span>
-                  <span className="text-[11px] text-slate-500 block">Selecting text with the mouse immediately copies it to the system clipboard without pressing Ctrl+C.</span>
+                  <span className="text-[11px] text-plinky-muted block">Selecting text with the mouse immediately copies it to the system clipboard without pressing Ctrl+C.</span>
                 </div>
               </label>
 
@@ -209,7 +231,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}
                   >
                     <div className="font-semibold text-[11px]">Context Menu</div>
-                    <div className="text-[10px] text-slate-500">Show PuTTY action menu</div>
+                    <div className="text-[11px] text-plinky-muted">Show PuTTY action menu</div>
                   </button>
 
                   <button
@@ -222,7 +244,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}
                   >
                     <div className="font-semibold text-[11px]">Paste Clipboard (PuTTY)</div>
-                    <div className="text-[10px] text-slate-500">Right click pastes (Shift+Right for menu)</div>
+                    <div className="text-[11px] text-plinky-muted">Right click pastes (Shift+Right for menu)</div>
                   </button>
                 </div>
               </div>
@@ -265,7 +287,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between p-2.5 bg-plinky-950 rounded border border-plinky-800">
               <div>
                 <p className="font-medium text-slate-200">Reset Saved Layout</p>
-                <p className="text-[11px] text-slate-500">Clears cached split panes, tab order, and restores default single layout.</p>
+                <p className="text-[11px] text-plinky-muted">Clears cached split panes, tab order, and restores default single layout.</p>
               </div>
               <button
                 type="button"
@@ -298,7 +320,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-slate-200">Delete Vault</p>
-                  <p className="text-[11px] text-slate-500">Permanently deletes the vault and every password saved in it.</p>
+                  <p className="text-[11px] text-plinky-muted">Permanently deletes the vault and every password saved in it.</p>
                 </div>
                 <button
                   type="button"
@@ -355,7 +377,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-3 bg-plinky-950 border-t border-plinky-800 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition"
+            className="px-4 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
           >
             Done
           </button>

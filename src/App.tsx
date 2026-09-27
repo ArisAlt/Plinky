@@ -81,7 +81,7 @@ export const App: React.FC = () => {
   const [newSessionFolder, setNewSessionFolder] = useState<string | undefined>(undefined);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [terminalFontFamily, setTerminalFontFamily] = useState<string>(
-    '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono", "FiraCode Nerd Font", "Fira Code", "DejaVu Sans Mono", monospace'
+    '"MesloLGS Nerd Font", "MesloLGS NF", "FantasqueSansM Nerd Font", "JetBrainsMono Nerd Font", "JetBrains Mono Variable", "JetBrains Mono", "DejaVu Sans Mono", monospace'
   );
   const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
   const [terminalCursorStyle, setTerminalCursorStyle] = useState<'block' | 'bar' | 'underline'>('bar');
@@ -348,7 +348,7 @@ export const App: React.FC = () => {
       case 'B': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
       case 'C': return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
       case 'D': return 'text-rose-400 bg-rose-500/10 border-rose-500/30';
-      default: return 'text-slate-500';
+      default: return 'text-plinky-muted';
     }
   };
 
@@ -376,7 +376,7 @@ export const App: React.FC = () => {
       case 'live':
       default:
         return (
-          <Terminal className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
+          <Terminal className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-sky-400' : 'text-plinky-muted'}`} />
         );
     }
   };
@@ -483,7 +483,7 @@ export const App: React.FC = () => {
 
                         {/* Channel Badge Indicator */}
                         {tab.syncChannel !== 'none' && (
-                          <span className={`px-1 py-0.2 rounded border text-[9px] font-mono font-bold ${getChannelColor(tab.syncChannel)}`}>
+                          <span className={`px-1 py-px rounded border text-[11px] font-bold tabular-nums ${getChannelColor(tab.syncChannel)}`}>
                             {tab.syncChannel}
                           </span>
                         )}
@@ -491,7 +491,7 @@ export const App: React.FC = () => {
                         <button
                           onClick={(e) => handleCloseTab(tab.id, e)}
                           title="Close Tab"
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-plinky-800 text-slate-500 hover:text-slate-200 transition"
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-plinky-800 text-plinky-muted hover:text-slate-200 transition"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -510,7 +510,7 @@ export const App: React.FC = () => {
                     title="Open a tab: local shell, recent or saved session, or a new one"
                     aria-label="Open a tab"
                     aria-expanded={!!launcherAnchor}
-                    className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-plinky-800 transition"
+                    className="p-1 rounded text-plinky-muted hover:text-slate-300 hover:bg-plinky-800 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -597,7 +597,7 @@ export const App: React.FC = () => {
               {/* Terminal Viewport (Single, Split, Grid, or Terminal+SFTP) */}
               <div className="flex-1 relative overflow-hidden bg-plinky-950 flex flex-col">
                 {tabs.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
+                  <div className="h-full flex flex-col items-center justify-center text-plinky-muted text-xs space-y-2">
                     <Terminal className="w-8 h-8 text-slate-600" />
                     <span className="text-slate-400">No open terminals</span>
                     {/* This connected to sessions[0], whichever session loaded
@@ -608,7 +608,7 @@ export const App: React.FC = () => {
                         <span>Pick a session on the left, or press Ctrl+Shift+O to search.</span>
                         <button
                           onClick={() => window.dispatchEvent(new Event('plinky:focus-session-search'))}
-                          className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors"
+                          className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition-colors"
                         >
                           Open a session
                         </button>
@@ -616,7 +616,7 @@ export const App: React.FC = () => {
                     ) : (
                       <button
                         onClick={() => { setNewSessionFolder(undefined); setIsNewSessionOpen(true); }}
-                        className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors"
+                        className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition-colors"
                       >
                         New session
                       </button>
@@ -713,7 +713,7 @@ export const App: React.FC = () => {
                         />
                       </div>
                     ) : (
-                      <div className="flex-1 h-full flex flex-col items-center justify-center bg-plinky-950 text-slate-500 text-xs space-y-2">
+                      <div className="flex-1 h-full flex flex-col items-center justify-center bg-plinky-950 text-plinky-muted text-xs space-y-2">
                         <Columns className="w-6 h-6 text-slate-600" />
                         <span>Empty Split View Pane</span>
                         <button
@@ -769,7 +769,7 @@ export const App: React.FC = () => {
                         />
                       </div>
                     ) : (
-                      <div className="flex-1 w-full flex flex-col items-center justify-center bg-plinky-950 text-slate-500 text-xs space-y-2">
+                      <div className="flex-1 w-full flex flex-col items-center justify-center bg-plinky-950 text-plinky-muted text-xs space-y-2">
                         <Rows className="w-6 h-6 text-slate-600" />
                         <span>Empty Split View Pane</span>
                         <button
@@ -809,7 +809,7 @@ export const App: React.FC = () => {
                     {Array.from({ length: Math.max(0, 4 - paneTabs(4).length) }, (_, i) => (
                       <div
                         key={`empty-${i}`}
-                        className="w-full h-full flex flex-col items-center justify-center bg-plinky-950 text-slate-500 text-xs space-y-2"
+                        className="w-full h-full flex flex-col items-center justify-center bg-plinky-950 text-plinky-muted text-xs space-y-2"
                       >
                         <LayoutGrid className="w-6 h-6 text-slate-600" />
                         <span>Empty pane</span>
@@ -856,7 +856,7 @@ export const App: React.FC = () => {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-sm space-y-2">
               <p>No session to browse.</p>
-              <p className="text-xs text-slate-500">Connect to a session, or use a saved session's SFTP button in the sidebar.</p>
+              <p className="text-xs text-plinky-muted">Connect to a session, or use a saved session's SFTP button in the sidebar.</p>
               <button onClick={() => setActiveView('sessions')} className="mt-2 px-3 py-1 rounded bg-plinky-800 hover:bg-plinky-700 text-xs">Back</button>
             </div>
           ))}

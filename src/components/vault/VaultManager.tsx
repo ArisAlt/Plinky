@@ -478,7 +478,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
               <div className="mx-auto w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-400 mb-2">
                 <Shield className="w-5 h-5" />
               </div>
-              <h2 className="text-sm font-semibold text-white">Initialize Plinky Vault</h2>
+              <h2 className="text-base font-semibold text-white">Initialize Plinky Vault</h2>
               <p className="text-xs text-slate-400">
                 Choose a strong master password to encrypt your session passwords and private keys.
               </p>
@@ -520,7 +520,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={loading || !masterPassword}
-                  className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
+                  className="flex-1 py-2 bg-sky-700 hover:brightness-110 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
                 >
                   <Lock className="w-3.5 h-3.5" />
                   <span>Create & Encrypt Vault</span>
@@ -545,7 +545,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
               <div className="mx-auto w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 mb-2">
                 <Lock className="w-5 h-5" />
               </div>
-              <h2 className="text-sm font-semibold text-white">Unlock Vault</h2>
+              <h2 className="text-base font-semibold text-white">Unlock Vault</h2>
               <p className="text-xs text-slate-400">
                 Enter your master password to decrypt your credential database.
               </p>
@@ -577,7 +577,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={loading || !masterPassword}
-                  className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
+                  className="flex-1 py-2 bg-sky-700 hover:brightness-110 disabled:opacity-40 text-white font-medium text-xs rounded transition flex items-center justify-center space-x-1"
                 >
                   <Unlock className="w-3.5 h-3.5" />
                   <span>Unlock Credential Vault</span>
@@ -598,7 +598,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
 
               <button
                 onClick={() => (showAddForm ? resetForm() : setShowAddForm(true))}
-                className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition"
+                className="flex items-center space-x-1 px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white text-xs font-medium transition"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{showAddForm ? 'Cancel' : 'Add Credential'}</span>
@@ -608,7 +608,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
             {/* Add Credential Form */}
             {showAddForm && (
               <form onSubmit={handleAddEntry} className="bg-plinky-900 border border-plinky-800 rounded-lg p-4 space-y-3">
-                <h3 className="text-xs font-semibold text-white">{editingId ? `Edit Credential` : 'Add New Credential'}</h3>
+                <h3 className="text-sm font-semibold text-white">{editingId ? `Edit Credential` : 'Add New Credential'}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">Key / Session Identifier</label>
@@ -675,7 +675,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                       placeholder={editingId ? 'Leave empty to keep the current enable password' : 'e.g. Cisco enable secret...'}
                       className="w-full px-2.5 py-1.5 bg-plinky-950 border border-amber-500/40 rounded text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
                     />
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[11px] text-slate-400">
                       Used for privileged exec elevation (e.g. Cisco `enable` command) on network switches and routers.
                     </p>
                   </div>
@@ -702,7 +702,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                   </button>
                   <button
                     type="submit"
-                    className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition"
+                    className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white text-xs font-medium transition"
                   >
                     {editingId ? 'Save Changes' : 'Save Secret'}
                   </button>
@@ -712,7 +712,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
 
             {/* Credential List */}
             {entries.length === 0 ? (
-              <div className="bg-plinky-900 border border-dashed border-plinky-800 rounded-lg p-8 text-center text-slate-500 text-xs">
+              <div className="bg-plinky-900 border border-dashed border-plinky-800 rounded-lg p-8 text-center text-plinky-muted text-xs">
                 No credentials stored yet in this vault. Click "Add Credential" to save passwords or passphrases.
               </div>
             ) : (
@@ -730,13 +730,13 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           <Key className="w-3.5 h-3.5 text-sky-400" />
                           <span className="font-mono font-medium text-xs text-white">{entry.id}</span>
                           {entry.username && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-plinky-800 text-slate-400 font-mono">
+                            <span className="text-[11px] px-1.5 py-px rounded bg-plinky-800 text-slate-400 font-mono">
                               {entry.username}
                             </span>
                           )}
                           {entry.has_enable_secret && (
                             <span 
-                              className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-medium"
+                              className="text-[11px] px-1.5 py-px rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-medium"
                               title="Contains enable password for privileged exec"
                             >
                               + Enable Pwd
@@ -762,7 +762,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
                           <button
                             onClick={() => copyEnableToClipboard(entry.id)}
                             title="Copy Enable Password (clears clipboard after 25s)"
-                            className="flex items-center space-x-1 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 text-[10px] font-mono transition"
+                            className="flex items-center space-x-1 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 text-[11px] font-mono transition"
                           >
                             {isEnableCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Shield className="w-3 h-3 text-amber-400" />}
                             <span>Enable</span>
@@ -850,7 +850,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
             <button type="button" onClick={closeExport} disabled={exportBusy} className="px-3 py-1.5 rounded bg-plinky-800 hover:bg-plinky-700 disabled:opacity-40">
               Cancel
             </button>
-            <button type="submit" disabled={!exportPassword || exportBusy} className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40">
+            <button type="submit" disabled={!exportPassword || exportBusy} className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-white disabled:opacity-40">
               {exportBusy ? 'Exporting…' : 'Choose file and export'}
             </button>
           </div>

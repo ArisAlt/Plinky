@@ -196,17 +196,17 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   };
 
   return (
-    <header className="h-11 bg-plinky-900 border-b border-plinky-800 px-3 flex items-center justify-between select-none text-xs">
+    <header className="h-11 bg-plinky-900 border-b border-plinky-800 px-3 flex items-center justify-between gap-3 select-none text-xs whitespace-nowrap">
       {/* Brand & Left Navigation */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-4 shrink-0">
         <div className="flex items-center space-x-2">
           <div className="h-6 w-6 rounded bg-sky-500/20 border border-sky-500/40 flex items-center justify-center">
             <Terminal className="w-3.5 h-3.5 text-sky-400" />
           </div>
-          <span className="font-bold text-sm tracking-tight text-white font-mono">PLINKY</span>
+          <span className="font-bold text-sm tracking-wide text-white">PLINKY</span>
           {(puttyVersion || puttyMissing) && (
             <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+              className={`text-[11px] px-1.5 py-0.5 rounded tabular-nums border ${
                 puttyMissing
                   ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
                   : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
@@ -221,6 +221,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {/* View Switchers */}
         <div className="flex items-center space-x-1 pl-2 border-l border-plinky-800">
           <button
+            aria-label="Sessions"
+            title="Sessions"
             onClick={() => setActiveView('sessions')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'sessions'
@@ -229,10 +231,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Folder className="w-3.5 h-3.5" />
-            <span>Sessions</span>
+            <span className="hidden lg:inline">Sessions</span>
           </button>
 
           <button
+            aria-label="SFTP Pane"
+            title="SFTP Pane"
             onClick={() => setActiveView(activeView === 'sftp' ? 'sessions' : 'sftp')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'sftp'
@@ -241,10 +245,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <HardDrive className="w-3.5 h-3.5" />
-            <span>SFTP Pane</span>
+            <span className="hidden lg:inline">SFTP Pane</span>
           </button>
 
           <button
+            aria-label="SSH Tunnels"
+            title="SSH Tunnels"
             onClick={() => setActiveView(activeView === 'tunnels' ? 'sessions' : 'tunnels')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'tunnels'
@@ -253,10 +259,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Network className="w-3.5 h-3.5" />
-            <span>SSH Tunnels</span>
+            <span className="hidden lg:inline">SSH Tunnels</span>
           </button>
 
           <button
+            aria-label="Host Keys"
+            title="Host Keys"
             onClick={() => setActiveView(activeView === 'keys' ? 'sessions' : 'keys')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'keys'
@@ -265,10 +273,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Key className="w-3.5 h-3.5" />
-            <span>Host Keys</span>
+            <span className="hidden lg:inline">Host Keys</span>
           </button>
 
           <button
+            aria-label="Vault"
+            title="Vault"
             onClick={() => setActiveView(activeView === 'vault' ? 'sessions' : 'vault')}
             className={`flex items-center space-x-1 px-2.5 py-1 rounded transition ${
               activeView === 'vault'
@@ -277,13 +287,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>Vault</span>
+            <span className="hidden lg:inline">Vault</span>
           </button>
         </div>
       </div>
 
       {/* Center Quick Connect with History & Autocomplete */}
-      <div ref={dropdownRef} className="relative w-80">
+      <div ref={dropdownRef} className="relative w-80 min-w-[9rem] shrink">
         <form onSubmit={handleQuickConnectSubmit} className="flex items-center space-x-1.5 w-full">
           <input
             ref={inputRef}
@@ -297,13 +307,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             onFocus={() => setIsDropdownOpen(true)}
             onKeyDown={handleInputKeyDown}
             placeholder="Quick Connect: user@host[:port]..."
-            className="flex-1 px-2.5 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-sky-500 transition"
+            className="flex-1 px-2.5 py-1 bg-plinky-950 border border-plinky-700 rounded text-xs text-slate-200 placeholder-plinky-muted font-mono focus:outline-none focus:border-sky-500 transition"
           />
           <button
             type="submit"
             disabled={!quickHost.trim()}
             title="Quick Connect via plink"
-            className="p-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40 disabled:pointer-events-none transition"
+            className="p-1.5 rounded bg-sky-700 hover:brightness-110 text-white disabled:opacity-40 disabled:pointer-events-none transition"
           >
             <Play className="w-3 h-3 fill-current" />
           </button>
@@ -327,13 +337,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                   >
                     <div className="flex items-center space-x-2 min-w-0 flex-1">
                       {item.type === 'history' ? (
-                        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <Clock className="w-3.5 h-3.5 text-plinky-muted shrink-0" />
                       ) : (
                         <Terminal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                       )}
                       <div className="flex flex-col min-w-0 truncate">
                         <span className="font-mono text-xs truncate">{item.label}</span>
-                        <span className="text-[10px] text-slate-500 truncate">{item.subtext}</span>
+                        <span className="text-[11px] text-plinky-muted truncate">{item.subtext}</span>
                       </div>
                     </div>
 
@@ -343,7 +353,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                         onClick={(e) => removeHistoryItem(e, item.target)}
                         title="Remove from history"
                         aria-label={`Remove ${item.target} from history`}
-                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition ml-2"
+                        className="p-1 rounded text-plinky-muted hover:text-rose-400 hover:bg-rose-500/10 transition ml-2"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -355,11 +365,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
             {history.length > 0 && (
               <div className="p-1.5 border-t border-plinky-800 bg-plinky-950/60 flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 font-medium px-1">Quick Connect History</span>
+                <span className="text-[11px] text-plinky-muted font-medium px-1">Quick Connect History</span>
                 <button
                   type="button"
                   onClick={clearAllHistory}
-                  className="flex items-center space-x-1 text-[10px] text-slate-400 hover:text-rose-400 px-1.5 py-0.5 rounded hover:bg-plinky-800 transition"
+                  className="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-rose-400 px-1.5 py-0.5 rounded hover:bg-plinky-800 transition"
                 >
                   <Trash2 className="w-2.5 h-2.5" />
                   <span>Clear All</span>
@@ -371,18 +381,21 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2 shrink-0">
         <button
+            aria-label="New Session"
+            title="New Session"
           onClick={onNewSession}
-          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-600/80 hover:bg-sky-500 text-white font-medium transition"
+          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-sky-700 hover:brightness-110 text-white font-medium transition"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>New Session</span>
+          <span className="hidden md:inline">New Session</span>
         </button>
 
         <button
           onClick={onOpenSettings}
           title="Settings & PuTTY Path"
+          aria-label="Settings"
           className="p-1.5 rounded hover:bg-plinky-800 text-slate-400 hover:text-slate-200 transition"
         >
           <Settings className="w-4 h-4" />
