@@ -3,7 +3,9 @@ name = "plinky-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core terminal engine, PTY lifecycle, pre-auth state machine, and connection registry for Plinky"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-only"
+# Part of the Plinky app, not a library for crates.io.
+publish = false
 
 [dependencies]
 portable-pty = "0.8"
