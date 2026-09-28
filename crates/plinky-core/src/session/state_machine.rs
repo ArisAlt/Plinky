@@ -23,6 +23,12 @@ pub struct HostKeyPromptInfo {
     /// host-key dialog that followed.
     #[serde(default)]
     pub weak: Option<String>,
+    /// Any other (y/n) question plink stops at, verbatim (its last lines).
+    /// Plinky knows plink's host-key and weak-crypto questions; a new or
+    /// unexpected one used to sit in the held-back pre-auth output, and the
+    /// session looked hung. Shown as a plain yes/no dialog instead.
+    #[serde(default)]
+    pub question: Option<String>,
 }
 
 impl HostKeyPromptInfo {
@@ -52,6 +58,7 @@ impl HostKeyPromptInfo {
             raw_prompt: raw.to_string(),
             changed: raw.contains("POTENTIAL SECURITY BREACH") || raw.contains("host key does not match"),
             weak: None,
+            question: None,
         }
     }
 
@@ -73,6 +80,28 @@ impl HostKeyPromptInfo {
             raw_prompt: raw.to_string(),
             changed: false,
             weak: Some(format!("{what}: {alg}")),
+            question: None,
+        })
+    }
+
+    /// A (y/n) question at the very end of the output, or None.
+    pub fn parse_question(raw: &str) -> Option<Self> {
+        let rx = Regex::new(r"\(y/n[^)\n]*\)\s*$").unwrap();
+        let trimmed = raw.trim_end_matches(['\r', '\n']);
+        if !rx.is_match(trimmed) {
+            return None;
+        }
+        let lines: Vec<&str> = trimmed.lines().map(|l| l.trim_end_matches('\r')).collect();
+        let from = lines.len().saturating_sub(8);
+        Some(Self {
+            host: String::new(),
+            port: 0,
+            key_type: String::new(),
+            fingerprint: String::new(),
+            raw_prompt: raw.to_string(),
+            changed: false,
+            weak: None,
+            question: Some(lines[from..].join("\n").trim().to_string()),
         })
     }
 }
@@ -294,6 +323,12 @@ impl PreAuthStateMachine {
             self.state = SessionState::HostKeyPending {
                 prompt: prompt_info.clone(),
             };
+            return PreAuthAction::HostKeyPrompt(prompt_info);
+        }
+
+        // Any other question plink stops at.
+        if let Some(prompt_info) = HostKeyPromptInfo::parse_question(&text) {
+            self.state = SessionState::HostKeyPending { prompt: prompt_info.clone() };
             return PreAuthAction::HostKeyPrompt(prompt_info);
         }
 
@@ -534,5 +569,35 @@ mod weak_crypto_tests {
         // "The first " is also held back while it may become the question.
         let mut sm = PreAuthStateMachine::new();
         assert!(matches!(sm.feed_bytes(b"The first "), PreAuthAction::Withhold(_) | PreAuthAction::Hold));
+    }
+
+    #[test]
+    fn an_unknown_yes_no_question_becomes_a_plain_dialog() {
+        // Not one plink 0.81 asks today; the fallback is for the next one.
+        let mut sm = PreAuthStateMachine::new();
+        match sm.feed_bytes(b"The server wants to try a new thing.\r\nAllow it? (y/n) ") {
+            PreAuthAction::HostKeyPrompt(info) => {
+                assert!(info.weak.is_none());
+                assert_eq!(info.question.as_deref(), Some("The server wants to try a new thing.\nAllow it? (y/n)"));
+            }
+            other => panic!("expected a prompt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_known_questions_keep_their_own_dialogs() {
+        let mut sm = PreAuthStateMachine::new();
+        match sm.feed_bytes(WEAK_KEX.as_bytes()) {
+            PreAuthAction::HostKeyPrompt(info) => assert!(info.weak.is_some() && info.question.is_none()),
+            other => panic!("{other:?}"),
+        }
+        let mut sm = PreAuthStateMachine::new();
+        match sm.feed_bytes(NEW_KEY.as_bytes()) {
+            PreAuthAction::HostKeyPrompt(info) => assert!(info.question.is_none() && info.weak.is_none()),
+            other => panic!("{other:?}"),
+        }
+        // Ordinary pre-auth text that merely mentions (y/n) mid-line is not a question.
+        let mut sm = PreAuthStateMachine::new();
+        assert!(!matches!(sm.feed_bytes(b"Answer (y/n) at each prompt.\r\nlogin as: "), PreAuthAction::HostKeyPrompt(_)));
     }
 }

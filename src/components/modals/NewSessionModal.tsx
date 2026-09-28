@@ -15,6 +15,14 @@ import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, paste
 
 type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
 
+/** The hop command a router jump types (NX-OS syntax; the backend's default too). */
+const DEFAULT_HOP_COMMAND = 'ssh {user}@{host}';
+const HOP_PRESETS: { label: string; command: string }[] = [
+  { label: 'NX-OS / Linux', command: 'ssh {user}@{host}' },
+  { label: 'IOS / IOS-XE', command: 'ssh -l {user} {host}' },
+  { label: 'Telnet', command: 'telnet {host}' },
+];
+
 /** Each protocol's usual port, as PuTTY fills it in. */
 const DEFAULT_PORT: Partial<Record<Protocol, number>> = { SSH: 22, Telnet: 23, Rlogin: 513 };
 
@@ -104,6 +112,12 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [enableJumpHost, setEnableJumpHost] = useState(false);
   const [jumpHost, setJumpHost] = useState('');
   const [jumpPort, setJumpPort] = useState('22');
+  // How the jump host reaches the target. "tunnel": PuTTY's SSH proxy (a
+  // Linux bastion forwards the connection). "cli": log in to the device and
+  // type the hop command at its prompt -- NX-OS and IOS refuse the tunnel,
+  // which hung the session right after the jump password.
+  const [jumpMode, setJumpMode] = useState<'tunnel' | 'cli'>('tunnel');
+  const [jumpCommand, setJumpCommand] = useState(DEFAULT_HOP_COMMAND);
   const [jumpUsername, setJumpUsername] = useState('');
   // A saved session picked as the bastion: stored by name, so plink uses
   // that session's own host, port, username and key file (tested against a
@@ -176,6 +190,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setJumpPreset(preset ? preset.name : null);
       setJumpHost(hasJumpHost ? (preset ? preset.hostname : extra.ProxyHost || '') : '');
       setJumpPort(hasJumpHost ? (preset ? String(preset.port || 22) : extra.ProxyPort || '22') : '22');
+      setJumpMode(extra.PlinkyJumpMode === 'cli' ? 'cli' : 'tunnel');
+      setJumpCommand(extra.PlinkyJumpCommand || DEFAULT_HOP_COMMAND);
       setJumpUsername(hasJumpHost ? (preset ? preset.username || '' : extra.ProxyUsername || '') : '');
       setJumpPassword('');
       setJumpVaultKey(hasJumpHost && extra.PlinkyJumpVaultKey ? extra.PlinkyJumpVaultKey : null);
@@ -227,6 +243,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setEnableJumpHost(false);
       setJumpHost('');
       setJumpPort('22');
+      setJumpMode('tunnel');
+      setJumpCommand(DEFAULT_HOP_COMMAND);
       setJumpUsername('');
       setJumpPreset(null);
       setUseVault(false);
@@ -353,7 +371,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       // bastion login was as the literal user "%proxyuser".
       const wasJumpHost = editingSession?.extra?.PlinkyJumpHost === '1' || editingSession?.extra?.ProxyMethod === '6';
       if (protocol === 'SSH' && enableJumpHost && (jumpPreset || jumpHost.trim())) {
-        extra.ProxyMethod = '6';
+        // A router jump is Plinky's own (a script); PuTTY must not tunnel.
+        extra.ProxyMethod = jumpMode === 'cli' ? '0' : '6';
+        if (jumpMode === 'cli') {
+          extra.PlinkyJumpMode = 'cli';
+          extra.PlinkyJumpCommand = jumpCommand.trim() || DEFAULT_HOP_COMMAND;
+        } else {
+          delete extra.PlinkyJumpMode;
+          delete extra.PlinkyJumpCommand;
+        }
         extra.ProxyHost = jumpPreset ?? jumpHost.trim();
         extra.ProxyPort = jumpPort.trim() || '22';
         if (jumpPreset) delete extra.ProxyUsername; // the saved session's own user applies
@@ -369,6 +395,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         delete extra.ProxyTelnetCommand;
         delete extra.PlinkyJumpHost;
         delete extra.PlinkyJumpVaultKey;
+        delete extra.PlinkyJumpMode;
+        delete extra.PlinkyJumpCommand;
       }
     }
 
@@ -1076,6 +1104,52 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
                   {enableJumpHost && (
                     <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
+                      <fieldset className="space-y-1.5">
+                        <legend className="text-slate-300 text-meta mb-1">How the jump host reaches this device</legend>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {([
+                            ['tunnel', 'SSH tunnel', 'A Linux bastion forwards the connection (PuTTY proxy).'],
+                            ['cli', 'Device command line', 'Router or switch: log in, then type the hop command at its prompt.'],
+                          ] as const).map(([id, title, note]) => (
+                            <label key={id} className={`flex flex-col gap-0.5 p-2 rounded border cursor-pointer ${
+                              jumpMode === id ? 'border-sky-500/60 bg-sky-500/10' : 'border-plinky-700 hover:border-plinky-600'
+                            }`}>
+                              <span className="flex items-center gap-1.5 font-medium text-slate-200">
+                                <input type="radio" name="jump-mode" value={id} checked={jumpMode === id}
+                                  onChange={() => setJumpMode(id)} className="text-sky-500 focus:ring-0 bg-plinky-900" />
+                                {title}
+                              </span>
+                              <span className="text-meta text-slate-400">{note}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                      {jumpMode === 'cli' && (
+                        <div className="space-y-1">
+                          <label htmlFor="new-session-modal-hop-command" className="text-slate-300 text-meta">Hop command, typed at the jump device's prompt</label>
+                          <input id="new-session-modal-hop-command"
+                            type="text"
+                            autoComplete="off"
+                            value={jumpCommand}
+                            onChange={e => setJumpCommand(e.target.value)}
+                            className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
+                          />
+                          <div className="flex flex-wrap items-center gap-1.5 text-meta">
+                            {HOP_PRESETS.map(p => (
+                              <button key={p.label} type="button" onClick={() => setJumpCommand(p.command)}
+                                className={`px-1.5 py-0.5 rounded border ${jumpCommand === p.command ? 'border-sky-500/60 text-sky-300' : 'border-plinky-700 text-slate-400 hover:text-slate-200'}`}>
+                                {p.label}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-meta text-plinky-muted leading-relaxed">
+                            <code className="text-slate-400">{'{user}'}</code>, <code className="text-slate-400">{'{host}'}</code> and{' '}
+                            <code className="text-slate-400">{'{port}'}</code> are this session's (General tab). With the vault unlocked,
+                            Plinky types the jump device's password, this command, then this session's password; the second
+                            device's host key is checked by the jump device, not PuTTY.
+                          </p>
+                        </div>
+                      )}
                       {/* Visual Topology Route Banner (MobaXterm Style) */}
                       <div className="p-2 rounded bg-plinky-900/90 border border-sky-500/30 flex items-center justify-between text-meta">
                         <div className="flex items-center space-x-1">

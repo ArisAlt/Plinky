@@ -31,6 +31,8 @@ export interface HostKeyPromptInfo {
   /** Not a host key: plink's weak-crypto question. What is weak, e.g.
    *  "key-exchange algorithm: diffie-hellman-group1-sha1". */
   weak?: string | null;
+  /** Any other (y/n) question plink stopped at, verbatim. */
+  question?: string | null;
 }
 
 export interface PromptEvent {

@@ -86,6 +86,19 @@ impl JumpLogin {
         format!("{}@{}'s password: ", l.user, l.host)
     }
 
+    /// plink's keyboard-interactive prompt: a Cisco (NX-OS, IOS) password
+    /// asked as "| Password: " inside "-- Keyboard-interactive
+    /// authentication prompts from server". It names no host, so it is only
+    /// ever answered in the phase whose login is under way.
+    fn at_kbd_password(&self) -> bool {
+        let line = self.tail.rsplit('\n').next().unwrap_or("");
+        line.starts_with("| ") && line.to_ascii_lowercase().trim_end().ends_with("password:")
+    }
+
+    fn at_prompt(&self, l: &Login) -> bool {
+        self.tail.ends_with(&Self::prompt(l)) || self.at_kbd_password()
+    }
+
     fn typed(password: &SecretString) -> zeroize::Zeroizing<Vec<u8>> {
         let mut out = zeroize::Zeroizing::new(Vec::with_capacity(password.len() + 1));
         out.extend_from_slice(password.as_bytes());
@@ -112,7 +125,10 @@ impl JumpLogin {
         // failed. Stop, whatever phase we're in.
         if self.phase != Phase::Jump {
             if let Some(j) = &self.creds.jump {
-                if self.tail.ends_with(&Self::prompt(j)) {
+                // A keyboard-interactive prompt names no host: before the
+                // primary line it can only be the jump host asking again.
+                let again = self.tail.ends_with(&Self::prompt(j)) || (self.phase == Phase::Primary && self.at_kbd_password());
+                if again {
                     self.phase = Phase::Done;
                     return None;
                 }
@@ -122,7 +138,7 @@ impl JumpLogin {
         match self.phase {
             Phase::Jump => {
                 let j = self.creds.jump.as_ref()?;
-                if self.tail.ends_with(&Self::prompt(j)) {
+                if self.at_prompt(j) {
                     self.phase = if self.creds.target.is_some() { Phase::Primary } else { Phase::Done };
                     self.tail.clear();
                     return Some(Self::typed(&j.password));
@@ -141,7 +157,7 @@ impl JumpLogin {
             }
             Phase::Target => {
                 let t = self.creds.target.as_ref()?;
-                if self.tail.ends_with(&Self::prompt(t)) {
+                if self.at_prompt(t) {
                     self.phase = Phase::Done;
                     self.tail.clear();
                     return Some(Self::typed(&t.password));
@@ -273,5 +289,27 @@ mod tests {
         assert_eq!(text(j.feed(b"jumpu@10.0.0")), None);
         assert_eq!(text(j.feed(b".1's pass")), None);
         assert_eq!(text(j.feed(b"word: ")).as_deref(), Some("JumpPass\r"));
+    }
+
+    #[test]
+    fn a_router_asking_through_keyboard_interactive_gets_its_password_too() {
+        // NX-OS as the jump host, IOS behind it: both ask "| Password: "
+        // (plink 0.81, keyboard-interactive), never "user@host's password:".
+        const KBD: &str = "-- Keyboard-interactive authentication prompts from server: ------------------\r\n| Password: ";
+        let mut j = both();
+        assert_eq!(text(j.feed(PROXY_LINE.as_bytes())), None);
+        assert_eq!(text(j.feed(KBD.as_bytes())).as_deref(), Some("JumpPass\r"));
+        assert_eq!(text(j.feed(PRIMARY_LINE.as_bytes())), None);
+        assert_eq!(text(j.feed(KBD.as_bytes())).as_deref(), Some("FinalPass\r"));
+        assert!(j.is_done());
+    }
+
+    #[test]
+    fn a_second_keyboard_interactive_prompt_before_the_primary_line_is_a_failed_jump_login() {
+        const KBD: &str = "| Password: ";
+        let mut j = both();
+        assert_eq!(text(j.feed(KBD.as_bytes())).as_deref(), Some("JumpPass\r"));
+        assert_eq!(text(j.feed(b"\r\n| Password: ")), None);
+        assert!(j.is_done());
     }
 }

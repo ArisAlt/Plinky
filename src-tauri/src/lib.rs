@@ -313,6 +313,20 @@ async fn spawn_terminal_session(
         };
         // Through a jump host, plink would offer a -pwfile password to the
         // jump host first; answer each host's prompt instead.
+        // Through a router or switch's CLI: plink goes to the first device,
+        // a script hops from there (a tunnel is refused by NX-OS and IOS).
+        if let Some(s) = saved.as_ref() {
+            let guard = vault_state.inner.lock().await;
+            let plan = cli_jump_plan(guard.as_ref(), s, |n| putty_compat::sessions::read_session(n).ok());
+            drop(guard);
+            if let Some((first_hop, script)) = plan {
+                // Not the saved name: plink must not -load the target.
+                let hop_name = format!("{} (via {})", session_name, first_hop.hostname);
+                return registry
+                    .create_plink_session_with_script(&session_id, &hop_name, first_hop, script, log_file_name, cols, rows, tx)
+                    .map_err(|e| format!("Failed to create plink session: {e}"));
+            }
+        }
         if is_ssh {
             let guard = vault_state.inner.lock().await;
             let jump = match (guard.as_ref(), saved.as_ref()) {
@@ -656,29 +670,10 @@ fn jump_credentials_for(
     read: impl Fn(&str) -> Option<putty_compat::sessions::PuttySession>,
 ) -> Option<plinky_core::session::jump_login::JumpCredentials> {
     use plinky_core::session::jump_login::{JumpCredentials, Login};
-    let extra = |k: &str| saved.extra.get(k).map(String::as_str).unwrap_or("");
-    if extra("ProxyMethod") != "6" || extra("ProxyHost").is_empty() {
+    if saved.extra.get("ProxyMethod").map(String::as_str) != Some("6") {
         return None;
     }
-    let proxy_host = extra("ProxyHost");
-    let proxy_user = extra("ProxyUsername");
-
-    let (host, port, user, entry) = match read(proxy_host) {
-        Some(preset) => {
-            let user = if proxy_user.is_empty() { preset.user_name.clone() } else { proxy_user.to_string() };
-            let entry = find_session_entry_for(vault, Some(&preset), &preset.name, None, None);
-            (preset.host_name.clone(), preset.port_number, user, entry)
-        }
-        None => {
-            let explicit = Some(extra("PlinkyJumpVaultKey")).filter(|k| !k.is_empty());
-            let keys = vault_key_candidates(&format!("jump:{}", saved.name), explicit, Some(proxy_host), Some(proxy_user));
-            // vault_key_candidates adds "session:jump:<name>" and the bare
-            // name too; harmless, nothing else is stored under them.
-            let entry = keys.iter().find_map(|k| vault.get_entry(k));
-            let port = extra("ProxyPort").parse().unwrap_or(22);
-            (proxy_host.to_string(), port, proxy_user.to_string(), entry)
-        }
-    };
+    let (host, port, user, entry) = jump_host_of(Some(vault), saved, &read)?;
     let jump = entry.filter(|_| !user.is_empty()).map(|e| Login {
         user,
         host,
@@ -695,6 +690,82 @@ fn jump_credentials_for(
             password: e.secret.clone(),
         });
     Some(JumpCredentials { jump, target })
+}
+
+/// The jump host a session names (`ProxyHost`, or a saved session by that
+/// name), its port, user, and vault entry if the vault is open.
+fn jump_host_of<'v>(
+    vault: Option<&'v Vault>,
+    saved: &putty_compat::sessions::PuttySession,
+    read: &impl Fn(&str) -> Option<putty_compat::sessions::PuttySession>,
+) -> Option<(String, u16, String, Option<&'v plinky_core::vault::VaultEntry>)> {
+    let extra = |k: &str| saved.extra.get(k).map(String::as_str).unwrap_or("");
+    if extra("ProxyHost").is_empty() {
+        return None;
+    }
+    let proxy_host = extra("ProxyHost");
+    let proxy_user = extra("ProxyUsername");
+
+    Some(match read(proxy_host) {
+        Some(preset) => {
+            let user = if proxy_user.is_empty() { preset.user_name.clone() } else { proxy_user.to_string() };
+            let entry = vault.and_then(|v| find_session_entry_for(v, Some(&preset), &preset.name, None, None));
+            (preset.host_name.clone(), preset.port_number, user, entry)
+        }
+        None => {
+            let explicit = Some(extra("PlinkyJumpVaultKey")).filter(|k| !k.is_empty());
+            let keys = vault_key_candidates(&format!("jump:{}", saved.name), explicit, Some(proxy_host), Some(proxy_user));
+            // vault_key_candidates adds "session:jump:<name>" and the bare
+            // name too; harmless, nothing else is stored under them.
+            let entry = vault.and_then(|v| keys.iter().find_map(|k| v.get_entry(k)));
+            let port = extra("ProxyPort").parse().unwrap_or(22);
+            (proxy_host.to_string(), port, proxy_user.to_string(), entry)
+        }
+    })
+}
+
+/// The hop command for a jump through a device's CLI, NX-OS style by
+/// default: IOS wants `ssh -l {user} {host}`.
+pub const DEFAULT_HOP_COMMAND: &str = "ssh {user}@{host}";
+
+/// A session that goes through a router or switch's CLI instead of a
+/// tunnel (`PlinkyJumpMode=cli`): where plink connects (the first device)
+/// and the script that logs in and hops (see plinky_core::session::expect).
+/// A locked vault still hops: only the passwords are left to the user.
+fn cli_jump_plan(
+    vault: Option<&Vault>,
+    saved: &putty_compat::sessions::PuttySession,
+    read: impl Fn(&str) -> Option<putty_compat::sessions::PuttySession>,
+) -> Option<(plinky_core::transport::plink::ExplicitTarget, plinky_core::session::expect::Expect)> {
+    use plinky_core::session::expect::{cli_prompt, hop_command, hop_failures, password_prompt, Expect, Reply, Step};
+    if saved.extra.get("PlinkyJumpMode").map(String::as_str) != Some("cli") {
+        return None;
+    }
+    let (host, port, user, entry) = jump_host_of(vault, saved, &read)?;
+    let first_hop = plinky_core::transport::plink::ExplicitTarget {
+        hostname: host,
+        port,
+        username: Some(user).filter(|u| !u.is_empty()),
+        protocol: plinky_core::transport::plink::TargetProtocol::Ssh,
+    };
+    let template = saved
+        .extra
+        .get("PlinkyJumpCommand")
+        .map(String::as_str)
+        .filter(|c| !c.trim().is_empty())
+        .unwrap_or(DEFAULT_HOP_COMMAND);
+    let command = hop_command(template, &saved.user_name, &saved.host_name, saved.port_number);
+    let target_entry = vault.and_then(|v| find_session_entry_for(v, Some(saved), &saved.name, None, None));
+
+    let mut steps = Vec::new();
+    if let Some(e) = entry {
+        steps.push(Step { expect: password_prompt(), reply: Reply::Secret(e.secret.clone()), label: "jump password" });
+    }
+    steps.push(Step { expect: cli_prompt(), reply: Reply::Line(command), label: "hop command" });
+    if let Some(e) = target_entry {
+        steps.push(Step { expect: password_prompt(), reply: Reply::Secret(e.secret.clone()), label: "target password" });
+    }
+    Some((first_hop, Expect::new(steps, hop_failures())))
 }
 
 /// What the terminal needs to offer the vault: which entry (never its
@@ -1655,6 +1726,51 @@ mod tests {
         assert!(jump_credentials_for(&vault, &session("Router", "h", "u", &[]), none).is_none());
         assert!(jump_credentials_for(&vault, &session("Router", "h", "u", &[("ProxyMethod", "5"), ("ProxyHost", "x")]), none).is_none());
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_router_jump_connects_to_the_first_device_and_hops_by_command() {
+        // NX-OS first, IOS behind it: no tunnel (NX-OS won't forward),
+        // plink goes to the NX-OS box and the script types the hop.
+        use super::cli_jump_plan;
+        use plinky_core::session::expect::Event;
+        let session = |extra: &[(&str, &str)]| putty_compat::sessions::PuttySession {
+            name: "PE2".into(),
+            host_name: "10.1.1.2".into(),
+            port_number: 22,
+            user_name: "admin".into(),
+            protocol: "ssh".into(),
+            extra: extra.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join(format!("plinky-cli-jump-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut vault = Vault::create_fast(dir.join("vault.bin"), "pw").unwrap();
+        vault.set_entry(VaultEntry::new("session:PE2", "ios-pw"));
+        vault.set_entry(VaultEntry::new("jump:PE2", "nxos-pw"));
+        let none = |_: &str| None;
+        let sent = |e: Event| match e { Event::Send { bytes, .. } => Some(String::from_utf8(bytes.to_vec()).unwrap()), _ => None };
+
+        let pe2 = session(&[
+            ("PlinkyJumpMode", "cli"), ("ProxyMethod", "0"), ("ProxyHost", "10.0.0.1"),
+            ("ProxyUsername", "space"), ("PlinkyJumpCommand", "ssh -l {user} {host}"),
+        ]);
+        let (hop, mut script) = cli_jump_plan(Some(&vault), &pe2, none).unwrap();
+        assert_eq!((hop.hostname.as_str(), hop.port, hop.username.as_deref()), ("10.0.0.1", 22, Some("space")));
+        assert_eq!(sent(script.feed(b"| Password: ")).as_deref(), Some("nxos-pw\r"));
+        assert_eq!(sent(script.feed(b"\r\nnexus-01# ")).as_deref(), Some("ssh -l admin 10.1.1.2\r"));
+        assert_eq!(sent(script.feed(b"Password: ")).as_deref(), Some("ios-pw\r"));
+
+        // Locked vault: it still hops, the passwords are the user's.
+        let (_, mut script) = cli_jump_plan(None, &session(&[("PlinkyJumpMode", "cli"), ("ProxyHost", "10.0.0.1")]), none).unwrap();
+        assert_eq!(sent(script.feed(b"| Password: ")), None);
+        assert_eq!(sent(script.feed(b"\r\nnexus-01# ")).as_deref(), Some("ssh admin@10.1.1.2\r"));
+
+        // Tunnel mode or no jump host: not this path.
+        assert!(cli_jump_plan(Some(&vault), &session(&[("ProxyMethod", "6"), ("ProxyHost", "10.0.0.1")]), none).is_none());
+        assert!(cli_jump_plan(Some(&vault), &session(&[("PlinkyJumpMode", "cli")]), none).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -49,6 +49,7 @@ import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import { useTerminalTheme } from '../../themes/terminalThemes';
 import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
+import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { fatalHint, sshBannerHint } from '../../services/fatalHint';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
@@ -249,6 +250,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const isVaultUnlocked = !!vault && !vault.locked;
   const [isVaultMenuOpen, setIsVaultMenuOpen] = useState(false);
   const [detectedPasswordPrompt, setDetectedPasswordPrompt] = useState<'login' | 'enable' | null>(null);
+  // Unlocked in place: the notice then offers the saved password for the
+  // prompt still waiting. It used to say "Vault in the top bar".
+  const [unlockOpen, setUnlockOpen] = useState(false);
   // When plink was started and nothing has come back yet. An unreachable
   // host printed nothing for 35 s or more: a black terminal under a green
   // dot and a green "Terminal ready", which read as connected but hung.
@@ -1818,11 +1822,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {detectedPasswordPrompt && vault?.locked && vaultExists && (
           <div className="absolute top-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
             <Key className="w-3.5 h-3.5 text-slate-400" />
-            <span>Password prompt. Unlock the vault (Vault in the top bar) to send a saved password.</span>
+            <span>Password prompt. The vault is locked.</span>
+            <button
+              onClick={() => setUnlockOpen(true)}
+              className="px-2 py-0.5 rounded border border-slate-500 text-slate-200 hover:bg-plinky-800"
+            >
+              Unlock…
+            </button>
             <button onClick={() => setDetectedPasswordPrompt(null)} className="p-0.5 text-slate-400 hover:text-white rounded" title="Dismiss">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
+        )}
+
+        {unlockOpen && (
+          <VaultUnlockDialog
+            reason="This prompt's password is in the vault. Unlock it and Plinky can send it."
+            onUnlocked={() => { setUnlockOpen(false); terminalRef.current?.focus(); }}
+            onCancel={() => { setUnlockOpen(false); terminalRef.current?.focus(); }}
+          />
         )}
 
         {/* Free Type Visual Click Indicator */}
@@ -2288,6 +2306,29 @@ export const HostKeyDialog: React.FC<{
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
+
+  if (prompt.question) {
+    // A question plink asked that Plinky has no dialog of its own for.
+    return (
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div role="alertdialog" aria-modal="true" aria-labelledby="question-title"
+          className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-lg w-full p-6 text-slate-100">
+          <h3 id="question-title" className="text-base font-semibold text-white mb-2">PuTTY is asking</h3>
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs text-slate-200 bg-plinky-950/80 border border-plinky-800 rounded-lg p-3 mb-5">{prompt.question}</pre>
+          <div className="flex gap-2 justify-end">
+            <button ref={abandonRef} onClick={() => onAnswer('reject')}
+              className="px-3 py-2 rounded-lg text-xs font-semibold bg-plinky-800 hover:bg-plinky-700 text-slate-200 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-plinky-900 focus:ring-sky-400">
+              No
+            </button>
+            <button onClick={() => onAnswer('once')}
+              className="px-3 py-2 rounded-lg bg-sky-700 hover:brightness-110 text-on-accent text-xs font-medium">
+              Yes
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (prompt.weak) {
     // plink's weak-crypto question, before any host key. It used to land in

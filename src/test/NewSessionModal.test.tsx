@@ -931,5 +931,24 @@ describe('saving a password when there is no vault yet', () => {
     expect((screen.getByLabelText(/Connection Protocol/i) as HTMLSelectElement).value).toBe('SSH');
     expect(screen.queryByText(/Port 22 is SSH's port/)).toBeNull();
   });
+
+  it('saves a router jump as a hop command, not a PuTTY tunnel', async () => {
+    // NX-OS and IOS refuse PuTTY's tunnel; the session hung after the jump
+    // password. "Device command line" logs in and types the hop instead.
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '10.1.1.2' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Jump Host' }));
+    fireEvent.click(screen.getByLabelText(/Connect through SSH Jump Host/i));
+    fireEvent.change(screen.getByLabelText(/Jump Host \/ Gateway IP/i), { target: { value: '10.0.0.1' } });
+    fireEvent.change(screen.getByLabelText(/Gateway Username/i), { target: { value: 'space' } });
+    fireEvent.click(screen.getByLabelText(/Device command line/i));
+    fireEvent.click(screen.getByRole('button', { name: 'IOS / IOS-XE' }));
+    expect((screen.getByLabelText(/^Hop command/) as HTMLInputElement).value).toBe('ssh -l {user} {host}');
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const extra = onSave.mock.calls[0][0].extra;
+    expect(extra).toMatchObject({ ProxyMethod: '0', ProxyHost: '10.0.0.1', ProxyUsername: 'space', PlinkyJumpMode: 'cli', PlinkyJumpCommand: 'ssh -l {user} {host}' });
+  });
 });
 

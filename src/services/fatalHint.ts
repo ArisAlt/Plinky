@@ -7,6 +7,10 @@ const HINTS: [RegExp, (t: string) => string][] = [
   [/No route to host|Network is unreachable/i, t => `${t} can't be reached from this machine. Check the network or VPN.`],
   [/Host does not exist|Name or service not known|nodename nor servname|No such host/i, () => 'That name doesn’t resolve. Check the spelling, or use the IP address.'],
   [/Remote side unexpectedly closed|Connection reset/i, t => `${t} closed the connection. The server may limit connections or have restarted.`],
+  // plink 0.81 through a jump host that won't forward (NX-OS, IOS):
+  // "fatal error in proxy SSH connection: Server refused to open main
+  // channel: Administratively prohibited [open failed]".
+  [/Administratively prohibited|refused to open main channel/i, () => 'The jump host refused to forward the connection, as routers and switches do. In the session\u2019s Jump Host tab choose \u201cDevice command line\u201d.'],
   [/No supported authentication methods/i, () => 'The server accepts none of the login methods offered. It may need a key (Credentials tab) instead of a password.'],
 ];
 

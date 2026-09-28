@@ -69,6 +69,9 @@ pub struct ActiveSession {
     /// Answers the jump host's and the final host's password prompts, for a
     /// session through a jump host (see `jump_login`). Dropped once Live.
     pub jump_login: Option<super::jump_login::JumpLogin>,
+    /// A jump through a device's CLI (see `expect`): runs its steps on the
+    /// output, before and after Live, until done or stopped.
+    pub expect: Option<super::expect::Expect>,
 }
 
 static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
@@ -284,6 +287,7 @@ impl SessionRegistry {
             flow,
             instance,
             jump_login: None,
+            expect: None,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -319,7 +323,7 @@ impl SessionRegistry {
         rows: u16,
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
-        self.spawn_plink(id, session_name, explicit_target, login, None, log_file_name, cols, rows, out_tx)
+        self.spawn_plink(id, session_name, explicit_target, login, None, None, log_file_name, cols, rows, out_tx)
     }
 
     /// A saved session through a jump host, logging in to both hosts from
@@ -337,7 +341,26 @@ impl SessionRegistry {
         out_tx: mpsc::UnboundedSender<Vec<u8>>,
     ) -> Result<()> {
         let jump = super::jump_login::JumpLogin::new(credentials);
-        self.spawn_plink(id, session_name, None, None, Some(jump), log_file_name, cols, rows, out_tx)
+        self.spawn_plink(id, session_name, None, None, Some(jump), None, log_file_name, cols, rows, out_tx)
+    }
+
+    /// A session that reaches its device through another device's CLI:
+    /// plink connects to the first device (`first_hop`), and `script`
+    /// logs in to it, types the hop command and answers the second
+    /// device's password (see `expect`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_plink_session_with_script(
+        &self,
+        id: &str,
+        session_name: &str,
+        first_hop: crate::transport::plink::ExplicitTarget,
+        script: super::expect::Expect,
+        log_file_name: Option<String>,
+        cols: u16,
+        rows: u16,
+        out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) -> Result<()> {
+        self.spawn_plink(id, session_name, Some(first_hop), None, None, Some(script), log_file_name, cols, rows, out_tx)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -348,6 +371,7 @@ impl SessionRegistry {
         explicit_target: Option<crate::transport::plink::ExplicitTarget>,
         login: Option<crate::transport::plink::PlinkLogin>,
         jump_login: Option<super::jump_login::JumpLogin>,
+        expect: Option<super::expect::Expect>,
         log_file_name: Option<String>,
         cols: u16,
         rows: u16,
@@ -376,6 +400,7 @@ impl SessionRegistry {
             // not, raw_rx hit EOF: the process exited on its own.
             let mut reported = false;
             while let Some(chunk) = raw_rx.recv().await {
+                let mut script_note: Option<String> = None;
                 let action = {
                     let mut lock = registry_clone.sessions.lock().unwrap();
                     if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
@@ -395,6 +420,25 @@ impl SessionRegistry {
                         } else if let Some(answer) = session.jump_login.as_mut().and_then(|j| j.feed(&chunk)) {
                             let _ = session.transport.write(&answer);
                         }
+                        if let Some(script) = session.expect.as_mut() {
+                            match script.feed(&chunk) {
+                                super::expect::Event::Send { bytes, .. } => {
+                                    let _ = session.transport.write(&bytes);
+                                }
+                                super::expect::Event::Stopped(why) => {
+                                    session.expect = None;
+                                    if let Some(why) = why.filter(|w| !w.is_empty()) {
+                                        script_note = Some(format!(
+                                            "\r\n\x1b[33m[Plinky: jump script stopped ({why}). Carry on by hand.]\x1b[0m\r\n"
+                                        ));
+                                    }
+                                }
+                                super::expect::Event::None => {}
+                            }
+                            if session.expect.as_ref().is_some_and(|e| e.is_done()) {
+                                session.expect = None;
+                            }
+                        }
                         session.state_machine.feed_bytes(&chunk)
                     } else {
                         reported = true;
@@ -404,6 +448,11 @@ impl SessionRegistry {
 
                 // Charged by the reader when read; what doesn't reach the
                 // page (a withheld prompt, a detached tab) is refunded below.
+                if let Some(note) = script_note.take() {
+                    if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
+                        let _ = tx.send(note.into_bytes());
+                    }
+                }
                 let chunk_len = chunk.len();
                 let mut forwarded = 0usize;
                 match action {
@@ -523,6 +572,7 @@ impl SessionRegistry {
             flow,
             instance,
             jump_login,
+            expect,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -612,7 +662,7 @@ impl SessionRegistry {
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
 
         let weak = match session.state_machine.state() {
-            SessionState::HostKeyPending { prompt } => prompt.weak.is_some(),
+            SessionState::HostKeyPending { prompt } => prompt.weak.is_some() || prompt.question.is_some(),
             _ => {
                 return Err(PlinkyError::ProcessError(
                     "Session is not awaiting host key confirmation".into(),

@@ -44,3 +44,11 @@ describe('a Telnet session that reached an SSH server', () => {
     expect(sshBannerHint('Router> show ssh\r\nSSH Enabled - version 2.0\r\n', 'Telnet')).toBeNull();
   });
 });
+
+describe('a jump host that will not forward', () => {
+  it('points at the Device command line jump mode', () => {
+    // Verbatim plink 0.81 through a jump host with forwarding refused.
+    const out = 'FATAL ERROR: fatal error in proxy SSH connection: Server refused to open main channel: Administratively prohibited [open failed]\r\n';
+    expect(fatalHint(out, '10.1.1.2', 22)).toMatch(/Device command line/);
+  });
+});
