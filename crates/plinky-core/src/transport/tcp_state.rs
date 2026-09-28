@@ -10,11 +10,30 @@
 //! connection to the device, which matters for a terminal server line that
 //! takes only one client.
 
-/// `Some(true)` once `pid` holds an ESTABLISHED TCP socket, `Some(false)`
-/// while it doesn't, `None` where this can't be told: the tables can't be
+/// `Some(true)` once `pid`, or a process it started, holds an ESTABLISHED
+/// TCP socket, `Some(false)` while none does, `None` where this can't be told: the tables can't be
 /// read, the process is gone (Linux), or the platform has no way here.
 pub fn has_established_tcp(pid: u32) -> Option<bool> {
     imp::has_established_tcp(pid)
+}
+
+/// A process and everything it started, from (pid, parent pid) pairs. The
+/// connection can belong to a child: Chocolatey's and Scoop's plink.exe is
+/// a shim that starts the real plink, and Windows CI never saw the
+/// connection established through the shim's own pid.
+#[cfg(any(windows, test))]
+fn with_descendants(root: u32, pairs: &[(u32, u32)]) -> std::collections::HashSet<u32> {
+    let mut family = std::collections::HashSet::from([root]);
+    let mut frontier = vec![root];
+    while let Some(parent) = frontier.pop() {
+        for &(pid, ppid) in pairs {
+            // A pid is its own parent for the System Idle Process.
+            if ppid == parent && pid != parent && family.insert(pid) {
+                frontier.push(pid);
+            }
+        }
+    }
+    family
 }
 
 #[cfg(target_os = "linux")]
@@ -55,8 +74,31 @@ mod imp {
             .collect()
     }
 
+    /// `pid` and everything it started, from /proc/<pid>/task/*/children.
+    fn with_descendants(pid: u32) -> Vec<u32> {
+        let mut family = vec![pid];
+        let mut i = 0;
+        while i < family.len() && family.len() < 256 {
+            let tasks = std::fs::read_dir(format!("/proc/{}/task", family[i]));
+            for task in tasks.into_iter().flatten().flatten() {
+                let children = std::fs::read_to_string(task.path().join("children")).unwrap_or_default();
+                for child in children.split_whitespace().filter_map(|c| c.parse::<u32>().ok()) {
+                    if !family.contains(&child) {
+                        family.push(child);
+                    }
+                }
+            }
+            i += 1;
+        }
+        family
+    }
+
     pub(super) fn has_established_tcp(pid: u32) -> Option<bool> {
-        let mine = socket_inodes(pid)?;
+        // The process itself must be there: gone, nothing can be told.
+        let mut mine = socket_inodes(pid)?;
+        for child in with_descendants(pid).into_iter().skip(1) {
+            mine.extend(socket_inodes(child).unwrap_or_default());
+        }
         if mine.is_empty() {
             return Some(false);
         }
@@ -119,6 +161,54 @@ mod imp {
     const NO_ERROR: u32 = 0;
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 
+    const TH32CS_SNAPPROCESS: u32 = 0x2;
+    const INVALID_HANDLE_VALUE: isize = -1;
+
+    /// PROCESSENTRY32W.
+    #[repr(C)]
+    struct ProcessEntry {
+        size: u32,
+        usage: u32,
+        process_id: u32,
+        default_heap_id: usize,
+        module_id: u32,
+        threads: u32,
+        parent_process_id: u32,
+        priority: i32,
+        flags: u32,
+        exe_file: [u16; 260],
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> isize;
+        fn Process32FirstW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
+        fn Process32NextW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
+        fn CloseHandle(handle: isize) -> i32;
+    }
+
+    /// (pid, parent pid) of every process running now.
+    fn process_pairs() -> Vec<(u32, u32)> {
+        let mut pairs = Vec::new();
+        // SAFETY: a snapshot handle is closed below; entry.size is set as
+        // the calls require, and they write only within the struct.
+        unsafe {
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snapshot == INVALID_HANDLE_VALUE {
+                return pairs;
+            }
+            let mut entry: ProcessEntry = std::mem::zeroed();
+            entry.size = std::mem::size_of::<ProcessEntry>() as u32;
+            let mut more = Process32FirstW(snapshot, &mut entry) != 0;
+            while more {
+                pairs.push((entry.process_id, entry.parent_process_id));
+                more = Process32NextW(snapshot, &mut entry) != 0;
+            }
+            CloseHandle(snapshot);
+        }
+        pairs
+    }
+
     #[link(name = "iphlpapi")]
     extern "system" {
         fn GetExtendedTcpTable(
@@ -163,10 +253,11 @@ mod imp {
         if v4.is_none() && v6.is_none() {
             return None;
         }
-        Some(
-            v4.is_some_and(|t| owns_established(&t, pid, &V4))
-                || v6.is_some_and(|t| owns_established(&t, pid, &V6)),
-        )
+        let family = super::with_descendants(pid, &process_pairs());
+        Some(family.iter().any(|&p| {
+            v4.as_deref().is_some_and(|t| owns_established(t, p, &V4))
+                || v6.as_deref().is_some_and(|t| owns_established(t, p, &V6))
+        }))
     }
 }
 
@@ -192,6 +283,41 @@ mod tests {
             t.extend(row);
         }
         t
+    }
+
+    #[test]
+    fn a_process_s_family_includes_what_it_started_and_nothing_else() {
+        // shim 10 started plink 11, which started 12; 20 is unrelated, and
+        // pid 0 is its own parent (the System Idle Process).
+        let pairs = [(10, 1), (11, 10), (12, 11), (20, 1), (0, 0)];
+        let family = with_descendants(10, &pairs);
+        assert_eq!(family, std::collections::HashSet::from([10, 11, 12]));
+        assert_eq!(with_descendants(0, &pairs), std::collections::HashSet::from([0]));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_connection_made_by_a_child_process_counts() {
+        // The shim case: the process Plinky started is not the one that
+        // connects -- its child is.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut parent = std::process::Command::new("bash")
+            .args(["-c", &format!("(exec 3<>/dev/tcp/127.0.0.1/{port}; sleep 3); wait")])
+            .spawn()
+            .unwrap();
+        let _accepted = listener.accept().unwrap();
+        let mut seen = false;
+        for _ in 0..100 {
+            if has_established_tcp(parent.id()) == Some(true) {
+                seen = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let _ = parent.kill();
+        let _ = parent.wait();
+        assert!(seen, "the child's connection was not seen through the parent's pid");
     }
 
     #[test]

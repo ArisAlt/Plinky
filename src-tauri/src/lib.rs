@@ -222,7 +222,8 @@ fn watch_connection(app: &tauri::AppHandle, id: String) {
     tauri::async_runtime::spawn(async move {
         // A connect that fails takes the OS's connect timeout; a session
         // can't still be connecting after two minutes.
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+        let started = tokio::time::Instant::now();
+        let deadline = started + std::time::Duration::from_secs(120);
         while tokio::time::Instant::now() < deadline {
             // Closed or restarted under the same id: this watch is over.
             if registry.process_id(&id) != Some(pid) {
@@ -234,7 +235,13 @@ fn watch_connection(app: &tauri::AppHandle, id: String) {
                     let _ = app.emit("session:connected", &id);
                     return;
                 }
-                Some(false) => tokio::time::sleep(std::time::Duration::from_millis(10)).await,
+                // Every 10 ms while a connect is still quick; after a second
+                // (a slow or unreachable host), every 100 ms: each look reads
+                // the system's connection and process tables.
+                Some(false) => {
+                    let pause = if started.elapsed() < std::time::Duration::from_secs(1) { 10 } else { 100 };
+                    tokio::time::sleep(std::time::Duration::from_millis(pause)).await
+                }
                 None => return,
             }
         }
