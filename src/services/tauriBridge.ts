@@ -28,6 +28,9 @@ export interface HostKeyPromptInfo {
   raw_prompt: string;
   /** The key differs from the one PuTTY cached ("POTENTIAL SECURITY BREACH"). */
   changed?: boolean;
+  /** Not a host key: plink's weak-crypto question. What is weak, e.g.
+   *  "key-exchange algorithm: diffie-hellman-group1-sha1". */
+  weak?: string | null;
 }
 
 export interface PromptEvent {

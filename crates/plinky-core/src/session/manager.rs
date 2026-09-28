@@ -611,17 +611,27 @@ impl SessionRegistry {
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
 
-        if !matches!(session.state_machine.state(), SessionState::HostKeyPending { .. }) {
-            return Err(PlinkyError::ProcessError(
-                "Session is not awaiting host key confirmation".into(),
-            ));
-        }
+        let weak = match session.state_machine.state() {
+            SessionState::HostKeyPending { prompt } => prompt.weak.is_some(),
+            _ => {
+                return Err(PlinkyError::ProcessError(
+                    "Session is not awaiting host key confirmation".into(),
+                ))
+            }
+        };
 
-        let (bytes, echo): (&[u8], &[u8]) = match answer {
+        // The weak-crypto question is a plain (y/n): "n" abandons. A host key
+        // is y (store) / n (once) / Return (abandon).
+        let (bytes, echo): (&[u8], &[u8]) = if weak {
+            match answer {
+                PromptAnswer::AcceptAndStore | PromptAnswer::AcceptOnce => (b"y\r", b"y\r\n"),
+                PromptAnswer::Reject => (b"n\r", b"n\r\n"),
+            }
+        } else { match answer {
             PromptAnswer::AcceptAndStore => (b"y\r", b"y\r\n"),
             PromptAnswer::AcceptOnce => (b"n\r", b"n\r\n"),
             PromptAnswer::Reject => (b"\r", b"\r\n"),
-        };
+        } };
         session.transport.write(bytes)?;
         session.state_machine.prompt_answered_with_echo(echo);
         Ok(())

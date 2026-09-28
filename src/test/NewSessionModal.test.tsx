@@ -877,5 +877,59 @@ describe('saving a password when there is no vault yet', () => {
     await waitFor(() => expect(mockVaultSetEntry).toHaveBeenCalledWith(expect.objectContaining({ secret: 's3cret' })));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
   });
+
+  it('moves the port with the protocol while it is still the default', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    const proto = screen.getByLabelText(/Connection Protocol/i);
+    const port = screen.getByLabelText(/^Port$/) as HTMLInputElement;
+    expect(port.value).toBe('22');
+    fireEvent.change(proto, { target: { value: 'Telnet' } });
+    expect(port.value).toBe('23');
+    fireEvent.change(proto, { target: { value: 'SSH' } });
+    expect(port.value).toBe('22');
+    // A port the user typed is theirs: an EVE console on 32769 stays put.
+    fireEvent.change(port, { target: { value: '32769' } });
+    fireEvent.change(proto, { target: { value: 'Telnet' } });
+    expect(port.value).toBe('32769');
+  });
+
+  it('warns about Telnet on port 22 and offers SSH', () => {
+    // A copy of an EVE telnet console re-pointed at a router's port 22 kept
+    // Telnet, got the SSH greeting and was closed with nothing to say why.
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={{
+      name: 'PE2 (copy)', hostname: '192.0.2.57', port: 22, protocol: 'Telnet', extra: {},
+    } as any} />);
+    expect(screen.getByText(/Port 22 is SSH's port/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use SSH' }));
+    expect((screen.getByLabelText(/Connection Protocol/i) as HTMLSelectElement).value).toBe('SSH');
+    expect(screen.queryByText(/Port 22 is SSH's port/)).toBeNull();
+  });
+
+  it('moves the port with the protocol while it is still the default', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    const proto = screen.getByLabelText(/Connection Protocol/i);
+    const port = screen.getByLabelText(/^Port$/) as HTMLInputElement;
+    expect(port.value).toBe('22');
+    fireEvent.change(proto, { target: { value: 'Telnet' } });
+    expect(port.value).toBe('23');
+    fireEvent.change(proto, { target: { value: 'SSH' } });
+    expect(port.value).toBe('22');
+    // A port the user typed is theirs: an EVE console on 32769 stays put.
+    fireEvent.change(port, { target: { value: '32769' } });
+    fireEvent.change(proto, { target: { value: 'Telnet' } });
+    expect(port.value).toBe('32769');
+  });
+
+  it('warns about Telnet on port 22 and offers SSH', () => {
+    // A copy of an EVE telnet console re-pointed at a router's port 22 kept
+    // Telnet, got the SSH greeting and was closed with nothing to say why.
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={{
+      name: 'PE2 (copy)', hostname: '192.0.2.57', port: 22, protocol: 'Telnet', extra: {},
+    } as any} />);
+    expect(screen.getByText(/Port 22 is SSH's port/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use SSH' }));
+    expect((screen.getByLabelText(/Connection Protocol/i) as HTMLSelectElement).value).toBe('SSH');
+    expect(screen.queryByText(/Port 22 is SSH's port/)).toBeNull();
+  });
 });
 

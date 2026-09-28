@@ -15,6 +15,9 @@ import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, paste
 
 type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
 
+/** Each protocol's usual port, as PuTTY fills it in. */
+const DEFAULT_PORT: Partial<Record<Protocol, number>> = { SSH: 22, Telnet: 23, Rlogin: 513 };
+
 const NO_VAULT_MESSAGE =
   'There is no vault yet, so the password was not saved. Create one first: Vault in the top bar, set a master password, then save this session again.';
 
@@ -601,6 +604,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   value={protocol}
                   onChange={e => {
                     const nextProto = e.target.value as Protocol;
+                    // The port follows the protocol while it is still the old
+                    // one's default: a Telnet copy switched to SSH kept 23.
+                    const was = DEFAULT_PORT[protocol];
+                    const next = DEFAULT_PORT[nextProto];
+                    if (next && (!port.trim() || (was && port.trim() === String(was)))) setPort(String(next));
                     setProtocol(nextProto);
                     if (nextProto === 'Serial') {
                       if (serialPorts.length > 0 && !serialLine) {
@@ -738,6 +746,18 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       />
                     </div>
                   </div>
+                  {(protocol === 'Telnet' || protocol === 'RAW') && port.trim() === '22' && (
+                    <div role="status" className="flex items-center justify-between gap-2 p-2 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 text-meta">
+                      <span>Port 22 is SSH's port. A {protocol === 'RAW' ? 'Raw' : 'Telnet'} session there gets the SSH greeting and is closed.</span>
+                      <button
+                        type="button"
+                        onClick={() => setProtocol('SSH')}
+                        className="shrink-0 px-2 py-0.5 rounded border border-amber-500/50 text-amber-200 hover:bg-amber-500/10"
+                      >
+                        Use SSH
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
 

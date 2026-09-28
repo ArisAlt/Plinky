@@ -49,7 +49,7 @@ import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import { useTerminalTheme } from '../../themes/terminalThemes';
 import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
-import { fatalHint } from '../../services/fatalHint';
+import { fatalHint, sshBannerHint } from '../../services/fatalHint';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
   Radio,
@@ -478,6 +478,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     highlighterRef.current?.setEnabled(tab.activeHighlighting !== false);
   }, [tab.activeHighlighting]);
   const reachedLiveRef = useRef(false);
+  const sshBannerToldRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const [reconnectIn, setReconnectIn] = useState<number | null>(null);
@@ -765,6 +766,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
       const hint = live ? fatalHint(text, tab.hostname, tab.port) : null;
       if (hint) term.writeln(`\x1b[33m[Plinky: ${hint}]\x1b[0m`);
+      const mismatch = sshBannerToldRef.current ? null : sshBannerHint(recentOutputRef.current, tab.protocol);
+      if (mismatch) {
+        sshBannerToldRef.current = true;
+        term.writeln(`\r\n\x1b[33m[Plinky: ${mismatch}]\x1b[0m`);
+      }
       if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);
@@ -2282,6 +2288,52 @@ export const HostKeyDialog: React.FC<{
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
+
+  if (prompt.weak) {
+    // plink's weak-crypto question, before any host key. It used to land in
+    // the terminal as plain text; the answer had to be typed.
+    const [what, alg] = prompt.weak.split(': ');
+    return (
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="weakcrypto-title"
+          aria-describedby="weakcrypto-desc"
+          className="bg-plinky-900 border border-amber-500/60 rounded-xl shadow-2xl max-w-lg w-full p-6 text-slate-100"
+        >
+          <div className="flex items-start space-x-3 mb-4">
+            <div className="p-2.5 rounded-lg border bg-amber-500/10 border-amber-500/30 text-amber-400">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 id="weakcrypto-title" className="text-base font-semibold text-white">This server only offers outdated encryption</h3>
+              <p id="weakcrypto-desc" className="text-xs text-slate-300 mt-1 leading-relaxed">
+                Its first {what || 'algorithm'} is <span className="font-mono text-amber-300">{alg || prompt.weak}</span>,
+                which PuTTY rates below its warning threshold. Older network gear often only has this; the
+                connection works, but is easier to break than a modern one.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 justify-end">
+            <button
+              ref={abandonRef}
+              onClick={() => onAnswer('reject')}
+              className="order-first px-3 py-2 rounded-lg text-xs font-semibold bg-plinky-800 hover:bg-plinky-700 text-slate-200 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-plinky-900 focus:ring-sky-400"
+            >
+              Abandon connection
+            </button>
+            <button
+              onClick={() => onAnswer('once')}
+              className="px-3 py-2 rounded-lg bg-sky-700 hover:brightness-110 text-on-accent text-xs font-medium transition-colors"
+            >
+              Connect anyway
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">

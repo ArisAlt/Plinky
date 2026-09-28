@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fatalHint } from '../services/fatalHint';
+import { fatalHint, sshBannerHint } from '../services/fatalHint';
 
 describe('fatal error hints', () => {
   it('a refused connection points at the port and the service', () => {
@@ -14,5 +14,33 @@ describe('fatal error hints', () => {
   });
   it('text without a fatal error gets nothing', () => {
     expect(fatalHint('Connection refused by policy', 'x', 22)).toBeNull();
+  });
+});
+
+describe('a Telnet session that reached an SSH server', () => {
+  it('says the server speaks SSH and what to change', () => {
+    // What the owner's copied EVE session printed before "Session closed".
+    const out = 'SSH-2.0-Cisco-1.25\r\n';
+    expect(sshBannerHint(out, 'Telnet')).toMatch(/speaks SSH, but the session is set to Telnet/);
+    expect(sshBannerHint(out, 'RAW')).toMatch(/set to Raw/);
+  });
+
+  it('stays quiet for SSH sessions and ordinary output', () => {
+    expect(sshBannerHint('SSH-2.0-OpenSSH_9.6\r\n', 'SSH')).toBeNull();
+    expect(sshBannerHint('Router> show ssh\r\nSSH Enabled - version 2.0\r\n', 'Telnet')).toBeNull();
+  });
+});
+
+describe('a Telnet session that reached an SSH server', () => {
+  it('says the server speaks SSH and what to change', () => {
+    // What a copied EVE telnet session printed before "Session closed".
+    const out = 'SSH-2.0-Cisco-1.25\r\n';
+    expect(sshBannerHint(out, 'Telnet')).toMatch(/speaks SSH, but the session is set to Telnet/);
+    expect(sshBannerHint(out, 'RAW')).toMatch(/set to Raw/);
+  });
+
+  it('stays quiet for SSH sessions and ordinary output', () => {
+    expect(sshBannerHint('SSH-2.0-OpenSSH_9.6\r\n', 'SSH')).toBeNull();
+    expect(sshBannerHint('Router> show ssh\r\nSSH Enabled - version 2.0\r\n', 'Telnet')).toBeNull();
   });
 });

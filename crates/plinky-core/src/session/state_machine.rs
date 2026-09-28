@@ -13,6 +13,16 @@ pub struct HostKeyPromptInfo {
     /// accept button, at exactly the moment a man-in-the-middle would appear.
     #[serde(default)]
     pub changed: bool,
+    /// Not a host key at all: plink's weak-crypto question, "The first
+    /// key-exchange algorithm supported by the server is
+    /// diffie-hellman-group1-sha1, which is below the configured warning
+    /// threshold. Continue with connection? (y/n)". Holds what is weak
+    /// ("key-exchange algorithm: diffie-hellman-group1-sha1"). Old Cisco
+    /// gear asks this before the host key; it went to the terminal as plain
+    /// text, the user had to type "y", and its text then leaked into the
+    /// host-key dialog that followed.
+    #[serde(default)]
+    pub weak: Option<String>,
 }
 
 impl HostKeyPromptInfo {
@@ -41,7 +51,29 @@ impl HostKeyPromptInfo {
             fingerprint,
             raw_prompt: raw.to_string(),
             changed: raw.contains("POTENTIAL SECURITY BREACH") || raw.contains("host key does not match"),
+            weak: None,
         }
+    }
+
+    /// plink's weak-crypto question (PuTTY's `confirm_weak_crypto_primitive`
+    /// and `confirm_weak_cached_hostkey`), or None if `raw` isn't one.
+    pub fn parse_weak(raw: &str) -> Option<Self> {
+        let rx = Regex::new(
+            r"(?s)The first (.+?) (?:supported by the server|we have stored for this server)\s+is\s+(\S+), which is below the configured warning threshold",
+        )
+        .unwrap();
+        let caps = rx.captures(raw)?;
+        let what = caps.get(1)?.as_str().trim().to_string();
+        let alg = caps.get(2)?.as_str().trim().to_string();
+        Some(Self {
+            host: String::new(),
+            port: 0,
+            key_type: String::new(),
+            fingerprint: String::new(),
+            raw_prompt: raw.to_string(),
+            changed: false,
+            weak: Some(format!("{what}: {alg}")),
+        })
     }
 }
 
@@ -104,11 +136,13 @@ pub struct PreAuthStateMachine {
 
 /// How plink's host-key notices begin, for holding back an unfinished line
 /// that may be one of them.
-const HOSTKEY_NOTICE_STARTS: [&str; 4] = [
+const HOSTKEY_NOTICE_STARTS: [&str; 5] = [
     "The host key is not cached",
     "The server's host key is not cached",
     "The host key does not match",
     "WARNING - POTENTIAL SECURITY BREACH",
+    // The weak-crypto question ("The first cipher supported by ...").
+    "The first ",
 ];
 
 /// Whether `tail` (an unfinished last line) may still become a notice.
@@ -119,10 +153,14 @@ fn could_start_notice(tail: &[u8]) -> bool {
 }
 
 /// How plink (0.75 to 0.85) opens a host-key notice, new key or changed key.
-const HOSTKEY_NOTICE_MARKERS: [&str; 3] = [
+const HOSTKEY_NOTICE_MARKERS: [&str; 6] = [
     "host key is not cached",
     "WARNING - POTENTIAL SECURITY BREACH",
     "host key does not match",
+    // The weak-crypto question: the dialog shows it, not the terminal.
+    "The first key-exchange algorithm",
+    "The first host key type",
+    "cipher supported by the server is",
 ];
 
 impl PreAuthStateMachine {
@@ -238,9 +276,21 @@ impl PreAuthStateMachine {
             return PreAuthAction::TransitionToLive(remaining);
         }
 
+        // plink's weak-crypto question, asked before any host key.
+        if text.contains("Continue with connection? (y/n)") {
+            if let Some(prompt_info) = HostKeyPromptInfo::parse_weak(&text) {
+                self.state = SessionState::HostKeyPending { prompt: prompt_info.clone() };
+                return PreAuthAction::HostKeyPrompt(prompt_info);
+            }
+        }
+
         // Check for host-key confirmation prompt
         if self.hostkey_prompt_regex.is_match(&text) {
-            let prompt_info = HostKeyPromptInfo::parse(&text);
+            // Only the notice itself: anything earlier in the buffer (a
+            // banner, a question already answered) is not about the key.
+            let from = HOSTKEY_NOTICE_MARKERS[..3].iter().filter_map(|m| text.find(m)).min().unwrap_or(0);
+            let line_start = text[..from].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prompt_info = HostKeyPromptInfo::parse(&text[line_start..]);
             self.state = SessionState::HostKeyPending {
                 prompt: prompt_info.clone(),
             };
@@ -425,5 +475,64 @@ mod changed_key_tests {
     fn a_first_visit_is_not_reported_as_changed() {
         let raw = "The host key is not cached for this server:\r\n  127.0.0.1 (port 2230)\r\nThe server's ssh-ed25519 key fingerprint is:\r\n  ssh-ed25519 255 SHA256:abc\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
         assert!(!HostKeyPromptInfo::parse(raw).changed);
+    }
+}
+
+#[cfg(test)]
+mod weak_crypto_tests {
+    use super::*;
+
+    // PuTTY 0.81's wording (console confirm_weak_crypto_primitive), as the
+    // owner's old Cisco router produced it.
+    const WEAK_KEX: &str = "The first key-exchange algorithm supported by the server is\r\ndiffie-hellman-group1-sha1, which is below the configured warning threshold.\r\nContinue with connection? (y/n) ";
+    const WEAK_CIPHER: &str = "The first cipher supported by the server is\r\n3des-cbc, which is below the configured warning threshold.\r\nContinue with connection? (y/n) ";
+    const NEW_KEY: &str = "The host key is not cached for this server:\r\n  192.0.2.57 (port 22)\r\nYou have no guarantee that the server is the computer\r\nyou think it is.\r\nThe server's ssh-rsa key fingerprint is:\r\n  ssh-rsa 2048 SHA256:q1w2e3r4t5y6u7i8o9p0asdfghjklzxcvbnmQWERTYU\r\nStore key in cache? (y/n, Return cancels connection, i for more info) ";
+
+    #[test]
+    fn the_weak_crypto_question_becomes_a_dialog_not_terminal_text() {
+        let mut sm = PreAuthStateMachine::new();
+        match sm.feed_bytes(WEAK_KEX.as_bytes()) {
+            PreAuthAction::HostKeyPrompt(info) => {
+                assert_eq!(info.weak.as_deref(), Some("key-exchange algorithm: diffie-hellman-group1-sha1"));
+                assert!(!info.changed);
+            }
+            other => panic!("expected a prompt, got {other:?}"),
+        }
+        assert!(matches!(sm.state(), SessionState::HostKeyPending { .. }));
+    }
+
+    #[test]
+    fn a_weak_cipher_is_named_too() {
+        let info = HostKeyPromptInfo::parse_weak(WEAK_CIPHER).unwrap();
+        assert_eq!(info.weak.as_deref(), Some("cipher: 3des-cbc"));
+        assert!(HostKeyPromptInfo::parse_weak(NEW_KEY).is_none());
+    }
+
+    #[test]
+    fn the_host_key_dialog_after_it_shows_only_the_host_key() {
+        // Answered weak-crypto question, its echo, then the host key: the
+        // dialog used to be built from the whole buffer.
+        let mut sm = PreAuthStateMachine::new();
+        assert!(matches!(sm.feed_bytes(WEAK_KEX.as_bytes()), PreAuthAction::HostKeyPrompt(_)));
+        sm.prompt_answered_with_echo(b"y\r\n");
+        let _ = sm.feed_bytes(b"y\r\n");
+        match sm.feed_bytes(NEW_KEY.as_bytes()) {
+            PreAuthAction::HostKeyPrompt(info) => {
+                assert!(info.weak.is_none());
+                assert_eq!(info.host, "192.0.2.57");
+                assert_eq!(info.port, 22);
+                assert_eq!(info.key_type, "ssh-rsa");
+                assert!(info.fingerprint.starts_with("SHA256:q1w2"));
+                assert!(!info.raw_prompt.contains("diffie-hellman"));
+            }
+            other => panic!("expected the host-key prompt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_line_that_starts_like_the_question_is_held_then_shown() {
+        // "The first " is also held back while it may become the question.
+        let mut sm = PreAuthStateMachine::new();
+        assert!(matches!(sm.feed_bytes(b"The first "), PreAuthAction::Withhold(_) | PreAuthAction::Hold));
     }
 }

@@ -17,3 +17,13 @@ export function fatalHint(text: string, host?: string, port?: number): string | 
   for (const [rx, hint] of HINTS) if (rx.test(text)) return hint(target);
   return null;
 }
+
+/** A Telnet or Raw session that reached an SSH server: it answers with its
+ *  version line ("SSH-2.0-Cisco-1.25") and closes. Seen with a copy of an
+ *  EVE-NG telnet console session re-pointed at a router's port 22, still
+ *  set to Telnet: "Session closed" with nothing to say why. */
+export function sshBannerHint(text: string, protocol?: string): string | null {
+  if (protocol !== 'Telnet' && protocol !== 'RAW') return null;
+  if (!/^SSH-(?:2\.0|1\.99)-/m.test(text)) return null;
+  return `This server speaks SSH, but the session is set to ${protocol === 'RAW' ? 'Raw' : 'Telnet'}. Edit the session and choose SSH as the protocol.`;
+}

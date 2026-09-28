@@ -69,3 +69,26 @@ describe('host key dialog', () => {
   });
 });
 
+
+describe('the weak-crypto question', () => {
+  const weak = { ...base, host: '', port: 0, key_type: '', fingerprint: '', weak: 'key-exchange algorithm: diffie-hellman-group1-sha1' };
+
+  it('names the outdated algorithm and asks, instead of landing in the terminal', () => {
+    // An old Cisco router's plink question used to arrive as terminal text
+    // the user had to answer by typing "y".
+    const onAnswer = vi.fn();
+    render(<HostKeyDialog prompt={weak} onAnswer={onAnswer} />);
+    expect(screen.getByText(/only offers outdated encryption/)).toBeTruthy();
+    expect(screen.getByText('diffie-hellman-group1-sha1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Connect anyway' }));
+    expect(onAnswer).toHaveBeenCalledWith('once');
+  });
+
+  it('Escape and Abandon both abandon', () => {
+    const onAnswer = vi.fn();
+    render(<HostKeyDialog prompt={weak} onAnswer={onAnswer} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'Abandon connection' }));
+    expect(onAnswer.mock.calls).toEqual([['reject'], ['reject']]);
+  });
+});
