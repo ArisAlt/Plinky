@@ -149,12 +149,31 @@ async fn telnet_session_survives_large_device_output() {
     device_dump_survives("telnet").await;
 }
 
+/// What a telnet peer typed, without the IAC option commands (IAC WILL 3
+/// would otherwise look like a Ctrl+C).
+fn telnet_data(raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == 255 && i + 1 < raw.len() {
+            i += if (251..=254).contains(&raw[i + 1]) { 3 } else { 2 };
+            continue;
+        }
+        out.push(raw[i]);
+        i += 1;
+    }
+    out
+}
+
 /// A GNS3-style console that never negotiates echo (a bare `Router>`).
 /// plink keeps local line editing on for it, and its pty used to stay
 /// cooked: Up was held until Enter (no shell history) and Ctrl+C became a
 /// SIGINT that killed plink and dropped the session. Both must now reach
 /// the device as typed, and the session must survive.
-#[cfg(unix)]
+///
+/// On Windows the same keys died another way: plink.exe keeps its console
+/// in processed-input mode, so Ctrl+C became a CTRL_C_EVENT that ended it,
+/// and without VT input the arrows never reached it at all.
 #[tokio::test]
 async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     use std::io::Read;
@@ -178,8 +197,8 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
                     Ok(n) => got.extend_from_slice(&buf[..n]),
                     Err(_) => {}
                 }
-                // The telnet options plink opens with are not what we're after.
-                if got.windows(4).any(|w| w == b"\x1b[A\x03") { break; }
+                // Up is sent before Ctrl+C, so Ctrl+C means both are in.
+                if telnet_data(&got).contains(&0x03) { break; }
             }
             let _ = got_tx.send(got);
             // Stay connected: a closed socket would end plink by itself.
@@ -215,8 +234,10 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     let got = tokio::task::spawn_blocking(move || got_rx.recv_timeout(Duration::from_secs(8)).unwrap_or_default())
         .await
         .unwrap();
+    let got = telnet_data(&got);
+    let up = got.windows(3).any(|w| w == b"\x1b[A" || w == b"\x1bOA");
     assert!(
-        got.windows(4).any(|w| w == b"\x1b[A\x03"),
+        up && got.contains(&0x03),
         "Up and Ctrl+C must reach the console without waiting for Enter; got {got:?}"
     );
     tokio::time::sleep(Duration::from_millis(300)).await;

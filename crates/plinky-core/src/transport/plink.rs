@@ -69,6 +69,9 @@ pub struct PlinkTransport {
     /// Telnet and raw consoles are driven in character mode; see
     /// `force_character_mode`.
     char_mode: bool,
+    /// plink's process id, for reaching its console on Windows.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pid: Option<u32>,
 }
 
 /// Whether a connection should run with plink's local line editing off.
@@ -110,6 +113,104 @@ fn force_character_mode(fd: std::os::unix::io::RawFd) {
         t.c_cc[libc::VMIN] = 1;
         t.c_cc[libc::VTIME] = 0;
         libc::tcsetattr(fd, libc::TCSANOW, &t);
+    }
+}
+
+/// plink.exe's console input, set up the way PuTTY's own window behaves.
+///
+/// plink.exe always switches its console to ENABLE_PROCESSED_INPUT
+/// (windows/plink.c, plink_echoedit_update), and under a pseudo console that
+/// turns the Ctrl+C byte into a CTRL_C_EVENT: plink has no handler, so it
+/// exits and the session drops -- SSH as much as telnet. That mode also has
+/// no ENABLE_VIRTUAL_TERMINAL_INPUT, so keys without a character (the
+/// arrows, for shell history) never reach plink. Before each write this
+/// attaches to plink's console, clears processed input (and, for telnet and
+/// raw, line input and echo, as on Unix), sets VT input, and detaches.
+/// A console mode belongs to the console, so plink sees it at once.
+#[cfg(windows)]
+mod win_console {
+    use std::sync::{Mutex, Once};
+
+    const ENABLE_PROCESSED_INPUT: u32 = 0x0001;
+    const ENABLE_LINE_INPUT: u32 = 0x0002;
+    const ENABLE_ECHO_INPUT: u32 = 0x0004;
+    const ENABLE_VIRTUAL_TERMINAL_INPUT: u32 = 0x0200;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FILE_SHARE_READ: u32 = 1;
+    const FILE_SHARE_WRITE: u32 = 2;
+    const OPEN_EXISTING: u32 = 3;
+    const INVALID_HANDLE_VALUE: isize = -1;
+
+    type Handler = unsafe extern "system" fn(u32) -> i32;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn AttachConsole(pid: u32) -> i32;
+        fn FreeConsole() -> i32;
+        fn CreateFileW(
+            name: *const u16,
+            access: u32,
+            share: u32,
+            security: *const core::ffi::c_void,
+            disposition: u32,
+            flags: u32,
+            template: isize,
+        ) -> isize;
+        fn GetConsoleMode(handle: isize, mode: *mut u32) -> i32;
+        fn SetConsoleMode(handle: isize, mode: u32) -> i32;
+        fn CloseHandle(handle: isize) -> i32;
+        fn SetConsoleCtrlHandler(handler: Option<Handler>, add: i32) -> i32;
+    }
+
+    /// A process is attached to one console at a time.
+    static ATTACH: Mutex<()> = Mutex::new(());
+    static HANDLER: Once = Once::new();
+
+    /// While attached, plink's console events reach Plinky too; without a
+    /// handler that says "handled", one would end Plinky itself.
+    unsafe extern "system" fn swallow(_event: u32) -> i32 {
+        1
+    }
+
+    pub fn prepare_input(pid: u32, char_mode: bool) {
+        HANDLER.call_once(|| {
+            // SAFETY: registers a plain function with no captured state.
+            unsafe { SetConsoleCtrlHandler(Some(swallow), 1) };
+        });
+        let _one = ATTACH.lock().unwrap_or_else(|e| e.into_inner());
+        let conin: Vec<u16> = "CONIN$\0".encode_utf16().collect();
+        // SAFETY: plain Win32 calls; the handle is checked before use and
+        // closed, and the console is freed on every path after attaching.
+        unsafe {
+            if AttachConsole(pid) == 0 {
+                return;
+            }
+            let h = CreateFileW(
+                conin.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                core::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                0,
+            );
+            if h != INVALID_HANDLE_VALUE && h != 0 {
+                let mut mode = 0u32;
+                if GetConsoleMode(h, &mut mode) != 0 {
+                    let mut want = (mode & !ENABLE_PROCESSED_INPUT) | ENABLE_VIRTUAL_TERMINAL_INPUT;
+                    if char_mode {
+                        // Echo is only valid with line input on Windows.
+                        want &= !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+                    }
+                    if want != mode {
+                        SetConsoleMode(h, want);
+                    }
+                }
+                CloseHandle(h);
+            }
+            FreeConsole();
+        }
     }
 }
 
@@ -363,6 +464,7 @@ impl PlinkTransport {
             .take_writer()
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
+        let pid = child.process_id();
         let child = super::pump_pty_child(reader, child, out_tx, flow);
 
         if let Some(file) = pwfile {
@@ -377,6 +479,7 @@ impl PlinkTransport {
             writer,
             child,
             char_mode,
+            pid,
         })
     }
 }
@@ -388,6 +491,10 @@ impl Transport for PlinkTransport {
             if let Some(fd) = self.master.as_raw_fd() {
                 force_character_mode(fd);
             }
+        }
+        #[cfg(windows)]
+        if let Some(pid) = self.pid {
+            win_console::prepare_input(pid, self.char_mode);
         }
         self.writer
             .write_all(data)
