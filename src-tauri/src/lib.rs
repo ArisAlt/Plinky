@@ -211,8 +211,8 @@ struct ConnectedSessions(std::sync::Mutex<std::collections::HashSet<String>>);
 /// is up, by watching plink's own socket (tcp_state.rs). A console that
 /// prints nothing until something happens on the device otherwise showed
 /// "Connecting to host:port" long after it had connected: measured on a
-/// GNS3 IOS console, 0 bytes in the first 5 s. Where this can't be told
-/// (Windows, for now) the watcher stops at once and the page waits for
+/// GNS3 IOS console, 0 bytes in the first 5 s. Linux and Windows can tell;
+/// where it can't be told the watcher stops at once and the page waits for
 /// output, as before.
 fn watch_connection(app: &tauri::AppHandle, id: String) {
     use plinky_core::transport::tcp_state::has_established_tcp;

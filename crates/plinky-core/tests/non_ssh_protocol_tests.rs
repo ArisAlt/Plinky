@@ -261,7 +261,7 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
 /// waited for output before it stopped showing "Connecting to host:port",
 /// so a saved console session looked like it took ~10 s to connect. plink's
 /// own socket shows the connection is up while not one byte has arrived.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 #[tokio::test]
 async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
     use plinky_core::transport::tcp_state::has_established_tcp;
