@@ -187,6 +187,16 @@ mod code_page {
             if bytes.is_ascii() || ansi_code_page() == CP_UTF8 {
                 return String::from_utf8_lossy(bytes).into_owned();
             }
+            // The mirror of encode's fallback. A Greek name on a Windows
+            // whose code page is 1252 was saved as UTF-8 bytes, then read
+            // back as 1252: "Αθήνα" listed as "Î‘Î¸Î®Î½Î±". Valid UTF-8 for a
+            // name the code page can't hold can only have come from that
+            // fallback: a name it can hold was saved in the code page.
+            if let Ok(s) = std::str::from_utf8(bytes) {
+                if to_ansi(s).is_none() {
+                    return s.to_string();
+                }
+            }
             from_ansi(bytes).unwrap_or_else(|| String::from_utf8_lossy(bytes).into_owned())
         }
 
@@ -438,6 +448,15 @@ mod io {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_greek_session_name_reads_back_as_greek() {
+        // On a Windows whose code page can't hold Greek (1252, the CI
+        // runner's), the name is saved as UTF-8 and was read back as 1252.
+        for name in ["Αθήνα", "Δρομολογητής Πειραιά", "R1 Αθήνα"] {
+            assert_eq!(unescape_registry_key(&escape_registry_key(name)), name);
+        }
+    }
 
     #[test]
     fn escapes_what_putty_for_windows_escapes() {

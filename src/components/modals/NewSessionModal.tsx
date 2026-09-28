@@ -7,9 +7,10 @@ import {
 import { 
   listSerialPorts, DetectedSerialPort, 
   vaultListEntriesMeta, vaultSetEntry, VaultEntryMeta, VaultEntry,
-  vaultIsInitialized, vaultIsUnlocked,
+  vaultIsInitialized, vaultIsUnlocked, vaultGetEntry,
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
+import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
 
 type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
@@ -54,6 +55,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [isNetworkDevice, setIsNetworkDevice] = useState(false);
   const [vaultEnablePassword, setVaultEnablePassword] = useState('');
   const [vaultSaveError, setVaultSaveError] = useState<string | null>(null);
+  // The vault entry this session already uses, when editing. Its password
+  // isn't shown: left blank, it stays as it is.
+  const [savedVaultKey, setSavedVaultKey] = useState<string | null>(null);
+  // Unlock asked for in place; `save` continues the Save that needed it.
+  const [unlockFor, setUnlockFor] = useState<null | 'edit' | 'save'>(null);
+  const unlockDeclined = useRef(false);
+  const [resubmit, setResubmit] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   // Whether there is a vault to save into. On a first run there is none:
   // saving a password failed with "Vault is locked ... unlock the vault",
   // pointing at something that didn't exist yet.
@@ -128,6 +137,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setTab('general');
+    setUnlockFor(null);
+    unlockDeclined.current = false;
     refreshPorts();
     setVaultSaveError(null);
     vaultListEntriesMeta().then(setVaultEntries).catch(() => {});
@@ -166,13 +177,18 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setJumpPassword('');
       setJumpVaultKey(hasJumpHost && extra.PlinkyJumpVaultKey ? extra.PlinkyJumpVaultKey : null);
 
-      // Load vault credentials key
+      // Load vault credentials key. Shown as the entry itself, password
+      // blank = unchanged. It opened on "Link to existing", which with the
+      // vault locked was an empty list and a warning, for a session whose
+      // login was fine.
       if (extra.PlinkyVaultKey) {
         setUseVault(true);
-        setVaultMode('link');
+        setVaultMode('new');
         setSelectedVaultKey(extra.PlinkyVaultKey);
         setVaultKeyId(extra.PlinkyVaultKey);
+        setSavedVaultKey(extra.PlinkyVaultKey);
       } else {
+        setSavedVaultKey(null);
         setUseVault(false);
         setVaultMode('new');
         setSelectedVaultKey('');
@@ -214,6 +230,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setVaultMode('new');
       setSelectedVaultKey('');
       setVaultKeyId('');
+      setSavedVaultKey(null);
       setJumpPassword('');
       setJumpVaultKey(null);
       setVaultPassword('');
@@ -227,6 +244,39 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setAutoReconnect(false);
     }
   }, [isOpen, editingSession, initialFolder]);
+
+  // The saved entry says whether it has an enable password; the checkbox
+  // used to start unticked on every edit, as if it had none.
+  useEffect(() => {
+    if (!isOpen || !savedVaultKey) return;
+    const meta = vaultEntries.find(v => v.id === savedVaultKey);
+    if (meta) setIsNetworkDevice(!!meta.has_enable_secret);
+  }, [isOpen, savedVaultKey, vaultEntries]);
+
+  // Ticking "Save credentials", or opening a saved session's credentials,
+  // with the vault locked asks for the master password there and then.
+  // Once per opening: "Not now" means not now.
+  const pickedCredentials = pickedTab === 'credentials';
+  useEffect(() => {
+    if (isOpen && useVault && vaultState === 'locked' && pickedCredentials && !unlockDeclined.current && unlockFor === null) {
+      setUnlockFor('edit');
+    }
+  }, [isOpen, useVault, vaultState, pickedCredentials, unlockFor]);
+
+  // A Save that stopped for the unlock goes on once the entries are loaded.
+  useEffect(() => {
+    if (!resubmit) return;
+    setResubmit(false);
+    formRef.current?.requestSubmit();
+  }, [resubmit]);
+
+  const afterUnlock = async () => {
+    const again = unlockFor === 'save';
+    setUnlockFor(null);
+    try { setVaultEntries(await vaultListEntriesMeta()); } catch { /* listed on the next change */ }
+    setVaultState('ready');
+    if (again) setResubmit(true);
+  };
 
   // Unlocking the vault with this dialog open fills "Link to existing".
   useEffect(() => {
@@ -259,6 +309,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     const sessionName = name.trim() || hostname.trim() || (protocol === 'Serial' ? serialLine.trim() : '');
     if (!sessionName) return;
     setVaultSaveError(null);
+
+    // Writing or checking a vault entry needs it unlocked: ask, then carry on.
+    const needsVault = (useVault && vaultMode === 'new') || (!!jumpPassword && enableJumpHost);
+    if (needsVault && vaultState !== 'none' && !(await vaultIsUnlocked().catch(() => false))) {
+      setUnlockFor('save');
+      return;
+    }
 
     const isSerial = protocol === 'Serial';
     const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
@@ -361,19 +418,28 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           setTab('credentials');
           return;
         }
-        if (vaultPassword) {
+        const exists = vaultEntries.some(v => v.id === finalKeyId);
+        if (vaultPassword || (exists && vaultEnablePassword)) {
           const now = Math.floor(Date.now() / 1000);
+          // Left blank, a password stays what it was: replacing the login
+          // password used to drop the enable password with it.
+          const prev = exists ? await vaultGetEntry(finalKeyId) : null;
           const entry: VaultEntry = {
             id: finalKeyId,
-            username: isSerial ? undefined : (username.trim() || undefined),
-            secret: vaultPassword,
+            username: isSerial ? undefined : (username.trim() || prev?.username || undefined),
             // Never trimmed: a password with a leading or trailing space is
             // a different password.
-            enable_secret: isNetworkDevice && vaultEnablePassword ? vaultEnablePassword : undefined,
-            notes: `Saved credentials for session "${sessionName}"`,
-            created_at: now,
+            secret: vaultPassword || prev?.secret || '',
+            enable_secret: isNetworkDevice ? (vaultEnablePassword || prev?.enable_secret || undefined) : undefined,
+            notes: prev?.notes || `Saved credentials for session "${sessionName}"`,
+            created_at: prev?.created_at ?? now,
             updated_at: now,
           };
+          if (!entry.secret) {
+            setVaultSaveError('Enter the login password to save in the vault.');
+            setTab('credentials');
+            return;
+          }
           // This failed silently when the vault was locked: the dialog
           // closed, the session was linked to an entry that didn't exist,
           // and the password was simply gone. Stay open and say why.
@@ -388,7 +454,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             return;
           }
           extra.PlinkyVaultKey = finalKeyId;
-        } else if (vaultEntries.some(v => v.id === finalKeyId)) {
+        } else if (exists) {
           extra.PlinkyVaultKey = finalKeyId;
         } else {
           // Linking to an entry that doesn't exist left a dangling key.
@@ -439,6 +505,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   };
 
   const isSerial = protocol === 'Serial';
+  // The key typed is one the vault already holds (or this session's own):
+  // a blank password then keeps the stored one.
+  const typedKey = vaultKeyId.trim();
+  const keyIsSaved = !!typedKey && (typedKey === savedVaultKey || vaultEntries.some(v => v.id === typedKey));
 
   // The tabs this protocol has. A dot marks one holding non-default settings.
   const visibleTabs: { id: SessionTab; label: string; on?: boolean }[] = [
@@ -504,6 +574,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
         {/* Form Body */}
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           // A required field on a hidden tab would block Save with nothing
           // on screen to say why: show the tab that holds it.
@@ -667,17 +738,6 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       />
                     </div>
                   </div>
-
-                  <div className="space-y-1">
-                    <label htmlFor="new-session-modal-default-username" className="text-slate-300 font-medium">Default Username</label>
-                    <input id="new-session-modal-default-username"
-                      type="text"
-                      placeholder="e.g. root, admin, or deploy"
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
-                    />
-                  </div>
                 </>
               )}
 
@@ -732,6 +792,19 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             </div>
 
             <div data-tab="credentials" hidden={tab !== 'credentials'} className="space-y-3">
+                  {!isSerial && (
+                    <div className="space-y-1">
+                      <label htmlFor="new-session-modal-default-username" className="text-slate-300 font-medium">Username</label>
+                      <input id="new-session-modal-default-username"
+                        type="text"
+                        autoComplete="off"
+                        placeholder="e.g. root, admin, or deploy"
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                        className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                  )}
                   {protocol === 'SSH' && (
                     <div className="space-y-1">
                       <label htmlFor="new-session-modal-private-key-file-ppk" className="text-slate-300 font-medium flex items-center space-x-1">
@@ -768,41 +841,26 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                     </span>
                   )}
                 </div>
-                {useVault && (vaultState === 'none' || vaultState === 'locked') && (
+                {useVault && vaultState === 'none' && (
                   <p role="status" className="p-2 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 text-meta">
-                    {vaultState === 'none'
-                      ? 'No vault yet. Create one first: Vault in the top bar, then set a master password. Until then a password here can\'t be saved.'
-                      : 'The vault is locked. Unlock it (Vault in the top bar) to save or link a password here.'}
+                    No vault yet. Create one first: Vault in the top bar, then set a master password. Until then a password here can't be saved.
                   </p>
+                )}
+                {useVault && vaultState === 'locked' && (
+                  <div role="status" className="flex items-center justify-between gap-2 p-2 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 text-meta">
+                    <span>The vault is locked, so this session's password can't be read or saved.</span>
+                    <button
+                      type="button"
+                      onClick={() => setUnlockFor('edit')}
+                      className="shrink-0 px-2 py-0.5 rounded border border-amber-500/50 text-amber-200 hover:bg-amber-500/10"
+                    >
+                      Unlock…
+                    </button>
+                  </div>
                 )}
 
                 {useVault && (
                   <div className="space-y-2.5 pt-1 border-t border-plinky-800/80 animate-in fade-in duration-150">
-                    {/* Mode toggle: Create New vs Link Existing */}
-                    <div className="flex items-center space-x-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setVaultMode('new')}
-                        className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
-                          vaultMode === 'new'
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                            : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
-                        }`}
-                      >
-                        Create New Vault Entry
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setVaultMode('link')}
-                        className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
-                          vaultMode === 'link'
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                            : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
-                        }`}
-                      >
-                        Link to Existing Vault Entry
-                      </button>
-                    </div>
 
                     {vaultMode === 'link' ? (
                       <div className="space-y-1">
@@ -839,12 +897,17 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                             />
                           </div>
                           <div className="space-y-1">
-                            <label htmlFor="new-session-modal-login-password" className="text-slate-300 text-meta">Login Password *</label>
+                            <label htmlFor="new-session-modal-login-password" className="text-slate-300 text-meta">
+                              {keyIsSaved ? 'Login Password' : 'Login Password *'}
+                            </label>
                             <input id="new-session-modal-login-password"
                               type="password"
+                              // WebView2 filled a remembered password in here
+                              // on edit, and Save wrote it over the vault's.
+                              autoComplete="new-password"
                               value={vaultPassword}
                               onChange={e => setVaultPassword(e.target.value)}
-                              placeholder="Session login password..."
+                              placeholder={keyIsSaved ? 'Saved. Type to replace' : 'Session login password...'}
                               className="w-full bg-plinky-900 border border-plinky-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
                             />
                           </div>
@@ -872,6 +935,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                             </label>
                             <input id="new-session-modal-enable-password-cisco-arista-h"
                               type="password"
+                              autoComplete="new-password"
                               value={vaultEnablePassword}
                               onChange={e => setVaultEnablePassword(e.target.value)}
                               placeholder="e.g. Cisco enable secret..."
@@ -881,6 +945,32 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                         )}
                       </div>
                     )}
+
+                    {/* Mode toggle, under the fields it switches */}
+                    <div className="flex items-center space-x-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setVaultMode('new')}
+                        className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
+                          vaultMode === 'new'
+                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                            : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
+                        }`}
+                      >
+                        Create New Vault Entry
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVaultMode('link')}
+                        className={`flex-1 py-1 px-2 rounded border text-center font-medium transition ${
+                          vaultMode === 'link'
+                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                            : 'bg-plinky-900 text-slate-400 border-plinky-700 hover:text-slate-300'
+                        }`}
+                      >
+                        Link to Existing Vault Entry
+                      </button>
+                    </div>
 
                     <p className="flex items-center gap-1.5 text-meta text-slate-400">
                       <Lock className="w-3 h-3 shrink-0 text-plinky-muted" aria-hidden="true" />
@@ -1235,6 +1325,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               <span>{editingSession ? 'Save Changes' : 'Save session'}</span>
             </button>
           </div>
+        {unlockFor && (
+            <VaultUnlockDialog
+              reason={unlockFor === 'save'
+                ? 'Saving this session writes its password to the vault. Unlock it and the save carries on.'
+                : 'This session keeps its password in the vault. Unlock it to see or change the entry.'}
+              onUnlocked={() => { void afterUnlock(); }}
+              onCancel={() => { unlockDeclined.current = true; setUnlockFor(null); }}
+            />
+          )}
         </form>
       </div>
     </div>

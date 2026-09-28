@@ -443,3 +443,20 @@ pub fn delete_session_in(dir: &Path, name: &str) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+
+    #[test]
+    fn a_greek_session_name_survives_the_file_name() {
+        // Every Greek letter is two %XX bytes, so the name ends in one.
+        // `i + 2 < len` skipped an escape at the very end: "Αθήνα" came back
+        // as "Αθήν" plus the raw text "%CE%B1", shown as garbage.
+        for name in ["Αθήνα", "Δρομολογητής Πειραιά", "R1 Αθήνα", "α"] {
+            assert_eq!(unescape_session_name(&escape_session_name(name)), name);
+        }
+        assert_eq!(unescape_session_name("abc%41"), "abcA");
+        assert_eq!(unescape_session_name("50%"), "50%");
+    }
+}

@@ -9,6 +9,8 @@ const mockVaultListEntriesMeta = vi.fn().mockResolvedValue([
 const mockVaultSetEntry = vi.fn().mockResolvedValue(true);
 const mockVaultIsInitialized = vi.fn().mockResolvedValue(true);
 const mockVaultIsUnlocked = vi.fn().mockResolvedValue(true);
+const mockVaultGetEntry = vi.fn().mockResolvedValue(null);
+const mockVaultUnlock = vi.fn().mockResolvedValue(true);
 
 vi.mock('../services/tauriBridge', () => ({
   VAULT_CHANGED_EVENT: 'plinky:vault-changed',
@@ -37,6 +39,8 @@ vi.mock('../services/tauriBridge', () => ({
   vaultSetEntry: (...args: any[]) => mockVaultSetEntry(...args),
   vaultIsInitialized: (...args: any[]) => mockVaultIsInitialized(...args),
   vaultIsUnlocked: (...args: any[]) => mockVaultIsUnlocked(...args),
+  vaultGetEntry: (...args: any[]) => mockVaultGetEntry(...args),
+  vaultUnlock: (...args: any[]) => mockVaultUnlock(...args),
 }));
 
 describe('NewSessionModal Component', () => {
@@ -329,14 +333,15 @@ describe('NewSessionModal Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
 
     // Verify vaultSetEntry called with credentials including enable_secret
-    expect(mockVaultSetEntry).toHaveBeenCalledWith(
+    // (after Save has checked the vault is unlocked).
+    await waitFor(() => expect(mockVaultSetEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'cisco-core-vault-key',
         username: 'cisco_admin',
         secret: 'adminSecret123',
         enable_secret: 'ciscoPrivilegedSecret456',
       })
-    );
+    ));
 
     // Verify onSave session has PlinkyVaultKey and NO plaintext password.
     // The session is saved only after the vault accepted the entry.
@@ -769,6 +774,108 @@ describe('saving a password when there is no vault yet', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0]).toMatchObject({ name: 'core-sw1.example.test', hostname: 'core-sw1.example.test' });
+  });
+
+  const savedWithVault = {
+    name: 'core-rtr1',
+    hostname: '192.0.2.1',
+    port: 22,
+    protocol: 'SSH',
+    username: 'netops',
+    extra: { PlinkyVaultKey: 'router-cisco-core' },
+  } as any;
+
+  it('keeps the username with the credentials, not on General', () => {
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    const user = screen.getByLabelText(/^Username$/);
+    expect(user.closest('[data-tab]')?.getAttribute('data-tab')).toBe('credentials');
+  });
+
+  it('puts Create/Link under the key and password fields', () => {
+    mockVaultIsUnlocked.mockResolvedValue(true);
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
+    fireEvent.click(screen.getByLabelText(/Save credentials in Encrypted Vault/i));
+    const pw = screen.getByLabelText(/Login Password/);
+    const create = screen.getByRole('button', { name: 'Create New Vault Entry' });
+    expect(pw.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('never lets the browser fill a remembered password into the vault fields', () => {
+    // On Windows, WebView2 put a saved password into Login Password when a
+    // session was opened to edit, and Save wrote it over the vault's.
+    const { container } = render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
+    container.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach(cb => { if (!cb.checked) fireEvent.click(cb); });
+    fireEvent.click(screen.getByRole('tab', { name: 'Jump Host' }));
+    container.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach(cb => { if (!cb.checked) fireEvent.click(cb); });
+    const pw = [...container.querySelectorAll<HTMLInputElement>('input[type=password]')];
+    expect(pw.length).toBeGreaterThanOrEqual(3);
+    for (const el of pw) expect(el.getAttribute('autocomplete')).toBe('new-password');
+  });
+
+  it('opens a saved session on its own vault entry, password blank = unchanged', async () => {
+    mockVaultIsUnlocked.mockResolvedValue(true);
+    mockVaultSetEntry.mockClear();
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} editingSession={savedWithVault} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
+    expect((screen.getByLabelText(/Vault Key ID/) as HTMLInputElement).value).toBe('router-cisco-core');
+    expect((screen.getByLabelText(/Login Password/) as HTMLInputElement).placeholder).toMatch(/Saved/);
+    // The entry has an enable password; the box used to start unticked.
+    await waitFor(() => expect((screen.getByLabelText(/Network Device/) as HTMLInputElement).checked).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: /^save changes$/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(mockVaultSetEntry).not.toHaveBeenCalled();
+    expect(onSave.mock.calls[0][0].extra.PlinkyVaultKey).toBe('router-cisco-core');
+  });
+
+  it('replacing the login password keeps the enable password', async () => {
+    mockVaultIsUnlocked.mockResolvedValue(true);
+    mockVaultSetEntry.mockClear();
+    mockVaultGetEntry.mockResolvedValue({ id: 'router-cisco-core', username: 'netops', secret: 'old', enable_secret: 'en4ble', created_at: 5, updated_at: 5 });
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={savedWithVault} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
+    await waitFor(() => expect((screen.getByLabelText(/Network Device/) as HTMLInputElement).checked).toBe(true));
+    fireEvent.change(screen.getByLabelText(/Login Password/), { target: { value: 'n3w' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save changes$/i }));
+    await waitFor(() => expect(mockVaultSetEntry).toHaveBeenCalled());
+    expect(mockVaultSetEntry.mock.calls[0][0]).toMatchObject({ secret: 'n3w', enable_secret: 'en4ble', created_at: 5 });
+    mockVaultGetEntry.mockResolvedValue(null);
+  });
+
+  it('asks for the master password in place when a saved session\'s vault is locked', async () => {
+    mockVaultIsInitialized.mockResolvedValue(true);
+    mockVaultIsUnlocked.mockResolvedValue(false);
+    mockVaultUnlock.mockClear();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingSession={savedWithVault} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
+    const master = await screen.findByLabelText('Master password');
+    fireEvent.change(master, { target: { value: 'm4ster' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    await waitFor(() => expect(mockVaultUnlock).toHaveBeenCalledWith('m4ster'));
+    await waitFor(() => expect(screen.queryByLabelText('Master password')).toBeNull());
+    mockVaultIsUnlocked.mockResolvedValue(true);
+  });
+
+  it('a Save that needs the locked vault asks to unlock, then finishes', async () => {
+    mockVaultIsInitialized.mockResolvedValue(true);
+    mockVaultIsUnlocked.mockResolvedValue(false);
+    mockVaultSetEntry.mockClear();
+    const onSave = vi.fn();
+    render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/192\.0\.2\.10/i), { target: { value: '192.0.2.7' } });
+    fireEvent.click(screen.getByRole('tab', { name: /Credentials & Vault/i }));
+    fireEvent.click(screen.getByLabelText(/Save credentials in Encrypted Vault/i));
+    // Ticking the box with the vault locked asks at once; "Not now" defers it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    fireEvent.change(screen.getByLabelText(/Login Password/), { target: { value: 's3cret' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save session$/i }));
+    const master = await screen.findByLabelText('Master password');
+    mockVaultIsUnlocked.mockResolvedValue(true);
+    fireEvent.change(master, { target: { value: 'm4ster' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    await waitFor(() => expect(mockVaultSetEntry).toHaveBeenCalledWith(expect.objectContaining({ secret: 's3cret' })));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
   });
 });
 
