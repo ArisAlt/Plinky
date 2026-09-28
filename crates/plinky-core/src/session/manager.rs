@@ -477,16 +477,17 @@ impl SessionRegistry {
                                 forwarded = n;
                             }
                         }
-                        match answer {
-                            Some(super::begin_gate::Gate::Answer) => {
-                                begin_gate = None;
-                                let mut lock = registry_clone.sessions.lock().unwrap();
-                                if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
+                        if let Some(outcome @ (super::begin_gate::Gate::Answer | super::begin_gate::Gate::Done)) = answer {
+                            begin_gate = None;
+                            let mut lock = registry_clone.sessions.lock().unwrap();
+                            if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
+                                // The Return goes while plink still reads a
+                                // line; only then is the session begun.
+                                if outcome == super::begin_gate::Gate::Answer {
                                     let _ = session.transport.write(b"\r");
                                 }
+                                session.transport.session_begun();
                             }
-                            Some(super::begin_gate::Gate::Done) => begin_gate = None,
-                            _ => {}
                         }
                     }
                     PreAuthAction::TransitionToLive(bytes) => {
@@ -504,14 +505,18 @@ impl SessionRegistry {
                         // Watched past this chunk: see begin_gate.rs.
                         let mut gate = super::begin_gate::BeginGate::new();
                         match gate.feed(&bytes) {
-                            super::begin_gate::Gate::Answer => {
+                            super::begin_gate::Gate::Waiting => begin_gate = Some(gate),
+                            outcome => {
                                 let mut lock = registry_clone.sessions.lock().unwrap();
                                 if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
-                                    let _ = session.transport.write(b"\r");
+                                    // The Return goes while plink still reads
+                                    // a line; only then is the session begun.
+                                    if outcome == super::begin_gate::Gate::Answer {
+                                        let _ = session.transport.write(b"\r");
+                                    }
+                                    session.transport.session_begun();
                                 }
                             }
-                            super::begin_gate::Gate::Waiting => begin_gate = Some(gate),
-                            super::begin_gate::Gate::Done => {}
                         }
                     }
                     PreAuthAction::Suppress => {}
@@ -852,6 +857,11 @@ impl SessionRegistry {
         let lock = self.sessions.lock().unwrap();
         let log = lock.get(id)?.log.as_ref()?;
         Some((log.path().to_path_buf(), log.written()))
+    }
+
+    /// Whether the session's login is over (Transport::has_begun).
+    pub fn has_begun(&self, id: &str) -> Option<bool> {
+        Some(self.sessions.lock().unwrap().get(id)?.transport.has_begun())
     }
 
     /// The process making the session's connection (plink), if it has one.

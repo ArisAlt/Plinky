@@ -108,6 +108,15 @@ pub trait Transport: Send {
         None
     }
 
+    /// The login is over: plink now reads the session as it runs, not
+    /// line by line (see PlinkTransport::begun). Only plink cares.
+    fn session_begun(&mut self) {}
+
+    /// Whether `session_begun` has happened (always, where there's no login).
+    fn has_begun(&self) -> bool {
+        true
+    }
+
     /// Explicitly terminates the transport and child process.
     fn kill(&mut self) -> Result<()>;
 

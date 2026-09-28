@@ -307,6 +307,8 @@ async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
         printed.extend_from_slice(&chunk);
     }
     assert!(connected, "plink's connection was never seen established");
+    // No login on a console: its keys are set up from the first one.
+    assert_eq!(registry.has_begun(id), Some(true), "a telnet console has no login to wait for");
     assert!(took < Duration::from_secs(1), "seen only after {took:?}");
     // Windows' pseudo-console announces its own modes when plink starts
     // (ESC[?9001h ESC[?1004h, seen on CI): terminal setup, not the device.

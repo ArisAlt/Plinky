@@ -72,6 +72,16 @@ pub struct PlinkTransport {
     /// plink's process id: for reaching its console on Windows, and for
     /// seeing when its connection is up (tcp_state.rs).
     pid: Option<u32>,
+    /// Whether the login is over. Until then plink reads whole lines from
+    /// its console -- the password, a host-key answer, "Press Return to
+    /// begin session" -- and waits for a newline. On Windows,
+    /// `prepare_input` switches off processed input (so Ctrl+C and the
+    /// arrows reach the device), and without it Enter gives a carriage
+    /// return and no newline: plink's line never ended, and an SSH session
+    /// took no input at all at "Press Return to begin session" (owner,
+    /// v0.1.15). So the console is left as plink set it until the session
+    /// has begun. Telnet and raw have no login: begun from the start.
+    begun: bool,
 }
 
 /// Whether a connection should run with plink's local line editing off.
@@ -539,6 +549,7 @@ impl PlinkTransport {
             child,
             char_mode,
             pid,
+            begun: char_mode,
         })
     }
 }
@@ -546,6 +557,14 @@ impl PlinkTransport {
 impl Transport for PlinkTransport {
     fn process_id(&self) -> Option<u32> {
         self.pid
+    }
+
+    fn session_begun(&mut self) {
+        self.begun = true;
+    }
+
+    fn has_begun(&self) -> bool {
+        self.begun
     }
 
     fn write(&mut self, data: &[u8]) -> Result<()> {
@@ -556,7 +575,7 @@ impl Transport for PlinkTransport {
             }
         }
         #[cfg(windows)]
-        if let Some(pid) = self.pid {
+        if let (Some(pid), true) = (self.pid, self.begun) {
             win_console::prepare_input(pid, self.char_mode);
         }
         self.writer

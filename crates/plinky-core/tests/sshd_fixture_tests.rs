@@ -271,6 +271,20 @@ async fn test_sshd_fixture_plink_preauth_to_live_and_reattach() {
         "Session failed to transition to SessionState::Live via D9 marker"
     );
 
+    // plink's "Press Return to begin session" is answered, and only then is
+    // the session begun: on Windows the console is set up for the running
+    // session from here, and doing it during the login left plink's line
+    // read without its newline (no input at all at that prompt).
+    let mut begun = false;
+    for _ in 0..30 {
+        if registry.has_begun(session_id) == Some(true) {
+            begun = true;
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    assert!(begun, "the session never began after the login");
+
     // 5. Send command to remote session
     sleep(Duration::from_millis(500)).await;
     registry
