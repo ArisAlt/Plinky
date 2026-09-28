@@ -2980,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "plinky-desktop"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "libc",
  "plinky-core",
