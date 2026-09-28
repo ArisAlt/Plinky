@@ -795,13 +795,29 @@ impl SessionRegistry {
 
     /// Terminates and removes a session.
     pub fn close_session(&self, id: &str) -> Result<()> {
-        let mut lock = self.sessions.lock().unwrap();
-        if let Some(mut session) = lock.remove(id) {
+        let removed = self.sessions.lock().unwrap().remove(id);
+        if let Some(mut session) = removed {
             session.flow.close();
             let _ = session.transport.kill();
+            // Dropping the transport closes the pty, and on Windows that is
+            // ClosePseudoConsole, which can wait on the console's output.
+            // It used to run under the sessions lock, so a slow close froze
+            // every other tab's input and the window with it. Nothing else
+            // holds the session now; let it close on its own time.
+            std::thread::spawn(move || drop(session));
         }
         self.sync_router.lock().unwrap().remove_session(id);
         Ok(())
+    }
+
+    /// Kills every session's process, for app exit. The sessions are not
+    /// dropped: exit must not wait on a pty close (see `close_session`).
+    pub fn kill_all(&self) {
+        let mut lock = self.sessions.lock().unwrap();
+        for session in lock.values_mut() {
+            session.flow.close();
+            let _ = session.transport.kill();
+        }
     }
 
     /// Retrieves scrollback history for webview reattachment.

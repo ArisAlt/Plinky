@@ -64,4 +64,13 @@ describe('TerminalManager', () => {
     terminalManager.unregisterTerminal('term-1');
     expect(terminalManager.getActiveTab()).toBeNull();
   });
+
+  it('hands the keyboard back to a terminal after a snippet is sent', () => {
+    const focus = vi.fn();
+    terminalManager.registerTerminal('term-1', { write: vi.fn(), focus } as unknown as Terminal, 'none');
+    terminalManager.focusTerminal('term-1');
+    expect(focus).toHaveBeenCalled();
+    // An unknown tab is a no-op, not a throw.
+    expect(() => terminalManager.focusTerminal('gone')).not.toThrow();
+  });
 });

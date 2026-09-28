@@ -30,6 +30,16 @@ class TerminalManager {
     return this.terminals.get(id)?.terminal;
   }
 
+  /** Gives a tab's terminal the keyboard. Focus is taken again on the next
+   *  frame: a snippet run from the parameters dialog sends while the dialog's
+   *  input still holds focus, and the dialog unmounting after that must not
+   *  leave the keyboard on the page body, where Enter goes nowhere. */
+  focusTerminal(id: string) {
+    const focus = () => this.terminals.get(id)?.terminal.focus();
+    focus();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focus);
+  }
+
   setSyncChannel(id: string, channel: SyncChannel) {
     const entry = this.terminals.get(id);
     if (entry) {

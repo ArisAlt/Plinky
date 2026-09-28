@@ -1459,8 +1459,22 @@ pub fn run() {
             inject_shell_integration,
             list_serial_ports
         ])
-        .run(context)
-        .expect("error while running plinky desktop application");
+        .build(context)
+        .expect("error while building plinky desktop application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // No plink outlives the window.
+                if let Some(registry) = app.try_state::<Arc<SessionRegistry>>() {
+                    registry.kill_all();
+                }
+                // On Windows, dropping the sessions at exit closes each
+                // pseudo console, and that can block: the app window went
+                // away but the process stayed, and had to be ended from Task
+                // Manager. The children are dead; leave without the drops.
+                #[cfg(windows)]
+                std::process::exit(0);
+            }
+        });
 }
 
 #[cfg(test)]

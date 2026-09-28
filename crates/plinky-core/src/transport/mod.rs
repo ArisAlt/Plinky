@@ -58,7 +58,11 @@ pub(crate) fn pump_pty_child(
                         // here and the page fall behind, the reader still
                         // stops at the window instead of racing ahead.
                         Some(tx) if tx.send(buf[..n].to_vec()).is_ok() => reader_flow.charge(n),
-                        _ => break,
+                        // Nobody is listening, but keep draining to EOF:
+                        // Windows' ClosePseudoConsole waits for the output
+                        // pipe to empty, and a reader that stopped here left
+                        // closing the tab (or the app) hanging.
+                        _ => {}
                     }
                 }
             }

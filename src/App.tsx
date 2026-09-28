@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
 import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest } from './services/tauriBridge';
 import { tabForOpenRequest, debounce } from './services/cliOpen';
+import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
 import { StatusBar } from './components/layout/StatusBar';
 import { SessionExplorer } from './components/sidebar/SessionExplorer';
@@ -442,6 +443,10 @@ export const App: React.FC = () => {
   const handleExecuteSnippet = (command: string) => {
     if (!activeTabId) return;
     writeTerminalInput(activeTabId, new TextEncoder().encode(command));
+    // The click left the keyboard on the snippet chip (or the parameters
+    // dialog), so a snippet sent without a newline, or one that asks
+    // "[y/N]", needed a click back into the terminal before Enter worked.
+    terminalManager.focusTerminal(activeTabId);
   };
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];

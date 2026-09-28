@@ -66,6 +66,51 @@ pub struct PlinkTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: super::PtyChild,
+    /// Telnet and raw consoles are driven in character mode; see
+    /// `force_character_mode`.
+    char_mode: bool,
+}
+
+/// Whether a connection should run with plink's local line editing off.
+///
+/// plink turns local line editing on for telnet and raw until the server
+/// negotiates echo, and does it by leaving its pty cooked. Against a console
+/// that never negotiates (measured with a bare `Router>` server), that cooked
+/// pty held the Up arrow back until Enter, so shell history didn't work, and
+/// turned Ctrl+C into SIGINT, which killed plink and dropped the session.
+/// PuTTY's "Local line editing: Force off" is the fix people apply there;
+/// SSH is left alone because plink's own password and host-key prompts
+/// read a line.
+pub fn wants_character_mode(saved_protocol: Option<&str>, explicit: Option<TargetProtocol>) -> bool {
+    match saved_protocol {
+        Some(p) => matches!(p.to_ascii_lowercase().as_str(), "telnet" | "raw"),
+        None => matches!(explicit, Some(TargetProtocol::Telnet | TargetProtocol::Raw)),
+    }
+}
+
+/// Clears ICANON, ISIG and IEXTEN on the pty if plink left them set, so
+/// every key reaches plink as it is typed and Ctrl+C is sent as 0x03 rather
+/// than raised as a signal. ECHO is plink's choice and stays as it is: a
+/// console that doesn't echo still shows what's typed. Checked on each
+/// write, since plink rewrites the termios whenever the server renegotiates.
+#[cfg(unix)]
+fn force_character_mode(fd: std::os::unix::io::RawFd) {
+    // SAFETY: fd is the live pty master owned by this transport; termios is
+    // a plain C struct fully written by tcgetattr before it is read.
+    unsafe {
+        let mut t: libc::termios = std::mem::zeroed();
+        if libc::tcgetattr(fd, &mut t) != 0 {
+            return;
+        }
+        let line = libc::ICANON | libc::ISIG | libc::IEXTEN;
+        if t.c_lflag & line == 0 {
+            return;
+        }
+        t.c_lflag &= !line;
+        t.c_cc[libc::VMIN] = 1;
+        t.c_cc[libc::VTIME] = 0;
+        libc::tcsetattr(fd, libc::TCSANOW, &t);
+    }
 }
 
 impl PlinkTransport {
@@ -281,7 +326,12 @@ impl PlinkTransport {
             })
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
-        let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
+        let saved = putty_compat::sessions::read_session(session_name).ok();
+        let has_saved_session = saved.is_some();
+        let char_mode = wants_character_mode(
+            saved.as_ref().map(|s| s.protocol.as_str()),
+            explicit_target.map(|t| t.protocol),
+        );
         let pwfile = login.map(|l| write_pwfile(&l.password)).transpose()?;
         let mut cmd = CommandBuilder::new(plink_bin);
         if let (Some(file), Some(l)) = (&pwfile, login) {
@@ -326,12 +376,19 @@ impl PlinkTransport {
             master: pair.master,
             writer,
             child,
+            char_mode,
         })
     }
 }
 
 impl Transport for PlinkTransport {
     fn write(&mut self, data: &[u8]) -> Result<()> {
+        #[cfg(unix)]
+        if self.char_mode {
+            if let Some(fd) = self.master.as_raw_fd() {
+                force_character_mode(fd);
+            }
+        }
         self.writer
             .write_all(data)
             .map_err(PlinkyError::IoError)?;
@@ -471,5 +528,18 @@ mod tests {
         let p: TargetProtocol = serde_json::from_str("\"telnet\"").unwrap();
         assert_eq!(p, TargetProtocol::Telnet);
         assert_eq!(TargetProtocol::default(), TargetProtocol::Ssh);
+    }
+
+    #[test]
+    fn only_telnet_and_raw_consoles_run_in_character_mode() {
+        // SSH keeps a line-mode pty: plink's password and host-key prompts read a line.
+        assert!(wants_character_mode(None, Some(TargetProtocol::Telnet)));
+        assert!(wants_character_mode(None, Some(TargetProtocol::Raw)));
+        assert!(!wants_character_mode(None, Some(TargetProtocol::Ssh)));
+        assert!(!wants_character_mode(None, None));
+        // A saved session's own protocol wins over the tab's guess.
+        assert!(wants_character_mode(Some("telnet"), Some(TargetProtocol::Ssh)));
+        assert!(!wants_character_mode(Some("ssh"), Some(TargetProtocol::Telnet)));
+        assert!(!wants_character_mode(Some("serial"), None));
     }
 }

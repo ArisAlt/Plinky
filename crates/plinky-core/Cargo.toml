@@ -27,4 +27,8 @@ tempfile = "3.10"
 # Export the vault to a KeePass (KDBX4) database.
 keepass = { version = "0.15", features = ["save_kdbx4"] }
 
+[target.'cfg(unix)'.dependencies]
+# Reads and sets the pty's termios (character mode for telnet/raw consoles).
+libc = "0.2"
+
 [dev-dependencies]

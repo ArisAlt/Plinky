@@ -148,3 +148,78 @@ async fn raw_session_survives_large_device_output() {
 async fn telnet_session_survives_large_device_output() {
     device_dump_survives("telnet").await;
 }
+
+/// A GNS3-style console that never negotiates echo (a bare `Router>`).
+/// plink keeps local line editing on for it, and its pty used to stay
+/// cooked: Up was held until Enter (no shell history) and Ctrl+C became a
+/// SIGINT that killed plink and dropped the session. Both must now reach
+/// the device as typed, and the session must survive.
+#[cfg(unix)]
+#[tokio::test]
+async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
+    use std::io::Read;
+    if !plink_available() {
+        eprintln!("skipping: plink not installed");
+        return;
+    }
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (got_tx, got_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        if let Ok((mut sock, _)) = listener.accept() {
+            let _ = sock.write_all(b"Router>");
+            sock.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
+            let mut got = Vec::new();
+            let end = std::time::Instant::now() + Duration::from_secs(6);
+            let mut buf = [0u8; 256];
+            while std::time::Instant::now() < end {
+                match sock.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => got.extend_from_slice(&buf[..n]),
+                    Err(_) => {}
+                }
+                // The telnet options plink opens with are not what we're after.
+                if got.windows(4).any(|w| w == b"\x1b[A\x03") { break; }
+            }
+            let _ = got_tx.send(got);
+            // Stay connected: a closed socket would end plink by itself.
+            std::thread::sleep(Duration::from_secs(3));
+        }
+    });
+
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let target = plinky_core::transport::plink::ExplicitTarget {
+        hostname: "127.0.0.1".into(),
+        port,
+        username: None,
+        protocol: plinky_core::transport::plink::TargetProtocol::Telnet,
+    };
+    let id = "gns3-r1";
+    registry
+        .create_plink_session(id, "R1 (plinky-test, not saved)", Some(target), None, 80, 24, tx)
+        .unwrap();
+    // Wait for the prompt, so plink has settled its terminal modes.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let mut seen = Vec::new();
+    while !String::from_utf8_lossy(&seen).contains("Router>") {
+        match tokio::time::timeout_at(deadline, rx.recv()).await {
+            Ok(Some(c)) => seen.extend_from_slice(&c),
+            _ => break,
+        }
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    registry.write_input(id, b"\x1b[A").unwrap();
+    registry.write_input(id, b"\x03").unwrap();
+
+    let got = tokio::task::spawn_blocking(move || got_rx.recv_timeout(Duration::from_secs(8)).unwrap_or_default())
+        .await
+        .unwrap();
+    assert!(
+        got.windows(4).any(|w| w == b"\x1b[A\x03"),
+        "Up and Ctrl+C must reach the console without waiting for Enter; got {got:?}"
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(registry.is_session_live(id), "Ctrl+C must not kill plink");
+    let _ = registry.close_session(id);
+}
