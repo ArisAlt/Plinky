@@ -399,6 +399,8 @@ impl SessionRegistry {
             // action sent its own notice, or the session was removed). If
             // not, raw_rx hit EOF: the process exited on its own.
             let mut reported = false;
+            // plink's "Press Return to begin session" after login (begin_gate.rs).
+            let mut begin_gate: Option<super::begin_gate::BeginGate> = None;
             while let Some(chunk) = raw_rx.recv().await {
                 let mut script_note: Option<String> = None;
                 let action = {
@@ -466,11 +468,25 @@ impl SessionRegistry {
                         }
                     }
                     PreAuthAction::PassThrough(bytes) => {
+                        // Still watching for plink's begin prompt: on Windows
+                        // its line can arrive after the marker's chunk.
+                        let answer = begin_gate.as_mut().map(|g| g.feed(&bytes));
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
                             let n = bytes.len();
                             if tx.send(bytes).is_ok() {
                                 forwarded = n;
                             }
+                        }
+                        match answer {
+                            Some(super::begin_gate::Gate::Answer) => {
+                                begin_gate = None;
+                                let mut lock = registry_clone.sessions.lock().unwrap();
+                                if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
+                                    let _ = session.transport.write(b"\r");
+                                }
+                            }
+                            Some(super::begin_gate::Gate::Done) => begin_gate = None,
+                            _ => {}
                         }
                     }
                     PreAuthAction::TransitionToLive(bytes) => {
@@ -485,11 +501,17 @@ impl SessionRegistry {
                         // just a "press any key" pause, so auto-advance past
                         // it instead of making the user hit Enter a second
                         // time (once for their password, once more for this).
-                        if String::from_utf8_lossy(&bytes).contains("Press Return to begin session") {
-                            let mut lock = registry_clone.sessions.lock().unwrap();
-                            if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
-                                let _ = session.transport.write(b"\r");
+                        // Watched past this chunk: see begin_gate.rs.
+                        let mut gate = super::begin_gate::BeginGate::new();
+                        match gate.feed(&bytes) {
+                            super::begin_gate::Gate::Answer => {
+                                let mut lock = registry_clone.sessions.lock().unwrap();
+                                if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
+                                    let _ = session.transport.write(b"\r");
+                                }
                             }
+                            super::begin_gate::Gate::Waiting => begin_gate = Some(gate),
+                            super::begin_gate::Gate::Done => {}
                         }
                     }
                     PreAuthAction::Suppress => {}

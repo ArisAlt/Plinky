@@ -6,5 +6,6 @@ pub mod shell_integration;
 pub mod paste;
 pub mod jump_login;
 pub mod expect;
+pub mod begin_gate;
 pub mod log;
 
