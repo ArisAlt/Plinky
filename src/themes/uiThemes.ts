@@ -255,11 +255,28 @@ const ABTOOLS: Record<string, Palette> = {
   },
 };
 
+// ── The look of other tools people come from ─────────────────────────────────
+// Approximations, not copies: the owner asked for "a theme like SecureCRT".
+// SecureCRT's window is the Windows light chrome: grey toolbars, a white
+// session manager, the system blue for selection.
+const LOOKALIKES: Record<string, Palette> = {
+  SecureCRT: {
+    bg: '#f0f0f0', surface: '#ffffff', field: '#ffffff', border: '#c8c8c8',
+    fg: '#1a1a1a', muted: '#5f5f5f',
+    accent: '#0078d7', accent_hover: '#006cc1', accent_active: '#005a9e',
+    neutral: '#e5e5e5', neutral_hover: '#d9d9d9',
+    danger: '#c42b1c', danger_hover: '#a4262c', disabled: '#f3f3f3',
+    log_green: '#107c10', log_red: '#c42b1c', log_yellow: '#8a5d00',
+    log_blue: '#0078d7', log_cyan: '#006b75', log_magenta: '#881798',
+  },
+};
+
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 export const UI_THEMES: UiTheme[] = [
   PLINKY,
   ...Object.entries(ABTOOLS).map(([name, p]) => expandPalette(slug(name), name, p)),
+  ...Object.entries(LOOKALIKES).map(([name, p]) => expandPalette(slug(name), name, p)),
 ];
 export const DEFAULT_UI_THEME = 'plinky';
 
@@ -275,9 +292,15 @@ export function applyUiTheme(id: string, persist = true) {
   const t = findUiTheme(id);
   current = t.id;
   const root = document.documentElement;
+  // New colours in one repaint, not hundreds of 150 ms transitions at once
+  // (see html.theme-switching in index.css): transitions off, colours set,
+  // one forced style pass so they land while off, transitions back on.
+  root.classList.add('theme-switching');
   for (const [k, v] of Object.entries(t.vars)) root.style.setProperty(k, v);
   root.style.colorScheme = t.light ? 'light' : 'dark';
   root.dataset.uiTheme = t.id;
+  void document.body?.offsetHeight;
+  root.classList.remove('theme-switching');
   if (persist) {
     try { localStorage.setItem(KEY, t.id); } catch { /* not remembered */ }
   }

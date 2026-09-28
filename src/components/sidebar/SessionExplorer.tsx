@@ -47,6 +47,9 @@ import { setSessionFolders, deletePuttySession, readPuttySession, writePuttySess
 import { askConfirm } from '../../services/confirm';
 import { STATUS_DOT, STATUS_TEXT, bestStatus } from '../../services/sessionStatus';
 
+/** Shared by every row without a tab, so it needs no allocation. */
+const NO_TABS: TerminalTab[] = [];
+
 interface SessionExplorerProps {
   sessions: PuttySession[];
   tabs: TerminalTab[];
@@ -302,6 +305,16 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const searching = searchQuery.trim().length > 0;
   const visibleTree = filterFolderTree(tree, searchQuery, sessionMatches);
   const filteredSessions = sessions.filter(sessionMatches);
+  // Each row looked up its tabs with a filter over every open tab, so the
+  // tree did sessions x tabs work on every render.
+  const tabsBySession = React.useMemo(() => {
+    const m = new Map<string, TerminalTab[]>();
+    for (const t of tabs) {
+      const list = m.get(t.sessionName);
+      if (list) list.push(t); else m.set(t.sessionName, [t]);
+    }
+    return m;
+  }, [tabs]);
 
   /** Rename or move folder `from` to path `to`, rewriting every session under it. */
   const moveFolder = async (from: string, to: string) => {
@@ -448,7 +461,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   // only when it isn't SSH, and the actions float over the row's end on
   // hover or keyboard focus instead of reserving space.
   const renderSession = (session: PuttySession) => {
-    const sessionTabs = tabs.filter(t => t.sessionName === session.name);
+    const sessionTabs = tabsBySession.get(session.name) ?? NO_TABS;
     const isActiveTab = sessionTabs.some(t => t.id === activeTabId);
     const status = bestStatus(sessionTabs);
     const target = sessionTarget(session);

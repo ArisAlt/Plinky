@@ -51,6 +51,12 @@ export const TERMINAL_THEMES: TerminalTheme[] = [
     { background: '#000000', foreground: '#bbbbbb', cursor: '#00ff00', selection: 'rgba(255, 255, 255, 0.3)' },
     ['#000000', '#bb0000', '#00bb00', '#bbbb00', '#0000bb', '#bb00bb', '#00bbbb', '#bbbbbb',
       '#555555', '#ff5555', '#55ff55', '#ffff55', '#5555ff', '#ff55ff', '#55ffff', '#ffffff']),
+  // SecureCRT's familiar look: black text on white, with the classic
+  // Windows 16-colour ANSI palette.
+  scheme('securecrt', 'SecureCRT',
+    { background: '#ffffff', foreground: '#000000', cursor: '#000000', selection: 'rgba(0, 120, 215, 0.3)' },
+    ['#000000', '#800000', '#008000', '#808000', '#000080', '#800080', '#008080', '#c0c0c0',
+      '#808080', '#ff0000', '#00ff00', '#ffff00', '#0000ff', '#ff00ff', '#00ffff', '#ffffff'], true),
   scheme('campbell', 'Campbell (Windows Terminal)',
     { background: '#0c0c0c', foreground: '#cccccc', cursor: '#ffffff', selection: 'rgba(255, 255, 255, 0.25)' },
     ['#0c0c0c', '#c50f1f', '#13a10e', '#c19c00', '#0037da', '#881798', '#3a96dd', '#cccccc',

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { UI_THEMES, applyUiTheme, initUiTheme, contrast, findUiTheme } from '../themes/uiThemes';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { UI_THEMES, applyUiTheme, initUiTheme, contrast, findUiTheme, getUiTheme } from '../themes/uiThemes';
 import { TERMINAL_THEMES, setTerminalTheme, getTerminalThemeId, findTerminalTheme, MATCH_INTERFACE, DEFAULT_TERMINAL_THEME } from '../themes/terminalThemes';
 import { TERMINAL_FONTS, primaryFamily } from '../themes/fonts';
 
@@ -18,11 +18,19 @@ describe('interface themes', () => {
     expect(col('plinky', 'white')).toBe('#ffffff');
   });
 
-  it('includes the ABtools palettes by name', () => {
+  it('includes the ABtools palettes by name, then the SecureCRT look', () => {
     expect(UI_THEMES.map(t => t.name)).toEqual([
       'Plinky', 'Neutral Slate', 'Tokyo Night', 'Catppuccin Mocha', 'Nord',
-      'Gruvbox Dark', 'Bchips Violet', 'Dracula', 'GitHub Light',
+      'Gruvbox Dark', 'Bchips Violet', 'Dracula', 'GitHub Light', 'SecureCRT',
     ]);
+  });
+
+  it('has a SecureCRT terminal: black on white, light', () => {
+    const t = findTerminalTheme('securecrt');
+    expect(t.id).toBe('securecrt');
+    expect(t.light).toBe(true);
+    expect(t.theme.background).toBe('#ffffff');
+    expect(t.theme.foreground).toBe('#000000');
   });
 
   // The pairs the UI actually draws: body text, secondary text, labels on
@@ -127,3 +135,23 @@ describe('match interface', () => {
   }
 });
 
+
+describe('switching the interface theme', () => {
+  it('applies the colours with transitions off, then turns them back on', () => {
+    // Hundreds of 150 ms colour transitions ran at once on every switch and
+    // made it lag on Windows; the colours now land in one style pass.
+    const root = document.documentElement;
+    const seen: boolean[] = [];
+    const set = root.style.setProperty.bind(root.style);
+    const spy = vi.spyOn(root.style, 'setProperty').mockImplementation((k, v, p) => {
+      seen.push(root.classList.contains('theme-switching'));
+      set(k, v, p);
+    });
+    const other = UI_THEMES.find(t => t.id !== getUiTheme())!;
+    applyUiTheme(other.id, false);
+    spy.mockRestore();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+    expect(root.classList.contains('theme-switching')).toBe(false);
+  });
+});

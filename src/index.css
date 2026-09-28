@@ -45,6 +45,17 @@
   }
 }
 
+/* A theme switch changes ~60 colour variables at once, and every button
+   and session row has a colour transition: on Windows (WebView2) hundreds of
+   150 ms transitions ran together, re-blurring the dialog backdrop on every
+   frame, and the switch visibly lagged. applyUiTheme sets this class for the
+   one style pass that applies the new colours. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
 /* Reduced motion: keep fades that explain a change, drop movement, stop
    anything that repeats. */
 @media (prefers-reduced-motion: reduce) {
