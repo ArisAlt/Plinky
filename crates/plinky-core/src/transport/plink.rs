@@ -142,13 +142,29 @@ mod win_console {
     const OPEN_EXISTING: u32 = 3;
     const INVALID_HANDLE_VALUE: isize = -1;
     const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+    const ERROR_ACCESS_DENIED: u32 = 5;
+
+    /// What the last setup did, for tests and bug reports: a failure here
+    /// is otherwise silent, and a silent failure is what v0.1.7's first CI
+    /// run found.
+    static LAST: Mutex<String> = Mutex::new(String::new());
+
+    pub fn last_setup() -> String {
+        LAST.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    fn record(what: String) {
+        if let Ok(mut s) = LAST.lock() {
+            *s = what;
+        }
+    }
 
     type Handler = unsafe extern "system" fn(u32) -> i32;
 
     #[link(name = "kernel32")]
     extern "system" {
         fn AttachConsole(pid: u32) -> i32;
-        fn GetConsoleWindow() -> isize;
+        fn GetLastError() -> u32;
         fn FreeConsole() -> i32;
         fn CreateFileW(
             name: *const u16,
@@ -185,19 +201,26 @@ mod win_console {
         // SAFETY: plain Win32 calls; the handle is checked before use and
         // closed, and the console is freed on every path after attaching.
         unsafe {
-            // The app has no console, but a debug build or a test runner
-            // does, and AttachConsole refuses a process that has one: on CI
-            // the arrows never reached plink for exactly that reason. Leave
-            // it for the moment and go back afterwards.
-            let had_console = GetConsoleWindow() != 0;
-            if had_console {
-                FreeConsole();
-            }
+            // The app has no console. A debug build or a test runner has one,
+            // sometimes without a window (so GetConsoleWindow can't tell),
+            // and AttachConsole refuses a process that has a console: on CI
+            // the keys never reached plink for exactly that reason. On
+            // "access denied", leave it for the moment and go back after.
+            let mut freed = false;
             if AttachConsole(pid) == 0 {
-                if had_console {
-                    AttachConsole(ATTACH_PARENT_PROCESS);
+                let err = GetLastError();
+                if err != ERROR_ACCESS_DENIED {
+                    record(format!("attach to {pid} failed: error {err}"));
+                    return;
                 }
-                return;
+                FreeConsole();
+                freed = true;
+                if AttachConsole(pid) == 0 {
+                    let err = GetLastError();
+                    AttachConsole(ATTACH_PARENT_PROCESS);
+                    record(format!("attach to {pid} failed after freeing own console: error {err}"));
+                    return;
+                }
             }
             let h = CreateFileW(
                 conin.as_ptr(),
@@ -210,23 +233,43 @@ mod win_console {
             );
             if h != INVALID_HANDLE_VALUE && h != 0 {
                 let mut mode = 0u32;
-                if GetConsoleMode(h, &mut mode) != 0 {
+                if GetConsoleMode(h, &mut mode) == 0 {
+                    record(format!("GetConsoleMode failed: error {}", GetLastError()));
+                } else {
                     let mut want = (mode & !ENABLE_PROCESSED_INPUT) | ENABLE_VIRTUAL_TERMINAL_INPUT;
                     if char_mode {
                         // Echo is only valid with line input on Windows.
                         want &= !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
                     }
-                    if want != mode {
-                        SetConsoleMode(h, want);
-                    }
+                    let set = want == mode || SetConsoleMode(h, want) != 0;
+                    let mut now = 0u32;
+                    GetConsoleMode(h, &mut now);
+                    record(format!(
+                        "pid {pid}: mode {mode:#06x} -> wanted {want:#06x}, set {set}, now {now:#06x}{}",
+                        if freed { " (own console freed)" } else { "" }
+                    ));
                 }
                 CloseHandle(h);
+            } else {
+                record(format!("CONIN$ of {pid} did not open: error {}", GetLastError()));
             }
             FreeConsole();
-            if had_console {
+            if freed {
                 AttachConsole(ATTACH_PARENT_PROCESS);
             }
         }
+    }
+}
+
+/// What the last Windows console setup did (empty elsewhere).
+pub fn console_setup_report() -> String {
+    #[cfg(windows)]
+    {
+        win_console::last_setup()
+    }
+    #[cfg(not(windows))]
+    {
+        String::new()
     }
 }
 

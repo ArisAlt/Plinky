@@ -242,9 +242,10 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     let got = telnet_data(&got);
     let arrow = |c: u8| got.windows(3).any(|w| w == [0x1b, b'[', c] || w == [0x1b, b'O', c]);
     let context = format!(
-        "console connected: {}; console got {got:?}; plink printed {:?}",
+        "console connected: {}; console got {got:?}; plink printed {:?}; console setup: {:?}",
         accepted.load(std::sync::atomic::Ordering::SeqCst),
         String::from_utf8_lossy(&seen),
+        plinky_core::transport::plink::console_setup_report(),
     );
     for (c, name) in [(b'A', "Up"), (b'B', "Down"), (b'C', "Right"), (b'D', "Left")] {
         assert!(arrow(c), "{name} must reach the console as typed; {context}");
