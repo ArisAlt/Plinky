@@ -308,6 +308,39 @@ async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
     }
     assert!(connected, "plink's connection was never seen established");
     assert!(took < Duration::from_secs(1), "seen only after {took:?}");
-    assert!(printed.is_empty(), "the console printed nothing, yet got {:?}", String::from_utf8_lossy(&printed));
+    // Windows' pseudo-console announces its own modes when plink starts
+    // (ESC[?9001h ESC[?1004h, seen on CI): terminal setup, not the device.
+    let text = String::from_utf8_lossy(&printed);
+    let without_setup = strip_control_sequences(&text);
+    assert!(without_setup.trim().is_empty(), "the console printed nothing, yet got {text:?}");
     let _ = registry.close_session(id);
+}
+
+/// Text with CSI sequences (ESC [ ... final letter) removed.
+#[cfg(any(target_os = "linux", windows))]
+fn strip_control_sequences(text: &str) -> String {
+    let mut out = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() || c == '~' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn pseudo_console_setup_is_not_device_output() {
+    // Exactly what Windows CI's plink printed on a silent console.
+    assert_eq!(strip_control_sequences("\u{1b}[?9001h\u{1b}[?1004h"), "");
+    // A device's own text stays, colours or not.
+    assert_eq!(strip_control_sequences("\u{1b}[1mR1#\u{1b}[0m"), "R1#");
 }
