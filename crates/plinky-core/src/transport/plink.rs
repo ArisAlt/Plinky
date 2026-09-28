@@ -141,12 +141,14 @@ mod win_console {
     const FILE_SHARE_WRITE: u32 = 2;
     const OPEN_EXISTING: u32 = 3;
     const INVALID_HANDLE_VALUE: isize = -1;
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
 
     type Handler = unsafe extern "system" fn(u32) -> i32;
 
     #[link(name = "kernel32")]
     extern "system" {
         fn AttachConsole(pid: u32) -> i32;
+        fn GetConsoleWindow() -> isize;
         fn FreeConsole() -> i32;
         fn CreateFileW(
             name: *const u16,
@@ -183,7 +185,18 @@ mod win_console {
         // SAFETY: plain Win32 calls; the handle is checked before use and
         // closed, and the console is freed on every path after attaching.
         unsafe {
+            // The app has no console, but a debug build or a test runner
+            // does, and AttachConsole refuses a process that has one: on CI
+            // the arrows never reached plink for exactly that reason. Leave
+            // it for the moment and go back afterwards.
+            let had_console = GetConsoleWindow() != 0;
+            if had_console {
+                FreeConsole();
+            }
             if AttachConsole(pid) == 0 {
+                if had_console {
+                    AttachConsole(ATTACH_PARENT_PROCESS);
+                }
                 return;
             }
             let h = CreateFileW(
@@ -210,6 +223,9 @@ mod win_console {
                 CloseHandle(h);
             }
             FreeConsole();
+            if had_console {
+                AttachConsole(ATTACH_PARENT_PROCESS);
+            }
         }
     }
 }

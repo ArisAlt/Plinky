@@ -184,8 +184,11 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let (got_tx, got_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    let accepted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let accepted_srv = accepted.clone();
     std::thread::spawn(move || {
         if let Ok((mut sock, _)) = listener.accept() {
+            accepted_srv.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = sock.write_all(b"Router>");
             sock.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
             let mut got = Vec::new();
@@ -197,7 +200,7 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
                     Ok(n) => got.extend_from_slice(&buf[..n]),
                     Err(_) => {}
                 }
-                // Up is sent before Ctrl+C, so Ctrl+C means both are in.
+                // The arrows are sent before Ctrl+C, so Ctrl+C means all are in.
                 if telnet_data(&got).contains(&0x03) { break; }
             }
             let _ = got_tx.send(got);
@@ -228,18 +231,25 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
         }
     }
     tokio::time::sleep(Duration::from_millis(300)).await;
-    registry.write_input(id, b"\x1b[A").unwrap();
-    registry.write_input(id, b"\x03").unwrap();
+    // Up and Down for history, Right and Left for editing the line.
+    for key in [&b"\x1b[A"[..], b"\x1b[B", b"\x1b[C", b"\x1b[D", b"\x03"] {
+        registry.write_input(id, key).unwrap();
+    }
 
     let got = tokio::task::spawn_blocking(move || got_rx.recv_timeout(Duration::from_secs(8)).unwrap_or_default())
         .await
         .unwrap();
     let got = telnet_data(&got);
-    let up = got.windows(3).any(|w| w == b"\x1b[A" || w == b"\x1bOA");
-    assert!(
-        up && got.contains(&0x03),
-        "Up and Ctrl+C must reach the console without waiting for Enter; got {got:?}"
+    let arrow = |c: u8| got.windows(3).any(|w| w == [0x1b, b'[', c] || w == [0x1b, b'O', c]);
+    let context = format!(
+        "console connected: {}; console got {got:?}; plink printed {:?}",
+        accepted.load(std::sync::atomic::Ordering::SeqCst),
+        String::from_utf8_lossy(&seen),
     );
+    for (c, name) in [(b'A', "Up"), (b'B', "Down"), (b'C', "Right"), (b'D', "Left")] {
+        assert!(arrow(c), "{name} must reach the console as typed; {context}");
+    }
+    assert!(got.contains(&0x03), "Ctrl+C must reach the console; {context}");
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert!(registry.is_session_live(id), "Ctrl+C must not kill plink");
     let _ = registry.close_session(id);
