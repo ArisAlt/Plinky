@@ -33,6 +33,8 @@ import {
   vaultSendSecret,
   sendBreak,
   readPuttySession,
+  listenSessionConnected,
+  isSessionConnected,
   pastePaced,
   cancelPaste,
   listenPasteProgress,
@@ -860,6 +862,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
+    // The connection is up (the backend watches plink's socket). A router
+    // console prints nothing until something happens on the device -- 0
+    // bytes in 5 s on a GNS3 IOS console -- so "Connecting to host:port"
+    // can't wait for output: it stayed up ~10 s on saved console sessions.
+    // A telnet or raw console is live from here; SSH still has to log in.
+    const onConnected = () => {
+      if (disposed) return;
+      setWaitingSince(null);
+      if ((tab.protocol === 'Telnet' || tab.protocol === 'RAW') && !reachedLiveRef.current) {
+        reachedLiveRef.current = true;
+        reconnectAttemptRef.current = 0;
+        addEventLog('Connected', 'success');
+        onUpdateTab(tab.id, { status: 'live' });
+      }
+    };
+    let unlistenConnected: (() => void) | null = null;
+    void listenSessionConnected(id => { if (id === tab.id) onConnected(); })
+      .then(u => { if (disposed) u?.(); else unlistenConnected = u; });
+
     const startFresh = () => {
       // Fresh start
       addEventLog(isLocalSession
@@ -907,6 +928,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           // The process is up; the connection is not. "Connected" is logged
           // when the login actually finishes.
           addEventLog(isLocalSession ? 'Local shell started' : 'plink started, waiting for the server', 'info');
+          // Connected before this page listened: the event went by.
+          if (!isLocalSession) void isSessionConnected(tab.id).then(c => { if (c) onConnected(); });
         }
       });
     };
@@ -1094,6 +1117,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     return () => {
       restartSessionRef.current = null;
+      unlistenConnected?.();
       pasteTarget?.removeEventListener('paste', onPasteCapture, true);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);

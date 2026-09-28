@@ -69,8 +69,8 @@ pub struct PlinkTransport {
     /// Telnet and raw consoles are driven in character mode; see
     /// `force_character_mode`.
     char_mode: bool,
-    /// plink's process id, for reaching its console on Windows.
-    #[cfg_attr(not(windows), allow(dead_code))]
+    /// plink's process id: for reaching its console on Windows, and for
+    /// seeing when its connection is up (tcp_state.rs).
     pid: Option<u32>,
 }
 
@@ -544,6 +544,10 @@ impl PlinkTransport {
 }
 
 impl Transport for PlinkTransport {
+    fn process_id(&self) -> Option<u32> {
+        self.pid
+    }
+
     fn write(&mut self, data: &[u8]) -> Result<()> {
         #[cfg(unix)]
         if self.char_mode {

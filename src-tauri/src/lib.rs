@@ -202,6 +202,50 @@ async fn ack_terminal_output(
     Ok(())
 }
 
+/// Sessions whose connection is up (watch_connection), for a page that asks
+/// after the event already went by.
+#[derive(Default)]
+struct ConnectedSessions(std::sync::Mutex<std::collections::HashSet<String>>);
+
+/// Tells the page, as `session:connected`, when a session's TCP connection
+/// is up, by watching plink's own socket (tcp_state.rs). A console that
+/// prints nothing until something happens on the device otherwise showed
+/// "Connecting to host:port" long after it had connected: measured on a
+/// GNS3 IOS console, 0 bytes in the first 5 s. Where this can't be told
+/// (Windows, for now) the watcher stops at once and the page waits for
+/// output, as before.
+fn watch_connection(app: &tauri::AppHandle, id: String) {
+    use plinky_core::transport::tcp_state::has_established_tcp;
+    let registry = app.state::<Arc<SessionRegistry>>().inner().clone();
+    let Some(pid) = registry.process_id(&id) else { return };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // A connect that fails takes the OS's connect timeout; a session
+        // can't still be connecting after two minutes.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+        while tokio::time::Instant::now() < deadline {
+            // Closed or restarted under the same id: this watch is over.
+            if registry.process_id(&id) != Some(pid) {
+                return;
+            }
+            match has_established_tcp(pid) {
+                Some(true) => {
+                    app.state::<ConnectedSessions>().0.lock().unwrap().insert(id.clone());
+                    let _ = app.emit("session:connected", &id);
+                    return;
+                }
+                Some(false) => tokio::time::sleep(std::time::Duration::from_millis(10)).await,
+                None => return,
+            }
+        }
+    });
+}
+
+#[tauri::command]
+fn is_session_connected(connected: State<'_, ConnectedSessions>, session_id: String) -> bool {
+    connected.0.lock().unwrap().contains(&session_id)
+}
+
 /// The tab left the screen. The session keeps running into scrollback and is
 /// no longer held to the page's pace; attaching again replays it.
 #[tauri::command]
@@ -217,6 +261,7 @@ fn detach_terminal_session(
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn start_terminal_session(
+    app: tauri::AppHandle,
     registry: State<'_, Arc<SessionRegistry>>,
     vault_state: State<'_, VaultState>,
     session_id: String,
@@ -246,6 +291,9 @@ async fn start_terminal_session(
         hostname, port, username, log_file_name, protocol,
     )
     .await?;
+    if !is_local {
+        watch_connection(&app, session_id.clone());
+    }
     if let Some((path, mode)) = putty_log {
         // Opened right after the spawn returns: output from the first few
         // milliseconds can reach the page before the log. A log that can't
@@ -516,8 +564,10 @@ fn resize_terminal(
 #[tauri::command]
 fn close_terminal_session(
     registry: State<Arc<SessionRegistry>>,
+    connected: State<ConnectedSessions>,
     session_id: String,
 ) -> Result<(), String> {
+    connected.0.lock().unwrap().remove(&session_id);
     registry
         .close_session(&session_id)
         .map_err(|e| format!("Failed to close session: {e}"))
@@ -1446,6 +1496,7 @@ async fn start_console_session(app: &tauri::AppHandle, mut req: cli::OpenRequest
         Ok(()) => {
             // Free-running into scrollback until a tab attaches.
             let _ = registry.detach_session(&id);
+            watch_connection(app, id.clone());
             req.session_id = Some(id);
         }
         // The tab starts it itself then, and shows why it failed.
@@ -1542,6 +1593,7 @@ pub fn run() {
         .manage(registry)
         .manage(VaultState::new())
         .manage(PasteJobs::default())
+        .manage(ConnectedSessions::default())
         .setup(move |app| {
             // The first launch's own consoles connect while the page loads.
             open_console_requests(app.handle(), startup_requests);
@@ -1575,6 +1627,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             take_open_requests,
+            is_session_connected,
             paste_paced,
             cancel_paste,
             send_break,

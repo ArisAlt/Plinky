@@ -832,6 +832,11 @@ impl SessionRegistry {
         Some((log.path().to_path_buf(), log.written()))
     }
 
+    /// The process making the session's connection (plink), if it has one.
+    pub fn process_id(&self, id: &str) -> Option<u32> {
+        self.sessions.lock().unwrap().get(id)?.transport.process_id()
+    }
+
     pub fn detach_session(&self, id: &str) -> Result<()> {
         let lock = self.sessions.lock().unwrap();
         let session = lock.get(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;

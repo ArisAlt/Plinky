@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 pub mod local;
 pub mod plink;
 pub mod serial;
+pub mod tcp_state;
 
 /// Handle to a PTY child whose output is being pumped by [`pump_pty_child`].
 pub(crate) struct PtyChild {
@@ -100,6 +101,12 @@ pub trait Transport: Send {
 
     /// Propagates terminal resize (columns, rows) to the underlying PTY.
     fn resize(&mut self, cols: u16, rows: u16) -> Result<()>;
+
+    /// The process that makes the network connection, where there is one
+    /// (plink). Used to see when its connection is up (tcp_state.rs).
+    fn process_id(&self) -> Option<u32> {
+        None
+    }
 
     /// Explicitly terminates the transport and child process.
     fn kill(&mut self) -> Result<()>;

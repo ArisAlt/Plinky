@@ -842,6 +842,27 @@ export function reopenSessionId(sessionId: string): void {
   closedSessionIds.delete(sessionId);
 }
 
+/** A session's TCP connection is up: the backend watches plink's own socket
+ *  (tcp_state.rs), so a console that prints nothing still shows connected. */
+export async function listenSessionConnected(
+  callback: (sessionId: string) => void
+): Promise<(() => void) | null> {
+  if (!isTauriEnvironment()) return null;
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<string>('session:connected', (event) => callback(event.payload));
+}
+
+/** For a page that started listening after the event went by. */
+export async function isSessionConnected(sessionId: string): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<boolean>('is_session_connected', { sessionId });
+  } catch {
+    return false;
+  }
+}
+
 export async function closeTerminalSession(sessionId: string): Promise<void> {
   closedSessionIds.add(sessionId);
   if (isTauriEnvironment()) {

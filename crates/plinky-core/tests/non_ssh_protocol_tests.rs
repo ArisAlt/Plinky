@@ -255,3 +255,59 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     assert!(registry.is_session_live(id), "Ctrl+C must not kill plink");
     let _ = registry.close_session(id);
 }
+
+/// A GNS3 router console sends nothing until something happens on the
+/// device: measured on a GNS3 IOS console, 0 bytes in the first 5 s. Plinky
+/// waited for output before it stopped showing "Connecting to host:port",
+/// so a saved console session looked like it took ~10 s to connect. plink's
+/// own socket shows the connection is up while not one byte has arrived.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
+    use plinky_core::transport::tcp_state::has_established_tcp;
+    if !plink_available() {
+        eprintln!("skipping: plink not installed");
+        return;
+    }
+    // The router: accepts, then says nothing.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        if let Ok((_sock, _)) = listener.accept() {
+            std::thread::sleep(Duration::from_secs(4));
+        }
+    });
+
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let target = plinky_core::transport::plink::ExplicitTarget {
+        hostname: "127.0.0.1".into(),
+        port,
+        username: None,
+        protocol: plinky_core::transport::plink::TargetProtocol::Telnet,
+    };
+    let id = "silent-r3";
+    registry
+        .create_plink_session(id, "R3 (plinky-test, not saved)", Some(target), None, 80, 24, tx)
+        .unwrap();
+    let pid = registry.process_id(id).expect("plink's process id");
+
+    let started = std::time::Instant::now();
+    let mut connected = false;
+    while started.elapsed() < Duration::from_secs(3) {
+        if has_established_tcp(pid) == Some(true) {
+            connected = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let took = started.elapsed();
+    let mut printed = Vec::new();
+    while let Ok(chunk) = rx.try_recv() {
+        printed.extend_from_slice(&chunk);
+    }
+    assert!(connected, "plink's connection was never seen established");
+    assert!(took < Duration::from_secs(1), "seen only after {took:?}");
+    assert!(printed.is_empty(), "the console printed nothing, yet got {:?}", String::from_utf8_lossy(&printed));
+    let _ = registry.close_session(id);
+}
