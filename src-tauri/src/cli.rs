@@ -26,6 +26,24 @@ pub struct OpenRequest {
     pub port: u16,
     pub title: Option<String>,
     pub user: Option<String>,
+    /// The session already started for it (lib.rs start_console_session);
+    /// the tab attaches to this id. None: the tab starts it itself.
+    pub session_id: Option<String>,
+}
+
+impl OpenRequest {
+    /// `telnet://127.0.0.1:5000`, `ssh://[2001:db8::1]:22`: the name the tab
+    /// shows it under, the same as cliOpen.ts builds. Never the title, or a
+    /// saved PuTTY session named like the device would be -loaded instead.
+    pub fn session_name(&self) -> String {
+        let scheme = match self.protocol {
+            TargetProtocol::Ssh => "ssh",
+            TargetProtocol::Telnet => "telnet",
+            TargetProtocol::Raw => "raw",
+        };
+        let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
+        format!("{scheme}://{host}:{}", self.port)
+    }
 }
 
 const MAX_TITLE: usize = 80;
@@ -105,7 +123,7 @@ pub fn parse_args(args: &[String]) -> Vec<OpenRequest> {
             let port = args.get(i + 2).and_then(|p| parse_port(p));
             match (host, port) {
                 (Some(host), Some(port)) if valid_host(&host) => {
-                    out.push(OpenRequest { protocol, host, port, title: pending_title.take(), user: None });
+                    out.push(OpenRequest { protocol, host, port, title: pending_title.take(), user: None, session_id: None });
                     i += 3;
                 }
                 _ => i += 1, // incomplete: skip the flag, keep reading
@@ -121,6 +139,7 @@ pub fn parse_args(args: &[String]) -> Vec<OpenRequest> {
                         port,
                         title: pending_title.take(),
                         user,
+                        session_id: None,
                     });
                     i += 2;
                 } else {
@@ -159,7 +178,18 @@ mod tests {
             port,
             title: title.map(str::to_string),
             user: None,
+            session_id: None,
         }
+    }
+
+    #[test]
+    fn a_console_is_named_by_its_address_the_way_the_page_names_it() {
+        // cliOpen.ts builds the same string for the tab's sessionName.
+        assert_eq!(telnet("127.0.0.1", 5000, Some("R1")).session_name(), "telnet://127.0.0.1:5000");
+        let v6 = parse_args(&argv(&["plinky", "--ssh", "ops@[2001:db8::1]:2222"]));
+        assert_eq!(v6[0].session_name(), "ssh://[2001:db8::1]:2222");
+        let raw = parse_args(&argv(&["plinky", "--raw", "10.0.0.2", "2001"]));
+        assert_eq!(raw[0].session_name(), "raw://10.0.0.2:2001");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { tabForOpenRequest, debounce } from '../services/cliOpen';
+import { tabForOpenRequest, throttle } from '../services/cliOpen';
 import { targetProtocolOf, startSessionInBackground, backgroundStartOf } from '../services/tauriBridge';
 import { saveLayout, loadLayout } from '../services/layoutPersistence';
 
@@ -9,6 +9,14 @@ describe('console tabs from the command line (GNS3)', () => {
     expect(tab).toMatchObject({
       id: 'tab-1', title: 'R1', hostname: '127.0.0.1', port: 5000, protocol: 'Telnet', status: 'connecting',
     });
+  });
+
+  it('takes the id of the session the backend already started, so it attaches to it', () => {
+    // The connect no longer waits for the tab: it starts when the request arrives.
+    const started = tabForOpenRequest({ protocol: 'telnet', host: '10.0.0.5', port: 5020, sessionId: 'cli-1-0' }, 'tab-x');
+    expect(started.id).toBe('cli-1-0');
+    const notStarted = tabForOpenRequest({ protocol: 'telnet', host: '10.0.0.5', port: 5020, sessionId: null }, 'tab-x');
+    expect(notStarted.id).toBe('tab-x');
   });
 
   it('never uses the title as the session name, so a saved session called R1 is not loaded instead', () => {
@@ -38,23 +46,40 @@ describe('a burst of launches', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('is handled once, after it ends', () => {
-    // GNS3's "open all consoles": twenty launches, twenty nudges.
+  it('opens the first console at once', () => {
+    // It was a 60 ms debounce: every single console waited 60 ms for its tab.
     const fn = vi.fn();
-    const nudge = debounce(fn, 60);
-    for (let i = 0; i < 20; i++) { nudge(); vi.advanceTimersByTime(5); }
-    expect(fn).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(60);
+    throttle(fn, 60)();
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes the rest of a burst in a few batches, not one update each', () => {
+    // GNS3's "open all consoles": twenty launches, twenty nudges, 5 ms apart.
+    const fn = vi.fn();
+    const nudge = throttle(fn, 60);
+    for (let i = 0; i < 20; i++) { nudge(); vi.advanceTimersByTime(5); }
+    vi.advanceTimersByTime(200);
+    expect(fn.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(fn.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  it('still takes a nudge that arrives after a quiet spell', () => {
+    const fn = vi.fn();
+    const nudge = throttle(fn, 60);
+    nudge();
+    vi.advanceTimersByTime(500);
+    nudge();
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 
   it('can be cancelled when the page goes away', () => {
     const fn = vi.fn();
-    const nudge = debounce(fn, 60);
+    const nudge = throttle(fn, 60);
+    nudge();
     nudge();
     nudge.cancel();
     vi.advanceTimersByTime(100);
-    expect(fn).not.toHaveBeenCalled();
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });
 

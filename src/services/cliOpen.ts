@@ -8,10 +8,12 @@ import { TerminalTab } from '../types/session';
 
 const hostLabel = (host: string) => (host.includes(':') ? `[${host}]` : host);
 
-export function tabForOpenRequest(r: OpenRequest, id: string): TerminalTab {
+/** `fallbackId` is used only when the backend didn't start the session
+ *  (no `sessionId`); otherwise the tab takes the session's id, to attach. */
+export function tabForOpenRequest(r: OpenRequest, fallbackId: string): TerminalTab {
   const target = `${hostLabel(r.host)}:${r.port}`;
   return {
-    id,
+    id: r.sessionId || fallbackId,
     title: r.title || target,
     // Not the title: a saved PuTTY session with the same name ("R1") would
     // be -loaded instead of this console.
@@ -27,13 +29,20 @@ export function tabForOpenRequest(r: OpenRequest, id: string): TerminalTab {
   };
 }
 
-/** Runs `fn` once, `ms` after the last of a burst of calls. */
-export function debounce(fn: () => void, ms: number) {
+/** Runs `fn` at once, then at most once per `ms` while calls keep coming:
+ *  the first console of a burst opens immediately, the rest in batches.
+ *  (It was a 60 ms debounce: every console waited 60 ms before its tab.) */
+export function throttle(fn: () => void, ms: number) {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending = false;
   const call = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => { timer = null; fn(); }, ms);
+    if (timer) { pending = true; return; }
+    fn();
+    timer = setTimeout(() => {
+      timer = null;
+      if (pending) { pending = false; call(); }
+    }, ms);
   };
-  call.cancel = () => { if (timer) clearTimeout(timer); timer = null; };
+  call.cancel = () => { if (timer) clearTimeout(timer); timer = null; pending = false; };
   return call;
 }

@@ -239,8 +239,10 @@ async fn start_terminal_session(
             .ok()
             .and_then(|s| putty_session_log(&s, unix_now()))
     };
+    let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    forward_output(rx, on_data);
     spawn_terminal_session(
-        &registry, &vault_state, session_id.clone(), session_name, is_local, cols, rows, on_data,
+        &registry, &vault_state, session_id.clone(), session_name, is_local, cols, rows, tx,
         hostname, port, username, log_file_name, protocol,
     )
     .await?;
@@ -264,16 +266,15 @@ async fn spawn_terminal_session(
     is_local: bool,
     cols: u16,
     rows: u16,
-    on_data: Channel,
+    // Where output goes: the page's channel, or nowhere yet for a console
+    // started before its tab exists (start_console_session).
+    tx: mpsc::UnboundedSender<Vec<u8>>,
     hostname: Option<String>,
     port: Option<u16>,
     username: Option<String>,
     log_file_name: Option<String>,
     protocol: Option<plinky_core::transport::plink::TargetProtocol>,
 ) -> Result<(), String> {
-    let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
-    forward_output(rx, on_data);
-
     // Saved serial sessions open on the native serial transport (ADR-005):
     // plink can't send a Break. Line settings come from the PuTTY file.
     let saved_serial = (!is_local)
@@ -1416,6 +1417,63 @@ fn copy_dir_all(from: &std::path::Path, to: &std::path::Path) -> std::io::Result
 /// arrive while the page is still loading would reach no listener.
 struct OpenRequests(std::sync::Mutex<Vec<cli::OpenRequest>>);
 
+/// Starts a console request's session as soon as the request arrives,
+/// before the page has drawn a tab for it; the tab attaches and replays what
+/// it printed meanwhile. The connect used to wait on the page: measured
+/// against GNS3 consoles, plink connects in 7 ms and PuTTY in ~52, while a
+/// Plinky console took ~260-300 ms, ~100-135 of them after the request had
+/// already arrived (a 60 ms batching wait, the tab and terminal being
+/// built, an attach attempt, then the start).
+async fn start_console_session(app: &tauri::AppHandle, mut req: cli::OpenRequest) -> cli::OpenRequest {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let id = format!("cli-{millis}-{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let registry = app.state::<Arc<SessionRegistry>>();
+    let vault = app.state::<VaultState>();
+    // No page yet: output only goes to scrollback, for the tab to replay.
+    let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    drop(rx);
+    let name = req.session_name();
+    match spawn_terminal_session(
+        &registry, &vault, id.clone(), name.clone(), false, 120, 32, tx,
+        Some(req.host.clone()), Some(req.port), req.user.clone(), None, Some(req.protocol),
+    )
+    .await
+    {
+        Ok(()) => {
+            // Free-running into scrollback until a tab attaches.
+            let _ = registry.detach_session(&id);
+            req.session_id = Some(id);
+        }
+        // The tab starts it itself then, and shows why it failed.
+        Err(e) => eprintln!("plinky: couldn't start {name}: {e}"),
+    }
+    req
+}
+
+/// Starts each request's session, then queues the requests for the page and
+/// nudges it. Queued only once started: a page that took a request while
+/// its session was still being created would start a second one.
+fn open_console_requests(app: &tauri::AppHandle, requests: Vec<cli::OpenRequest>) {
+    if requests.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut started = Vec::with_capacity(requests.len());
+        for r in requests {
+            started.push(start_console_session(&app, r).await);
+        }
+        app.state::<OpenRequests>().0.lock().unwrap().extend(started);
+        // Only a nudge: the page takes the queue when it hears it, and on
+        // its own once it is ready.
+        let _ = app.emit("cli:open", ());
+    });
+}
+
 #[tauri::command]
 fn take_open_requests(state: State<OpenRequests>) -> Vec<cli::OpenRequest> {
     std::mem::take(&mut *state.0.lock().unwrap())
@@ -1472,13 +1530,7 @@ pub fn run() {
         // device) hands its arguments to this window as new tabs and exits,
         // instead of opening another Plinky.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            let requests = cli::parse_args(&argv);
-            if !requests.is_empty() {
-                app.state::<OpenRequests>().0.lock().unwrap().extend(requests);
-                // Only a nudge: the page takes the queue when it hears it,
-                // and on its own once it is ready.
-                let _ = app.emit("cli:open", ());
-            }
+            open_console_requests(app, cli::parse_args(&argv));
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
                 let _ = w.set_focus();
@@ -1486,22 +1538,20 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(OpenRequests(std::sync::Mutex::new(startup_requests)))
+        .manage(OpenRequests(std::sync::Mutex::new(Vec::new())))
         .manage(registry)
         .manage(VaultState::new())
         .manage(PasteJobs::default())
         .setup(move |app| {
+            // The first launch's own consoles connect while the page loads.
+            open_console_requests(app.handle(), startup_requests);
             // No safe socket path (see handoff::socket_path): no handoff,
             // later launches still reach us through the plugin.
             #[cfg(unix)]
             if let Some(path) = handoff_path.clone() {
                 let handle = app.handle().clone();
                 handoff::listen(path, move |args| {
-                    let requests = cli::parse_args(&args);
-                    if !requests.is_empty() {
-                        handle.state::<OpenRequests>().0.lock().unwrap().extend(requests);
-                        let _ = handle.emit("cli:open", ());
-                    }
+                    open_console_requests(&handle, cli::parse_args(&args));
                     if let Some(w) = handle.get_webview_window("main") {
                         let _ = w.unminimize();
                         let _ = w.set_focus();

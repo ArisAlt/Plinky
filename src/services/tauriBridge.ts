@@ -571,6 +571,8 @@ export interface OpenRequest {
   port: number;
   title?: string | null;
   user?: string | null;
+  /** The session the backend already started for it; the tab attaches. */
+  sessionId?: string | null;
 }
 
 /** Console tabs queued by launches of Plinky (the first one's and forwarded ones); drains the queue. */

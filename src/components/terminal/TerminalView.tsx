@@ -946,6 +946,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         if (disposed) return;
         if (attachInfo) {
           isLivePtyRef.current = true;
+          // A session started before this view (a console from GNS3, a
+          // background tab) began at 120x32. The resize observer fired
+          // before the attach, while nothing was live, so tell it the real
+          // size now: telnet passes it on, and Cisco IOS wraps by it.
+          if (term.cols && term.rows) resizeTerminal(tab.id, term.cols, term.rows);
           // A host-key prompt raised while this tab was in the background was
           // broadcast to no listener; the backend still blocks input for it,
           // so re-show the dialog or the session is stuck.

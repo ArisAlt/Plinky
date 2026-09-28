@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
 import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest } from './services/tauriBridge';
-import { tabForOpenRequest, debounce } from './services/cliOpen';
+import { tabForOpenRequest, throttle } from './services/cliOpen';
 import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
 import { StatusBar } from './components/layout/StatusBar';
@@ -227,10 +227,14 @@ export const App: React.FC = () => {
     const stamp = Date.now();
     const newTabs = requests.map((r, i) =>
       tabForOpenRequest(r, `tab-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}`));
-    // A start that fails shows at once. One that works stays "connecting"
-    // until the tab is opened and its output (replayed) shows it connected:
-    // the dot says only what is known.
-    newTabs.slice(0, -1).forEach(t => {
+    // The backend has normally started each session already (sessionId):
+    // the tab only attaches. One it couldn't start is started here -- the
+    // shown tab in its own view, the others in the background. A start that
+    // fails shows at once. One that works stays "connecting" until the tab
+    // is opened and its output (replayed) shows it connected: the dot says
+    // only what is known.
+    const shown = newTabs[newTabs.length - 1];
+    newTabs.filter((t, i) => !requests[i].sessionId && t !== shown).forEach(t => {
       void startSessionInBackground(t).then(started => {
         if (started) return;
         setTabs(prev => prev.map(x => (x.id === t.id && x.status === 'connecting' ? { ...x, status: 'disconnected' } : x)));
@@ -246,8 +250,9 @@ export const App: React.FC = () => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     const drain = () => { void takeOpenRequests().then(reqs => { if (!disposed) openCliTabs(reqs); }); };
-    // A burst of launches (twenty consoles) becomes one update.
-    const nudge = debounce(drain, 60);
+    // The first console opens at once; the rest of a burst ("open all
+    // consoles": twenty launches) in a few batches, not twenty updates.
+    const nudge = throttle(drain, 60);
     void listenOpenRequests(nudge).then(u => {
       if (disposed) { u?.(); return; }
       unlisten = u;
