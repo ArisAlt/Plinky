@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle, Keyboard } from 'lucide-react';
 import { UI_THEMES, applyUiTheme, useUiTheme } from '../../themes/uiThemes';
 import { TERMINAL_THEMES, MATCH_INTERFACE, setTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
 import { TERMINAL_FONTS } from '../../themes/fonts';
 import { useUiZoom, zoomIn, zoomOut, zoomReset, UI_ZOOM_MIN, UI_ZOOM_MAX } from '../../services/uiZoom';
 import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
+import { usePasteConfirmMode, setPasteConfirmMode, PasteConfirmMode } from '../../services/pasteConfirm';
+import { SHORTCUT_LIST } from '../../services/shortcuts';
+
+const PASTE_OPTIONS: { mode: PasteConfirmMode; label: string; hint: string }[] = [
+  { mode: 'multiline', label: 'Multi-line pastes', hint: 'Asks before pasting several lines' },
+  { mode: 'always', label: 'Every paste', hint: 'Asks before any paste' },
+  { mode: 'never', label: 'Never', hint: 'Pastes straight away' },
+];
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -39,6 +47,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetLayout,
 }) => {
   const uiZoom = useUiZoom();
+  const pasteMode = usePasteConfirmMode();
   const uiTheme = useUiTheme();
   const termTheme = useTerminalTheme();
   const knownFont = TERMINAL_FONTS.some(f => f.value === fontFamily);
@@ -296,7 +305,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
                 <div className="select-none">
                   <span className="text-slate-200 font-medium block">Copy on select (Classic PuTTY)</span>
-                  <span className="text-meta text-plinky-muted block">Selecting text with the mouse immediately copies it to the system clipboard without pressing Ctrl+C.</span>
+                  <span className="text-meta text-plinky-muted block">Selecting text with the mouse copies it to the clipboard straight away, no shortcut needed.</span>
                 </div>
               </label>
 
@@ -331,7 +340,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Paste window (pasteConfirm.ts) */}
+              <div className="space-y-1.5 pt-2 border-t border-plinky-800/80">
+                <label className="text-meta text-slate-400 font-medium block">Show the paste window</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {PASTE_OPTIONS.map(o => (
+                    <button
+                      key={o.mode}
+                      type="button"
+                      onClick={() => setPasteConfirmMode(o.mode)}
+                      aria-pressed={pasteMode === o.mode}
+                      className={`py-1.5 px-2 rounded text-left transition border ${
+                        pasteMode === o.mode
+                          ? 'bg-sky-500/20 border-sky-500/50 text-sky-300 font-medium'
+                          : 'bg-plinky-900 border-plinky-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="font-semibold text-meta">{o.label}</div>
+                      <div className="text-meta text-slate-400">{o.hint}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-meta text-plinky-muted">Shows the text before it is sent, so you can check or edit it.</p>
+              </div>
             </div>
+          </div>
+
+          {/* Section: Keyboard shortcuts (shortcuts.ts) */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
+              <Keyboard className="w-3.5 h-3.5 text-slate-400" />
+              <span>Keyboard Shortcuts</span>
+            </div>
+            <dl className="p-3 bg-plinky-950 rounded border border-plinky-800 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+              {SHORTCUT_LIST.map(s => (
+                <React.Fragment key={s.action}>
+                  <dt className="flex flex-wrap gap-1">
+                    {s.keys.map(k => (
+                      <kbd key={k} className="px-1.5 py-0.5 rounded bg-plinky-900 border border-plinky-700 font-mono text-meta text-slate-200 whitespace-nowrap">{k}</kbd>
+                    ))}
+                  </dt>
+                  <dd className="text-meta text-slate-300 self-center">{s.action}</dd>
+                </React.Fragment>
+              ))}
+            </dl>
+            <p className="text-meta text-plinky-muted">Ctrl+C and Ctrl+V go to the device, as in PuTTY.</p>
           </div>
 
           {/* Section: PuTTY Environment */}

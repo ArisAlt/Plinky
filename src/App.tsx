@@ -13,6 +13,9 @@ import { HostKeyManager } from './components/keys/HostKeyManager';
 import { VaultManager } from './components/vault/VaultManager';
 import { DEFAULT_TERMINAL_FONT, loadTerminalFont } from './themes/fonts';
 import { ConfirmHost } from './components/common/ConfirmHost';
+import { PasteConfirmHost } from './components/common/PasteConfirmHost';
+import { askConfirm } from './services/confirm';
+import { appShortcut, AppShortcut } from './services/shortcuts';
 import { TooltipHost } from './components/common/TooltipHost';
 import { SyncBroadcastBar } from './components/sync/SyncBroadcastBar';
 import { QuickSnippetBar } from './components/snippets/QuickSnippetBar';
@@ -355,13 +358,24 @@ export const App: React.FC = () => {
   };
   const broadcastOpenRef = useRef(broadcastOpen);
   broadcastOpenRef.current = broadcastOpen;
+  // Tab shortcuts (shortcuts.ts), read through a ref so the one window
+  // listener below always sees the current tabs.
+  const onAppShortcutRef = useRef<(action: AppShortcut) => void>(() => {});
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && !e.altKey && e.code === 'KeyB') {
         e.preventDefault();
         e.stopPropagation();
         setBroadcastOpen(!broadcastOpenRef.current);
+        return;
       }
+      const action = appShortcut(e);
+      // Not behind an open dialog: Ctrl+Tab there would switch the tab
+      // underneath it.
+      if (!action || document.querySelector('[aria-modal="true"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onAppShortcutRef.current(action);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -399,6 +413,32 @@ export const App: React.FC = () => {
     } else if (remaining.length < 2 && layoutMode !== 'single' && layoutMode !== 'terminal-sftp') {
       setLayoutMode('single');
     }
+  };
+
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
+  onAppShortcutRef.current = (action) => {
+    if (action === 'newTab') {
+      const r = plusButtonRef.current?.getBoundingClientRect();
+      setLauncherAnchor(r ? { top: r.bottom + 4, left: r.left } : { top: 48, left: 16 });
+      return;
+    }
+    if (tabs.length === 0) return;
+    const i = Math.max(0, tabs.findIndex(t => t.id === activeTabId));
+    if (action === 'nextTab') setActiveTabId(tabs[(i + 1) % tabs.length].id);
+    else if (action === 'prevTab') setActiveTabId(tabs[(i - 1 + tabs.length) % tabs.length].id);
+    else void closeTabAsking(tabs[i]);
+  };
+
+  /** Ctrl+Shift+W: a key is easy to press by mistake, so a tab that is
+   *  still connected asks before its session ends. */
+  const closeTabAsking = async (tab: TerminalTab) => {
+    if (tab.status !== 'disconnected' && !(await askConfirm({
+      title: `Close ${tab.title}?`,
+      body: 'Its connection ends.',
+      confirmLabel: 'Close tab',
+      danger: true,
+    }))) return;
+    handleCloseTab(tab.id);
   };
 
   const handleUpdateTab = (tabId: string, updates: Partial<TerminalTab>) => {
@@ -612,12 +652,13 @@ export const App: React.FC = () => {
                   {/* "+": open a tab from a menu. It used to open the first
                       saved session in the list, whichever that was. */}
                   <button
+                    ref={plusButtonRef}
                     onClick={(e) => {
                       if (launcherAnchor) { setLauncherAnchor(null); return; }
                       const r = e.currentTarget.getBoundingClientRect();
                       setLauncherAnchor({ top: r.bottom + 4, left: r.left });
                     }}
-                    title="Open a tab: local shell, recent or saved session, or a new one"
+                    title="Open a tab: local shell, recent or saved session, or a new one (Ctrl+Shift+T)"
                     aria-label="Open a tab"
                     aria-expanded={!!launcherAnchor}
                     className="p-1 rounded text-plinky-muted hover:text-slate-300 hover:bg-plinky-800 transition"
@@ -996,6 +1037,7 @@ export const App: React.FC = () => {
       )}
 
       <ConfirmHost />
+      <PasteConfirmHost />
       <TooltipHost />
 
       {/* Application Bottom Status Bar */}

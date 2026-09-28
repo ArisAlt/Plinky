@@ -140,7 +140,8 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   // Ctrl+Shift is where terminal emulators keep their own shortcuts.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+      // e.code: the key's position, so a Greek layout ("ο") still matches.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyO') {
         e.preventDefault();
         e.stopPropagation();
         searchRef.current?.focus();

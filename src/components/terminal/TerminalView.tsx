@@ -51,6 +51,8 @@ import { useTerminalTheme } from '../../themes/terminalThemes';
 import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { fatalHint, sshBannerHint } from '../../services/fatalHint';
+import { askPaste, needsPasteConfirm } from '../../services/pasteConfirm';
+import { terminalShortcut } from '../../services/shortcuts';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
   Radio,
@@ -465,10 +467,49 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
     writeTerminalInput(tab.id, new TextEncoder().encode(text));
   };
-  // The capture listener below lives as long as the terminal; it reaches the
-  // current pasteText through this ref.
-  const pasteTextRef = useRef(pasteText);
-  pasteTextRef.current = pasteText;
+
+  /** A paste the way the terminal itself sends one: paced when this session
+   *  asks for it, otherwise through xterm (bracketed paste, line endings). */
+  const deliverTypedPaste = async (text: string) => {
+    if (pasteDelayRef.current > 0 && isLivePtyRef.current && isMultiLinePaste(text)) {
+      await pasteText(text);
+      return;
+    }
+    terminalRef.current?.paste(text);
+  };
+
+  /** Every paste passes the paste window first when Settings asks for it
+   *  (pasteConfirm.ts); `deliver` is how this particular paste is sent. */
+  const confirmThenPaste = async (text: string, deliver: (t: string) => Promise<void>) => {
+    if (!text) return;
+    if (needsPasteConfirm(text)) {
+      const approved = await askPaste({
+        text,
+        target: tab.title,
+        lineDelayMs: pasteDelayRef.current,
+        // A password pasted at its prompt stays off the screen until asked.
+        sensitive: !!detectedPasswordPrompt || classifyPasswordPrompt(recentOutputRef.current) !== null,
+      });
+      if (approved === null) return;
+      text = approved;
+    }
+    await deliver(text);
+  };
+
+  /** Reads the clipboard, then pastes through the paste window. */
+  const pasteFromClipboard = async (deliver: (t: string) => Promise<void>) => {
+    let text: string;
+    try {
+      text = navigator.clipboard ? await navigator.clipboard.readText() : '';
+    } catch (e) {
+      addEventLog(`Couldn't read the clipboard: ${e}`, 'error');
+      return;
+    }
+    await confirmThenPaste(text, deliver);
+  };
+  // The listeners set up once per terminal reach the current versions here.
+  const pasteActionsRef = useRef({ confirmThenPaste, pasteFromClipboard, deliverTypedPaste });
+  pasteActionsRef.current = { confirmThenPaste, pasteFromClipboard, deliverTypedPaste };
 
   // ---- Reconnect (T-016) ---------------------------------------------------
   // Restarts the session in this same terminal, like PuTTY's "Restart
@@ -924,20 +965,44 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         }
       });
 
-    // A keyboard paste reaches xterm as a DOM paste event on its textarea.
-    // When this session paces pastes and the text has several lines, take
-    // it here (capture phase, before xterm) so it goes out line by line;
-    // otherwise xterm pastes as usual (bracketed paste and all).
+    // A paste the webview performs itself (its own paste key, a middle
+    // click) reaches xterm as a DOM paste event on its textarea. When the
+    // paste window should ask first, or this session paces multi-line
+    // pastes, take it here (capture phase, before xterm); otherwise xterm
+    // pastes as usual (bracketed paste and all).
     const pasteTarget = containerRef.current;
     const onPasteCapture = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData('text/plain') ?? '';
-      if (pasteDelayRef.current > 0 && isLivePtyRef.current && isMultiLinePaste(text)) {
+      const paced = pasteDelayRef.current > 0 && isLivePtyRef.current && isMultiLinePaste(text);
+      if (paced || needsPasteConfirm(text)) {
         e.preventDefault();
         e.stopPropagation();
-        void pasteTextRef.current(text);
+        const a = pasteActionsRef.current;
+        void a.confirmThenPaste(text, t => pasteActionsRef.current.deliverTypedPaste(t));
       }
     };
     pasteTarget?.addEventListener('paste', onPasteCapture, true);
+
+    // Copy, paste and select all (shortcuts.ts). Handled here, not left to
+    // the webview: WebKitGTK and WebView2 disagree on which of these keys
+    // paste by themselves. preventDefault stops the webview's own paste,
+    // which would otherwise arrive as a second, unconfirmed one. Copy with
+    // nothing selected does nothing -- it must not reach the device as ^C.
+    term.attachCustomKeyEventHandler((e) => {
+      const action = terminalShortcut(e);
+      if (!action) return true;
+      e.preventDefault();
+      if (e.type !== 'keydown') return false;
+      if (action === 'copy') {
+        const selection = term.getSelection();
+        if (selection) void navigator.clipboard?.writeText(selection);
+      } else if (action === 'selectAll') {
+        term.selectAll();
+      } else {
+        void pasteActionsRef.current.pasteFromClipboard(t => pasteActionsRef.current.deliverTypedPaste(t));
+      }
+      return false;
+    });
 
     // Handle user keyboard input
     term.onData((data) => {
@@ -964,7 +1029,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Handle Ctrl+F for search and Ctrl+Up/Down for prompt navigation
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      // e.code, not e.key: on a Greek layout the F key types "φ".
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
         e.preventDefault();
         setIsSearchOpen(true);
         setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -1223,9 +1289,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const handlePaste = async () => {
     setContextMenu(null);
-    if (navigator.clipboard) {
-      await pasteText(await navigator.clipboard.readText());
-    }
+    await pasteFromClipboard(pasteText);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -1859,7 +1923,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         {contextMenu && (
           <div
             ref={contextMenuRef}
-            className="fixed z-40 w-52 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-40 w-60 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-900 border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-slate-200 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1868,7 +1932,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
               <Copy className="w-3.5 h-3.5 text-sky-400" />
-              <span>Copy Selection</span>
+              <span className="flex-1">Copy Selection</span>
+              <span className="text-meta text-plinky-muted">Ctrl+Shift+C</span>
             </button>
             <button
               onClick={handleCopyAll}
@@ -1882,14 +1947,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
               <Clipboard className="w-3.5 h-3.5 text-slate-400" />
-              <span>Paste Clipboard</span>
+              <span className="flex-1">Paste Clipboard</span>
+              <span className="text-meta text-plinky-muted">Ctrl+Shift+V</span>
             </button>
             <button
               onClick={handleSelectAll}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
               <CheckSquare className="w-3.5 h-3.5 text-slate-400" />
-              <span>Select All</span>
+              <span className="flex-1">Select All</span>
+              <span className="text-meta text-plinky-muted">Ctrl+Shift+A</span>
             </button>
             {vaultKey && (
               <>
