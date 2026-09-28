@@ -51,9 +51,8 @@ export const TERMINAL_THEMES: TerminalTheme[] = [
     { background: '#000000', foreground: '#bbbbbb', cursor: '#00ff00', selection: 'rgba(255, 255, 255, 0.3)' },
     ['#000000', '#bb0000', '#00bb00', '#bbbb00', '#0000bb', '#bb00bb', '#00bbbb', '#bbbbbb',
       '#555555', '#ff5555', '#55ff55', '#ffff55', '#5555ff', '#ff55ff', '#55ffff', '#ffffff']),
-  // SecureCRT's familiar look: black text on white, with the classic
-  // Windows 16-colour ANSI palette.
-  scheme('securecrt', 'SecureCRT',
+  // Black text on white, with the classic Windows 16-colour ANSI palette.
+  scheme('classic-light', 'Classic Light',
     { background: '#ffffff', foreground: '#000000', cursor: '#000000', selection: 'rgba(0, 120, 215, 0.3)' },
     ['#000000', '#800000', '#008000', '#808000', '#000080', '#800080', '#008080', '#c0c0c0',
       '#808080', '#ff0000', '#00ff00', '#ffff00', '#0000ff', '#ff00ff', '#00ffff', '#ffffff'], true),
@@ -152,11 +151,15 @@ export const findTerminalTheme = (id: string): TerminalTheme =>
 const isKnown = (id: string) => id === MATCH_INTERFACE || TERMINAL_THEMES.some(t => t.id === id);
 
 const KEY = 'plinky_terminal_theme';
+// Schemes renamed since they shipped: a choice saved under the old id still
+// loads. "securecrt" was v0.1.9-v0.1.11's name for Classic Light.
+const RENAMED: Record<string, string> = { securecrt: 'classic-light' };
 const EVENT = 'plinky:terminal-theme';
 
 function readSaved(): string {
   try {
-    const v = localStorage.getItem(KEY);
+    const saved = localStorage.getItem(KEY);
+    const v = saved ? (RENAMED[saved] ?? saved) : saved;
     return v && isKnown(v) ? v : DEFAULT_TERMINAL_THEME;
   } catch {
     return DEFAULT_TERMINAL_THEME;

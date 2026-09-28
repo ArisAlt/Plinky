@@ -39,7 +39,7 @@ PuTTY sees them too.
 - **Keep a record.** Log any session straight to a file of your choice as it
   happens.
 - **Manage tunnels and host keys** from one place.
-- **Make it yours.** Ten interface themes (including a SecureCRT look),
+- **Make it yours.** Ten interface themes (including a classic light look),
   seventeen terminal colour schemes, and programming fonts built in, so they
   work offline.
 

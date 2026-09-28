@@ -255,12 +255,11 @@ const ABTOOLS: Record<string, Palette> = {
   },
 };
 
-// ── The look of other tools people come from ─────────────────────────────────
-// Approximations, not copies: the owner asked for "a theme like SecureCRT".
-// SecureCRT's window is the Windows light chrome: grey toolbars, a white
-// session manager, the system blue for selection.
-const LOOKALIKES: Record<string, Palette> = {
-  SecureCRT: {
+// ── Classic desktop ──────────────────────────────────────────────────────────
+// The light Windows chrome: grey toolbars, a white session list, the system
+// blue for selection.
+const CLASSIC: Record<string, Palette> = {
+  'Classic Light': {
     bg: '#f0f0f0', surface: '#ffffff', field: '#ffffff', border: '#c8c8c8',
     fg: '#1a1a1a', muted: '#5f5f5f',
     accent: '#0078d7', accent_hover: '#006cc1', accent_active: '#005a9e',
@@ -276,12 +275,15 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 export const UI_THEMES: UiTheme[] = [
   PLINKY,
   ...Object.entries(ABTOOLS).map(([name, p]) => expandPalette(slug(name), name, p)),
-  ...Object.entries(LOOKALIKES).map(([name, p]) => expandPalette(slug(name), name, p)),
+  ...Object.entries(CLASSIC).map(([name, p]) => expandPalette(slug(name), name, p)),
 ];
 export const DEFAULT_UI_THEME = 'plinky';
 
 // ── applying and remembering ─────────────────────────────────────────────────
 const KEY = 'plinky_ui_theme';
+// Themes renamed since they shipped: a choice saved under the old id still
+// loads. "securecrt" was v0.1.9-v0.1.11's name for Classic Light.
+const RENAMED: Record<string, string> = { securecrt: 'classic-light' };
 const EVENT = 'plinky:ui-theme';
 let current = DEFAULT_UI_THEME;
 
@@ -310,6 +312,7 @@ export function applyUiTheme(id: string, persist = true) {
 export function initUiTheme() {
   let saved: string | null = null;
   try { saved = localStorage.getItem(KEY); } catch { /* storage unavailable */ }
+  if (saved) saved = RENAMED[saved] ?? saved;
   applyUiTheme(saved && UI_THEMES.some(t => t.id === saved) ? saved : DEFAULT_UI_THEME, false);
 }
 

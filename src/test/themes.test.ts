@@ -18,16 +18,16 @@ describe('interface themes', () => {
     expect(col('plinky', 'white')).toBe('#ffffff');
   });
 
-  it('includes the ABtools palettes by name, then the SecureCRT look', () => {
+  it('includes the ABtools palettes by name, then Classic Light', () => {
     expect(UI_THEMES.map(t => t.name)).toEqual([
       'Plinky', 'Neutral Slate', 'Tokyo Night', 'Catppuccin Mocha', 'Nord',
-      'Gruvbox Dark', 'Bchips Violet', 'Dracula', 'GitHub Light', 'SecureCRT',
+      'Gruvbox Dark', 'Bchips Violet', 'Dracula', 'GitHub Light', 'Classic Light',
     ]);
   });
 
-  it('has a SecureCRT terminal: black on white, light', () => {
-    const t = findTerminalTheme('securecrt');
-    expect(t.id).toBe('securecrt');
+  it('has a Classic Light terminal: black on white, light', () => {
+    const t = findTerminalTheme('classic-light');
+    expect(t.id).toBe('classic-light');
     expect(t.light).toBe(true);
     expect(t.theme.background).toBe('#ffffff');
     expect(t.theme.foreground).toBe('#000000');
@@ -65,6 +65,23 @@ describe('interface themes', () => {
     localStorage.setItem('plinky_ui_theme', 'no-such-theme');
     initUiTheme();
     expect(document.documentElement.dataset.uiTheme).toBe('plinky');
+  });
+});
+
+describe('a theme renamed after it shipped', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('still loads when saved under its old name, as Classic Light', async () => {
+    // v0.1.9-v0.1.11 saved it under the id "securecrt". Without the
+    // mapping, someone who had picked it silently fell back to the default.
+    localStorage.setItem('plinky_ui_theme', 'securecrt');
+    localStorage.setItem('plinky_terminal_theme', 'securecrt');
+    vi.resetModules(); // fresh modules: the terminal choice is read once, then cached
+    const ui = await import('../themes/uiThemes');
+    const term = await import('../themes/terminalThemes');
+    ui.initUiTheme();
+    expect(ui.getUiTheme()).toBe('classic-light');
+    expect(term.getTerminalThemeId()).toBe('classic-light');
   });
 });
 
