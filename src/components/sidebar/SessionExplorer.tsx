@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useFittedMenu } from '../../services/menuFit';
 import { PuttySession, TerminalTab } from '../../types/session';
 import {
   Folder,
@@ -90,8 +91,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>(getCollapsedFolders);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: PuttySession } | null>(null);
+  const sessionMenuRef = React.useRef<HTMLDivElement>(null);
+  const folderMenuRef = React.useRef<HTMLDivElement>(null);
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; node: FolderNode } | null>(null);
   const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false);
+  // Inside the window, measured once drawn; "Move to Folder" makes it taller.
+  useFittedMenu(sessionMenuRef, contextMenu, setContextMenu, [moveSubmenuOpen]);
+  useFittedMenu(folderMenuRef, folderMenu, setFolderMenu);
   const [newFolderInput, setNewFolderInput] = useState('');
   const [dragging, setDragging] = useState<Dragging | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
@@ -878,12 +884,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <div
             role="menu"
             aria-label={`Folder ${node.path}`}
-            style={{
-              position: 'fixed',
-              left: Math.min(folderMenu.x, window.innerWidth - 200),
-              top: Math.min(folderMenu.y, window.innerHeight - 200),
-            }}
-            className="z-40 w-48 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none"
+            ref={folderMenuRef}
+            style={{ position: 'fixed', left: folderMenu.x, top: folderMenu.y }}
+            className="z-40 w-48 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
@@ -1001,12 +1004,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         <div
           role="menu"
           aria-label={`Session ${contextMenu.session.name}`}
-          style={{ 
-            position: 'fixed', 
-            left: Math.min(contextMenu.x, window.innerWidth - 180), 
-            top: Math.min(contextMenu.y, window.innerHeight - 150) 
-          }}
-          className="z-40 w-44 bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          ref={sessionMenuRef}
+          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y }}
+          className="z-40 w-44 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
