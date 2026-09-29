@@ -933,9 +933,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         } else {
           // The process is up; the connection is not. "Connected" is logged
           // when the login actually finishes.
-          addEventLog(isLocalSession ? 'Local shell started' : 'plink started, waiting for the server', 'info');
-          // Connected before this page listened: the event went by.
-          if (!isLocalSession) void isSessionConnected(tab.id).then(c => { if (c) onConnected(); });
+          const isSerial = tab.protocol === 'Serial';
+          addEventLog(
+            isLocalSession ? 'Local shell started' : isSerial ? 'Serial line opened' : 'plink started, waiting for the server',
+            'info',
+          );
+          if (isLocalSession || isSerial) {
+            // No login to wait for: a local shell or a serial line is up
+            // once it starts. Its prompt can't be the sign: Windows' ends in
+            // ">" ("C:\Users\ops>"), which the live pattern never matched,
+            // so a Local Shell tab spun "connecting" forever (Windows 11 VM),
+            // and a router on a serial line may print nothing at all.
+            reachedLiveRef.current = true;
+            setWaitingSince(null);
+            onUpdateTab(tab.id, { status: 'live' });
+          } else {
+            // Connected before this page listened: the event went by.
+            void isSessionConnected(tab.id).then(c => { if (c) onConnected(); });
+          }
         }
       });
     };

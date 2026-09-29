@@ -35,7 +35,8 @@ vi.mock('../services/tauriBridge', async (orig) => ({
   ...(await orig<typeof import('../services/tauriBridge')>()),
   attachTerminalSession: async (id: string, _seq: number, onData: (c: Uint8Array) => void) => {
     bridge.liveChunk = onData;
-    const a = bridge.attachInfo!;
+    const a = bridge.attachInfo;
+    if (!a) return null; // nothing to reattach to: the view starts a session
     return {
       session_id: id,
       replay_data: Array.from(new TextEncoder().encode(a.replay)),
@@ -43,6 +44,10 @@ vi.mock('../services/tauriBridge', async (orig) => ({
       is_live: a.is_live,
       pending_prompt: null,
     };
+  },
+  startTerminalSession: async (_id: string, _name: string, _local: boolean, _c: number, _r: number, onData: (c: Uint8Array) => void) => {
+    bridge.liveChunk = onData;
+    return { started: true };
   },
 }));
 
@@ -117,3 +122,35 @@ describe('switching back to a logged-in SSH tab', () => {
     expect(statuses.at(-1)).toBe('live');
   });
 });
+
+describe('a session with no login', () => {
+  beforeEach(() => { bridge.attachInfo = null; bridge.liveChunk = null; });
+
+  async function mountFresh(t: Partial<TerminalTab>) {
+    const statuses: string[] = [];
+    const onUpdateTab = (_id: string, u: Partial<TerminalTab>) => { if (u.status) statuses.push(u.status); };
+    const fresh = { ...tab, status: 'connecting' as const, ...t };
+    await act(async () => { render(<TerminalView tab={fresh} onUpdateTab={onUpdateTab} />); });
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    return statuses;
+  }
+
+  it('a Local Shell is green once it starts, whatever its prompt looks like', async () => {
+    // Windows' prompt ends in ">", which the live pattern never matched:
+    // the tab spun "connecting" forever (Windows 11 VM).
+    const statuses = await mountFresh({ id: 'tab-local', title: 'Local Shell', sessionName: 'Local Shell', protocol: undefined });
+    await act(async () => { bridge.liveChunk!(new TextEncoder().encode('Microsoft Windows\r\n\r\nC:\\Users\\ops>')); });
+    expect(statuses.at(-1)).toBe('live');
+  });
+
+  it('a serial line is green once it opens, before the device prints anything', async () => {
+    const statuses = await mountFresh({ id: 'tab-serial', title: 'Console', sessionName: 'Console', protocol: 'Serial' });
+    expect(statuses.at(-1)).toBe('live');
+  });
+
+  it('an SSH session is not green just because plink started', async () => {
+    const statuses = await mountFresh({ id: 'tab-ssh-new' });
+    expect(statuses).not.toContain('live');
+  });
+});
+
