@@ -25,6 +25,37 @@ export function terminalShortcut(e: KeyInfo): TerminalShortcut | null {
   return null;
 }
 
+/** What PuTTY sends, with its default keyboard settings, for keys xterm.js
+ *  sends differently. Sessions only: a local shell is not a PuTTY session,
+ *  and its TERM expects xterm's keys.
+ *
+ *  - Home and End: ESC [1~ and ESC [4~ (PuTTY's "Standard"); xterm.js sends
+ *    ESC [H and ESC [F.
+ *  - F1 to F4: ESC [11~ to ESC [14~ (PuTTY's "ESC[n~"); xterm.js sends
+ *    ESC O P to ESC O S. F5 and up already match.
+ *  - Ctrl+Shift+6 (any session, local too): Ctrl+^, 0x1e, the first key of
+ *    Cisco's escape sequence -- Ctrl+Shift+6, then x -- that stops a ping
+ *    or traceroute. xterm.js sends it for Ctrl+6 but nothing with Shift held,
+ *    which is how every Cisco guide writes it.
+ *
+ *  All three were found by the end-to-end suite (e2e/). Named keys are
+ *  matched on e.key, which a layout doesn't change, so the keypad's Home and
+ *  End count too; Ctrl+Shift+6 on the physical key, like the shortcuts. */
+const PUTTY_KEYS: Record<string, string> = {
+  Home: '\x1b[1~',
+  End: '\x1b[4~',
+  F1: '\x1b[11~',
+  F2: '\x1b[12~',
+  F3: '\x1b[13~',
+  F4: '\x1b[14~',
+};
+
+export function keySequenceFor(e: KeyInfo & Pick<KeyboardEvent, 'key'>, localShell: boolean): string | null {
+  if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === 'Digit6') return '\x1e';
+  if (localShell || e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return null;
+  return PUTTY_KEYS[e.key] ?? null;
+}
+
 export type AppShortcut = 'nextTab' | 'prevTab' | 'newTab' | 'closeTab';
 
 export function appShortcut(e: KeyInfo): AppShortcut | null {

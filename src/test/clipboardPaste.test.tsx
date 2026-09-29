@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, fireEvent, screen } from '@testing-library/react';
 
 // The desktop app: every clipboard call goes to the backend.
 const env = vi.hoisted(() => ({ tauri: true, invoked: [] as { cmd: string; args?: unknown }[], clip: '' }));
@@ -13,7 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 // A stand-in xterm that keeps its key handler and records pastes.
-const term = vi.hoisted(() => ({ keyHandler: null as null | ((e: KeyboardEvent) => boolean), pasted: [] as string[] }));
+const term = vi.hoisted(() => ({ keyHandler: null as null | ((e: KeyboardEvent) => boolean), pasted: [] as string[], input: [] as string[] }));
 function stand(): any {
   const fn: any = () => stand();
   return new Proxy(fn, {
@@ -23,6 +23,7 @@ function stand(): any {
       if (p === 'write') return (_d: unknown, cb?: () => void) => { cb?.(); };
       if (p === 'attachCustomKeyEventHandler') return (h: (e: KeyboardEvent) => boolean) => { term.keyHandler = h; };
       if (p === 'paste') return (t: string) => { term.pasted.push(t); };
+      if (p === 'input') return (t: string) => { term.input.push(t); };
       if (p === 'getSelection') return () => 'selected text';
       if (p === Symbol.toPrimitive) return () => 0;
       if (p === 'then') return undefined;
@@ -70,7 +71,7 @@ describe('the clipboard in the desktop app', () => {
 });
 
 describe('pasting into a terminal', () => {
-  beforeEach(() => { env.invoked = []; env.clip = ''; env.tauri = true; term.keyHandler = null; term.pasted = []; });
+  beforeEach(() => { env.invoked = []; env.clip = ''; env.tauri = true; term.keyHandler = null; term.pasted = []; term.input = []; });
 
   const tab: TerminalTab = {
     id: 'tab-paste', title: 'R1', sessionName: 'R1', syncChannel: 'none', status: 'live',
@@ -93,5 +94,26 @@ describe('pasting into a terminal', () => {
     await act(async () => { term.keyHandler!(key('KeyC', { ctrlKey: true, shiftKey: true })); });
     await act(async () => { await new Promise(r => setTimeout(r, 10)); });
     expect(env.clip).toBe('selected text');
+  });
+
+  it('Paste in the right-click menu sends what Ctrl+Shift+V sends', async () => {
+    // It wrote the clipboard raw: a line break reached the router as LF, and
+    // CR LF (text copied on Windows) as two Enters per line. The keys go
+    // through the terminal's paste, which sends each line with one Enter.
+    env.clip = 'show ip route';
+    const { container } = await act(async () => render(<TerminalView tab={tab} onUpdateTab={() => {}} />));
+    const surface = container.querySelector('[class*="relative"]') ?? container.firstElementChild!;
+    await act(async () => { fireEvent.contextMenu(surface, { clientX: 20, clientY: 20 }); });
+    await act(async () => { fireEvent.click(screen.getByText('Paste Clipboard')); });
+    await act(async () => { await new Promise(r => setTimeout(r, 10)); });
+    expect(term.pasted).toEqual(['show ip route']);
+    expect(env.invoked.map(i => i.cmd)).not.toContain('write_terminal_input');
+  });
+
+  it('Ctrl+Shift+6 and Home go out as PuTTY sends them, as typed input', async () => {
+    await act(async () => { render(<TerminalView tab={tab} onUpdateTab={() => {}} />); });
+    expect(term.keyHandler!(key('Digit6', { ctrlKey: true, shiftKey: true, key: '^' }))).toBe(false);
+    expect(term.keyHandler!(key('Home', { key: 'Home' }))).toBe(false);
+    expect(term.input).toEqual(['\x1e', '\x1b[1~']);
   });
 });

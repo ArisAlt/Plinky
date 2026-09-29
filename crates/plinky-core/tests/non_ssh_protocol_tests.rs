@@ -346,3 +346,98 @@ fn pseudo_console_setup_is_not_device_output() {
     // A device's own text stays, colours or not.
     assert_eq!(strip_control_sequences("\u{1b}[1mR1#\u{1b}[0m"), "R1#");
 }
+
+/// What a console receives for "show vlan" and Enter. `negotiate` offers
+/// WILL ECHO and WILL SUPPRESS-GO-AHEAD on connect, as IOS behind GNS3 does.
+#[cfg(unix)]
+async fn line_end_sent(protocol: plinky_core::transport::plink::TargetProtocol, negotiate: bool) -> Vec<u8> {
+    use std::io::Read;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (got_tx, got_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        if let Ok((mut sock, _)) = listener.accept() {
+            if negotiate {
+                let _ = sock.write_all(&[255, 251, 1, 255, 251, 3]);
+            }
+            sock.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
+            let mut got = Vec::new();
+            let end = std::time::Instant::now() + Duration::from_secs(6);
+            let mut buf = [0u8; 256];
+            while std::time::Instant::now() < end {
+                match sock.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => got.extend_from_slice(&buf[..n]),
+                    Err(_) => {}
+                }
+                // Enter and whatever follows it in the same write.
+                let data = telnet_data(&got);
+                if let Some(at) = data.windows(9).position(|w| w == b"show vlan") {
+                    if data[at..].contains(&b'\r') || data[at..].contains(&b'\n') {
+                        std::thread::sleep(Duration::from_millis(300));
+                        let _ = sock.read(&mut buf).map(|n| got.extend_from_slice(&buf[..n]));
+                        break;
+                    }
+                }
+            }
+            let _ = got_tx.send(got);
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    });
+
+    let registry = SessionRegistry::new();
+    let (tx, _rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let target = plinky_core::transport::plink::ExplicitTarget {
+        hostname: "127.0.0.1".into(),
+        port,
+        username: None,
+        protocol,
+    };
+    let id = format!("line-end-{protocol:?}-{negotiate}");
+    registry
+        .create_plink_session(&id, "SW1 (plinky-test, not saved)", Some(target), None, 80, 24, tx)
+        .unwrap();
+    // Let plink connect and settle its terminal modes (a console that
+    // negotiates nothing prints nothing to wait for).
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    registry.write_input(&id, b"show vlan").unwrap();
+    registry.write_input(&id, b"\r").unwrap();
+    let got = tokio::task::spawn_blocking(move || got_rx.recv_timeout(Duration::from_secs(8)).unwrap_or_default())
+        .await
+        .unwrap();
+    let _ = registry.close_session(&id);
+    let data = telnet_data(&got);
+    let at = data.windows(9).position(|w| w == b"show vlan").unwrap_or_else(|| panic!("the line never arrived: {data:?}"));
+    data[at + 9..].to_vec()
+}
+
+/// A console server that negotiates nothing (ser2net and similar): PuTTY
+/// edits the line locally there and ends it with CR LF. plink's own local
+/// editing turned Enter into a bare LF (its pty maps CR to NL), measured as
+/// "show vlan\n" at the console. Raw now gets CR LF exactly; telnet gets
+/// CR NUL LF, since plink writes every CR as CR NUL (RFC 854), which the
+/// telnet server reads as CR.
+#[cfg(unix)]
+#[tokio::test]
+async fn enter_on_a_console_that_negotiates_nothing_ends_the_line_with_crlf() {
+    use plinky_core::transport::plink::TargetProtocol;
+    if !plink_available() {
+        eprintln!("skipping: plink not installed");
+        return;
+    }
+    assert_eq!(line_end_sent(TargetProtocol::Raw, false).await, b"\r\n");
+    assert_eq!(line_end_sent(TargetProtocol::Telnet, false).await, b"\r\0\n");
+}
+
+/// A console that echoes (IOS behind GNS3) keeps plink's own Enter, CR NUL:
+/// an extra LF there would be read as a second Enter.
+#[cfg(unix)]
+#[tokio::test]
+async fn enter_on_an_echoing_console_is_left_as_plink_sends_it() {
+    use plinky_core::transport::plink::TargetProtocol;
+    if !plink_available() {
+        eprintln!("skipping: plink not installed");
+        return;
+    }
+    assert_eq!(line_end_sent(TargetProtocol::Telnet, true).await, b"\r\0");
+}

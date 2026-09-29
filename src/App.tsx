@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest } from './services/tauriBridge';
+import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected } from './services/tauriBridge';
 import { tabForOpenRequest, throttle } from './services/cliOpen';
 import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
@@ -218,6 +218,26 @@ export const App: React.FC = () => {
     setStartupDone(true);
   };
 
+  // A telnet or raw console is ready once its connection is up (the backend
+  // watches plink's socket). A tab on screen hears that in its own view; one
+  // behind it has no view yet, so it is marked here. Without this, after
+  // GNS3's "console to all nodes" every tab but the front one kept its
+  // "connecting" spinner although connected, until clicked (e2e suite). SSH
+  // is not ready until its login is over, which only its view can tell.
+  const markConnected = (id: string) => {
+    setTabs(prev => prev.map(t => (
+      t.id === id && t.status === 'connecting' && (t.protocol === 'Telnet' || t.protocol === 'RAW')
+        ? { ...t, status: 'live' }
+        : t
+    )));
+  };
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenSessionConnected(markConnected).then(u => { if (disposed) u?.(); else unlisten = u; });
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
   // One tab per console asked for on the command line (T-020). All but the
   // tab that is shown start their session now: a session used to start only
   // when its tab's view appeared, so after GNS3's "open all consoles" only
@@ -230,9 +250,7 @@ export const App: React.FC = () => {
     // The backend has normally started each session already (sessionId):
     // the tab only attaches. One it couldn't start is started here -- the
     // shown tab in its own view, the others in the background. A start that
-    // fails shows at once. One that works stays "connecting" until the tab
-    // is opened and its output (replayed) shows it connected: the dot says
-    // only what is known.
+    // fails shows at once; one that connects turns ready (markConnected).
     const shown = newTabs[newTabs.length - 1];
     newTabs.filter((t, i) => !requests[i].sessionId && t !== shown).forEach(t => {
       void startSessionInBackground(t).then(started => {
@@ -241,6 +259,11 @@ export const App: React.FC = () => {
       });
     });
     setTabs(prev => [...prev, ...newTabs]);
+    // A session the backend started may have connected before its tab
+    // existed: the event found nothing to mark.
+    newTabs.filter((_, i) => requests[i].sessionId).forEach(t => {
+      void isSessionConnected(t.id).then(connected => { if (connected) markConnected(t.id); });
+    });
     setActiveTabId(newTabs[newTabs.length - 1].id);
     setActiveView('sessions');
   };
@@ -620,6 +643,10 @@ export const App: React.FC = () => {
                           setTabMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
                         }}
                         data-broadcast-glow={broadcastLit.has(tab.id) ? 'on' : 'off'}
+                        // Read by the end-to-end suite (e2e/): the status
+                        // icon alone does not name the state.
+                        data-tab-status={tab.status}
+                        data-tab-active={isActive}
                         style={broadcastLit.has(tab.id) ? { boxShadow: `0 0 0 1px ${glowColor(tab.syncChannel)}, 0 0 10px ${glowColor(tab.syncChannel)}` } : undefined}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${
                           isActive

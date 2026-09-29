@@ -15,6 +15,28 @@ pub mod tcp_state;
 pub(crate) struct PtyChild {
     pub killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
     pub alive: Arc<AtomicBool>,
+    output: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
+    flow: Arc<FlowGate>,
+}
+
+impl PtyChild {
+    /// Adds bytes to the session's output as if the child had written them:
+    /// the echo plink leaves to its terminal (plink.rs, `LocalEcho`). Sent
+    /// through the reader's own sender, so it lands in order with the
+    /// child's output, and charged to the flow window like it.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn inject(&self, bytes: Vec<u8>) {
+        if bytes.is_empty() {
+            return;
+        }
+        let n = bytes.len();
+        let guard = self.output.lock().unwrap();
+        if let Some(tx) = guard.as_ref() {
+            if tx.send(bytes).is_ok() {
+                self.flow.charge(n);
+            }
+        }
+    }
 }
 
 fn now_ms() -> u64 {
@@ -43,6 +65,7 @@ pub(crate) fn pump_pty_child(
     let last_output = Arc::new(AtomicU64::new(now_ms()));
 
     let (reader_sender, reader_last, reader_flow) = (sender.clone(), last_output.clone(), flow.clone());
+    let (sender_for_echo, flow_for_echo) = (sender.clone(), flow.clone());
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
@@ -84,7 +107,7 @@ pub(crate) fn pump_pty_child(
         flow.close();
     });
 
-    PtyChild { killer, alive }
+    PtyChild { killer, alive, output: sender_for_echo, flow: flow_for_echo }
 }
 
 pub trait Transport: Send {

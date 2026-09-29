@@ -67,7 +67,7 @@ pub struct PlinkTransport {
     writer: Box<dyn Write + Send>,
     child: super::PtyChild,
     /// Telnet and raw consoles are driven in character mode; see
-    /// `force_character_mode`.
+    /// `LineDiscipline`.
     char_mode: bool,
     /// plink's process id: for reaching its console on Windows, and for
     /// seeing when its connection is up (tcp_state.rs).
@@ -82,6 +82,8 @@ pub struct PlinkTransport {
     /// v0.1.15). So the console is left as plink set it until the session
     /// has begun. Telnet and raw have no login: begun from the start.
     begun: bool,
+    #[cfg(unix)]
+    discipline: LineDiscipline,
 }
 
 /// Whether a connection should run with plink's local line editing off.
@@ -101,29 +103,137 @@ pub fn wants_character_mode(saved_protocol: Option<&str>, explicit: Option<Targe
     }
 }
 
-/// Clears ICANON, ISIG and IEXTEN on the pty if plink left them set, so
-/// every key reaches plink as it is typed and Ctrl+C is sent as 0x03 rather
-/// than raised as a signal. ECHO is plink's choice and stays as it is: a
-/// console that doesn't echo still shows what's typed. Checked on each
-/// write, since plink rewrites the termios whenever the server renegotiates.
+/// What plink asked of its terminal, and what this set after it.
+///
+/// plink runs telnet and raw consoles with local echo and line editing on
+/// until the server negotiates echo, and does it by leaving its pty cooked.
+/// Cooked, the pty held the Up arrow back until Enter, turned Ctrl+C into a
+/// SIGINT that killed plink, turned Enter into a bare LF (the console got
+/// "show vlan\n"), and echoed control keys as ^? ^M ^J ^[[A (e2e suite).
+/// So each write takes the pty over: every key goes to plink as typed, and
+/// Plinky echoes and ends lines the way PuTTY does when it edits locally.
 #[cfg(unix)]
-fn force_character_mode(fd: std::os::unix::io::RawFd) {
+#[derive(Default)]
+struct LineDiscipline {
+    /// plink wants local echo: the server echoes nothing.
+    echo: bool,
+    /// plink wants local line editing: the server negotiated no echo, and
+    /// PuTTY ends such a line with CR LF. plink sets OPOST with line editing
+    /// and clears it without (measured: an IOS-style console offering WILL
+    /// ECHO leaves it off, a bare console keeps it on); this never sets it.
+    edit: bool,
+    /// The (lflag, iflag, oflag) this last set. Anything else is plink's:
+    /// it rewrites the modes whenever the server renegotiates.
+    set: Option<(libc::tcflag_t, libc::tcflag_t, libc::tcflag_t)>,
+    local_echo: LocalEcho,
+}
+
+#[cfg(unix)]
+fn take_over_line_discipline(fd: std::os::unix::io::RawFd, d: &mut LineDiscipline) {
     // SAFETY: fd is the live pty master owned by this transport; termios is
     // a plain C struct fully written by tcgetattr before it is read.
     unsafe {
         let mut t: libc::termios = std::mem::zeroed();
-        if libc::tcgetattr(fd, &mut t) != 0 {
+        if libc::tcgetattr(fd, &mut t) != 0 || d.set == Some((t.c_lflag, t.c_iflag, t.c_oflag)) {
             return;
         }
-        let line = libc::ICANON | libc::ISIG | libc::IEXTEN;
-        if t.c_lflag & line == 0 {
-            return;
-        }
-        t.c_lflag &= !line;
+        d.echo = t.c_lflag & libc::ECHO != 0;
+        d.edit = t.c_oflag & libc::OPOST != 0;
+        t.c_lflag &= !(libc::ICANON | libc::ISIG | libc::IEXTEN | libc::ECHO);
+        t.c_iflag &= !libc::ICRNL;
         t.c_cc[libc::VMIN] = 1;
         t.c_cc[libc::VTIME] = 0;
-        libc::tcsetattr(fd, libc::TCSANOW, &t);
+        if libc::tcsetattr(fd, libc::TCSANOW, &t) == 0 {
+            d.set = Some((t.c_lflag, t.c_iflag, t.c_oflag));
+        }
     }
+}
+
+/// Echo for a console that echoes nothing, as PuTTY's own line discipline
+/// shows it: text as typed, Enter as a new line, Backspace erasing what was
+/// typed (never the prompt), other control keys as ^C and the like, and
+/// nothing for arrow and function keys, which only move the device's cursor.
+#[derive(Default)]
+struct LocalEcho {
+    /// Characters typed on this line, so Backspace stops at the prompt.
+    col: usize,
+    /// 0: text; 1: after ESC; 2: inside an escape sequence.
+    esc: u8,
+    after_cr: bool,
+}
+
+impl LocalEcho {
+    #[cfg_attr(not(unix), allow(dead_code))]
+    fn echo(&mut self, typed: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for &b in typed {
+            match self.esc {
+                1 => {
+                    self.esc = if b == b'[' || b == b'O' { 2 } else { 0 };
+                    continue;
+                }
+                2 => {
+                    if (0x40..=0x7e).contains(&b) {
+                        self.esc = 0;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            let after_cr = std::mem::take(&mut self.after_cr);
+            match b {
+                0x1b => self.esc = 1,
+                b'\n' if after_cr => {}
+                b'\r' | b'\n' => {
+                    out.extend_from_slice(b"\r\n");
+                    self.col = 0;
+                    self.after_cr = b == b'\r';
+                }
+                0x7f | 0x08 => {
+                    if self.col > 0 {
+                        out.extend_from_slice(b"\x08 \x08");
+                        self.col -= 1;
+                    }
+                }
+                b'\t' => {
+                    out.push(b);
+                    self.col += 1;
+                }
+                0x00..=0x1f => {
+                    out.extend_from_slice(&[b'^', b + 0x40]);
+                    self.col += 2;
+                }
+                // A UTF-8 continuation byte: same character, same column.
+                0x80..=0xbf => out.push(b),
+                _ => {
+                    out.push(b);
+                    self.col += 1;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Enter as PuTTY sends it where it edits the line itself (a server that
+/// negotiated no echo): CR LF. PuTTY ends such a line with CR LF on raw
+/// and a telnet newline, also CR LF, on telnet. Through plink, raw sends
+/// exactly that, and telnet sends CR NUL LF: plink writes every CR as CR NUL
+/// (RFC 854), which a telnet server reads back as CR. A CR LF already there
+/// is left alone.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn enter_as_crlf(data: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    if !data.contains(&b'\r') {
+        return std::borrow::Cow::Borrowed(data);
+    }
+    let mut out = Vec::with_capacity(data.len() + 4);
+    for (i, &b) in data.iter().enumerate() {
+        out.push(b);
+        if b == b'\r' && data.get(i + 1) != Some(&b'\n') {
+            out.push(b'\n');
+        }
+    }
+    std::borrow::Cow::Owned(out)
 }
 
 /// plink.exe's console input, set up the way PuTTY's own window behaves.
@@ -550,6 +660,8 @@ impl PlinkTransport {
             char_mode,
             pid,
             begun: char_mode,
+            #[cfg(unix)]
+            discipline: LineDiscipline::default(),
         })
     }
 }
@@ -568,10 +680,20 @@ impl Transport for PlinkTransport {
     }
 
     fn write(&mut self, data: &[u8]) -> Result<()> {
+        #[allow(unused_mut)]
+        let mut data = std::borrow::Cow::Borrowed(data);
         #[cfg(unix)]
         if self.char_mode {
             if let Some(fd) = self.master.as_raw_fd() {
-                force_character_mode(fd);
+                take_over_line_discipline(fd, &mut self.discipline);
+                if self.discipline.echo {
+                    self.child.inject(self.discipline.local_echo.echo(&data));
+                }
+                if self.discipline.edit {
+                    if let std::borrow::Cow::Owned(crlf) = enter_as_crlf(&data) {
+                        data = std::borrow::Cow::Owned(crlf);
+                    }
+                }
             }
         }
         #[cfg(windows)]
@@ -579,7 +701,7 @@ impl Transport for PlinkTransport {
             win_console::prepare_input(pid, self.char_mode);
         }
         self.writer
-            .write_all(data)
+            .write_all(&data)
             .map_err(PlinkyError::IoError)?;
         self.writer.flush().map_err(PlinkyError::IoError)?;
         Ok(())
@@ -613,6 +735,16 @@ impl Transport for PlinkTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn enter_becomes_crlf_and_everything_else_is_left_alone() {
+        assert_eq!(&*enter_as_crlf(b"show vlan\r"), b"show vlan\r\n");
+        assert_eq!(&*enter_as_crlf(b"a\rb\r"), b"a\r\nb\r\n");
+        // Already a CR LF: not doubled.
+        assert_eq!(&*enter_as_crlf(b"a\r\n"), b"a\r\n");
+        // No Enter: nothing copied.
+        assert!(matches!(enter_as_crlf(b"\x1b[A\x03"), std::borrow::Cow::Borrowed(_)));
+    }
 
     #[test]
     fn login_args_carry_a_file_path_never_the_password() {

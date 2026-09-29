@@ -54,7 +54,7 @@ import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { fatalHint, sshBannerHint } from '../../services/fatalHint';
 import { askPaste, needsPasteConfirm } from '../../services/pasteConfirm';
-import { terminalShortcut } from '../../services/shortcuts';
+import { terminalShortcut, keySequenceFor } from '../../services/shortcuts';
 import { readClipboard, writeClipboard } from '../../services/clipboard';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
@@ -1039,6 +1039,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // which would otherwise arrive as a second, unconfirmed one. Copy with
     // nothing selected does nothing -- it must not reach the device as ^C.
     term.attachCustomKeyEventHandler((e) => {
+      const sequence = keySequenceFor(e, isLocalSession);
+      if (sequence) {
+        e.preventDefault();
+        if (e.type === 'keydown') term.input(sequence, true);
+        return false;
+      }
       const action = terminalShortcut(e);
       if (!action) return true;
       e.preventDefault();
@@ -1334,9 +1340,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setContextMenu(null);
   };
 
+  // The menu's Paste (and a right click set to paste) sends what the paste
+  // keys send. It wrote the clipboard raw: a line break reached a router as
+  // LF, and text copied on Windows as CR LF, two Enters per line, where
+  // Ctrl+Shift+V sends each line with one Enter (e2e suite).
   const handlePaste = async () => {
     setContextMenu(null);
-    await pasteFromClipboard(pasteText);
+    await pasteFromClipboard(deliverTypedPaste);
   };
 
   const handleDragOver = (e: React.DragEvent) => {

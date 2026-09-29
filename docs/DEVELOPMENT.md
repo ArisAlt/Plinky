@@ -85,7 +85,21 @@ cargo test --workspace
 
 # Run dependency license, advisory, and ban validation
 cargo deny check
+
+# End-to-end: the real app, backend and plink against stand-in consoles,
+# a private sshd and a socat serial line, on a hidden screen (Linux)
+npm run e2e -- --build      # builds a debug app first; later runs can skip --build
+npm run e2e -- --only paste # only tests whose name contains "paste"
 ```
+
+The end-to-end suite (`e2e/`) drives the app's page through WebKitGTK's
+remote inspector, so it needs no WebDriver: Node 22+, `plink`, and either
+`kwin_wayland` (its `--virtual` screen) or `Xvfb`. The SSH tests also need
+`sshd`, `ssh-keygen` and `puttygen`; the serial tests need `socat`. Each
+scenario runs in a throwaway home directory with its own runtime directory
+and no session bus, so it never touches your sessions, host keys or vault,
+and never hands its tabs to a Plinky you have open. Tests named "like PuTTY"
+expect PuTTY's default behaviour.
 
 ### Command Line (GNS3 consoles)
 Plinky opens console tabs from its launch arguments. A second launch hands
