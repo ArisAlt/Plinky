@@ -831,7 +831,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           scheduleAutoReconnectRef.current();
         }
         reachedLiveRef.current = false;
-      } else if (isPreauthPattern) {
+      } else if (isPreauthPattern && !reachedLiveRef.current) {
+        // Only before the login is over. After it, text that looks like a
+        // login is the session's own output: Windows' pseudo-console
+        // repaints plink's whole screen (the old "password:" included)
+        // when the tab tells it its size on reattach, and a router's
+        // `enable` asks "Password:". Either turned a live tab amber. The
+        // prompt is still noticed below, for the vault's offer.
         onUpdateTab(tab.id, { status: 'preauth' });
         if (isEnablePrompt) {
           setDetectedPasswordPrompt('enable');
@@ -952,6 +958,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       reopenSessionId(tab.id);
       if (disposed) return;
       recentOutputRef.current = '';
+      reachedLiveRef.current = false; // a new login, shown as one
       typedRef.current = { line: '', submitted: null };
       autoLoginSentRef.current = { user: false, password: false };
       setDetectedPasswordPrompt(null);
@@ -980,6 +987,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           if (attachInfo.pending_prompt) {
             setPendingPrompt(attachInfo.pending_prompt);
           }
+          // The backend knows whether the login is over; the replay below
+          // holds the old login prompt and must not decide it.
+          reachedLiveRef.current = attachInfo.is_live;
           if (attachInfo.replay_data && attachInfo.replay_data.length > 0) {
             handleIncomingChunk(new Uint8Array(attachInfo.replay_data), false);
             addEventLog(`Attached to active session "${tab.sessionName}" with replayed scrollback`, 'success');
