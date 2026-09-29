@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { writeClipboard } from '../../services/clipboard';
 import { HostKeyEntry, PpkInfo } from '../../types/session';
 import { listPuttyHostKeys, inspectPpk, pickPpkFile, removePuttyHostKey } from '../../services/tauriBridge';
 import { askConfirm } from '../../services/confirm';
@@ -60,7 +61,7 @@ export const HostKeyManager: React.FC<HostKeyManagerProps> = ({ onClose, initial
   }, [hostKeys, filter]);
 
   const copyFingerprint = (fp: string) => {
-    navigator.clipboard?.writeText(fp);
+    void writeClipboard(fp);
     setCopiedKey(fp);
     setTimeout(() => setCopiedKey(null), 1500);
   };

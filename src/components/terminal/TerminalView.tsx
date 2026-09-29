@@ -55,6 +55,7 @@ import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { fatalHint, sshBannerHint } from '../../services/fatalHint';
 import { askPaste, needsPasteConfirm } from '../../services/pasteConfirm';
 import { terminalShortcut } from '../../services/shortcuts';
+import { readClipboard, writeClipboard } from '../../services/clipboard';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
   Radio,
@@ -339,7 +340,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         addEventLog('Vault: nothing to copy (is the vault locked?)', 'warn');
         return;
       }
-      await navigator.clipboard.writeText(secret);
+      await writeClipboard(secret);
       setCopiedVaultKey(field);
       setTimeout(() => setCopiedVaultKey(null), 2000);
       // The clear below can't be verified in every webview (reading the
@@ -348,7 +349,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       addEventLog(`Copied the ${field === 'enable' ? 'enable ' : ''}password to the clipboard; Plinky will try to clear it in 25 s. A clipboard manager may keep a copy.`, 'info');
       setTimeout(async () => {
         try {
-          if ((await navigator.clipboard.readText()) === secret) await navigator.clipboard.writeText('');
+          if ((await readClipboard()) === secret) await writeClipboard('');
         } catch {
           // Can't check it's still ours, so leave the clipboard alone.
         }
@@ -502,7 +503,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const pasteFromClipboard = async (deliver: (t: string) => Promise<void>) => {
     let text: string;
     try {
-      text = navigator.clipboard ? await navigator.clipboard.readText() : '';
+      text = await readClipboard();
     } catch (e) {
       addEventLog(`Couldn't read the clipboard: ${e}`, 'error');
       return;
@@ -714,9 +715,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             },
             text: matchedText,
             activate: (_e, ip) => {
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(ip);
-              }
+              void writeClipboard(ip);
             },
           });
         }
@@ -862,9 +861,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     term.onSelectionChange(() => {
       if (copyOnSelectRef.current) {
         const selection = term.getSelection();
-        if (selection && selection.length > 0 && navigator.clipboard) {
-          navigator.clipboard.writeText(selection);
-        }
+        if (selection && selection.length > 0) void writeClipboard(selection);
       }
     });
 
@@ -1048,7 +1045,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (e.type !== 'keydown') return false;
       if (action === 'copy') {
         const selection = term.getSelection();
-        if (selection) void navigator.clipboard?.writeText(selection);
+        if (selection) void writeClipboard(selection);
       } else if (action === 'selectAll') {
         term.selectAll();
       } else {
@@ -1318,9 +1315,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const handleCopy = () => {
     const selection = terminalRef.current?.getSelection();
-    if (selection && navigator.clipboard) {
-      navigator.clipboard.writeText(selection);
-    }
+    if (selection) void writeClipboard(selection);
     setContextMenu(null);
   };
 
@@ -1334,10 +1329,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         fullText += line.translateToString(true) + '\n';
       }
     }
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(fullText.trimEnd());
-      addEventLog(`Copied entire scrollback (${buffer.length} lines) to clipboard`, 'info');
-    }
+    void writeClipboard(fullText.trimEnd());
+    addEventLog(`Copied entire scrollback (${buffer.length} lines) to clipboard`, 'info');
     setContextMenu(null);
   };
 
@@ -2257,9 +2250,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 <button
                   onClick={() => {
                     const text = eventLogs.map(e => `[${e.time}] ${e.message}`).join('\n');
-                    if (navigator.clipboard) {
-                      navigator.clipboard.writeText(text);
-                    }
+                    void writeClipboard(text);
                     addEventLog("Event log copied to clipboard", 'info');
                   }}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition"
@@ -2330,7 +2321,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                         {logPath}
                       </code>
                       <button
-                        onClick={() => navigator.clipboard?.writeText(logPath)}
+                        onClick={() => void writeClipboard(logPath)}
                         className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
                       >
                         Copy path

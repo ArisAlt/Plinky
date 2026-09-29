@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFittedMenu } from '../../services/menuFit';
+import { writeClipboard } from '../../services/clipboard';
 import { PuttySession, TerminalTab } from '../../types/session';
 import {
   Folder,
@@ -1103,7 +1104,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           <button
             onClick={() => {
               if (contextMenu.session.hostname) {
-                navigator.clipboard.writeText(contextMenu.session.hostname);
+                void writeClipboard(contextMenu.session.hostname);
               }
               setContextMenu(null);
             }}

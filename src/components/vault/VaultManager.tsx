@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { readClipboard, writeClipboard } from '../../services/clipboard';
 import { askConfirm } from '../../services/confirm';
 import { 
   Shield, 
@@ -365,16 +366,16 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   const copyToClipboard = async (key: string) => {
     const secret = await fetchSecret(key);
     if (secret === null) return;
-    navigator.clipboard.writeText(secret);
+    await writeClipboard(secret);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
     // Clear the clipboard after a timeout, but only if it still holds exactly
     // what we put there -- don't clobber something the user copied since.
     setTimeout(async () => {
       try {
-        const current = await navigator.clipboard.readText();
+        const current = await readClipboard();
         if (current === secret) {
-          await navigator.clipboard.writeText('');
+          await writeClipboard('');
         }
       } catch {
         // Clipboard read permission can be denied by the browser/webview;
@@ -387,14 +388,14 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
   const copyEnableToClipboard = async (key: string) => {
     const enableSecret = await fetchEnableSecret(key);
     if (!enableSecret) return;
-    navigator.clipboard.writeText(enableSecret);
+    await writeClipboard(enableSecret);
     setCopiedEnableKey(key);
     setTimeout(() => setCopiedEnableKey(null), 2000);
     setTimeout(async () => {
       try {
-        const current = await navigator.clipboard.readText();
+        const current = await readClipboard();
         if (current === enableSecret) {
-          await navigator.clipboard.writeText('');
+          await writeClipboard('');
         }
       } catch {
       }

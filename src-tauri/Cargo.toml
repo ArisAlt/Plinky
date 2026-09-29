@@ -22,6 +22,10 @@ serde_json = "1.0"
 putty-compat = { path = "../crates/putty-compat", version = "0.1.0" }
 plinky-core = { path = "../crates/plinky-core", version = "0.1.0" }
 tokio = { version = "1.38", features = ["full"] }
+# Clipboard read/write in the backend -- owner-approved. The webview blocks the
+# page from reading the clipboard (wry keeps clipboard access off), so paste
+# from other programs failed on Linux and Windows.
+tauri-plugin-clipboard-manager = "2"
 
 # geteuid: the GNS3 handoff socket is used only when this user owns it
 # (handoff.rs). Already in Cargo.lock through tauri.
