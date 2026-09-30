@@ -229,6 +229,14 @@ fn watch_connection(app: &tauri::AppHandle, id: String) {
             if registry.process_id(&id) != Some(pid) {
                 return;
             }
+            // plink exited before it connected (refused, unreachable). A
+            // tab behind the front one has no view to hear it, and kept its
+            // "connecting" spinner; on Windows the table then showed no
+            // rows forever rather than ending this loop.
+            if registry.is_session_ended(&id) {
+                let _ = app.emit("session:ended", &id);
+                return;
+            }
             match has_established_tcp(pid) {
                 Some(true) => {
                     app.state::<ConnectedSessions>().0.lock().unwrap().insert(id.clone());
@@ -251,6 +259,13 @@ fn watch_connection(app: &tauri::AppHandle, id: String) {
 #[tauri::command]
 fn is_session_connected(connected: State<'_, ConnectedSessions>, session_id: String) -> bool {
     connected.0.lock().unwrap().contains(&session_id)
+}
+
+/// For a page that made its tab after `session:ended` went by: a console
+/// refused in milliseconds ends before GNS3's tab exists.
+#[tauri::command]
+fn is_session_ended(registry: State<'_, Arc<SessionRegistry>>, session_id: String) -> bool {
+    registry.is_session_ended(&session_id)
 }
 
 /// The tab left the screen. The session keeps running into scrollback and is
@@ -1660,6 +1675,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             take_open_requests,
             is_session_connected,
+            is_session_ended,
             read_clipboard_text,
             write_clipboard_text,
             paste_paced,

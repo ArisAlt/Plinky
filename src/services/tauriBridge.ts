@@ -18,6 +18,8 @@ export interface AttachInfo {
   truncated: boolean;
   is_live: boolean;
   pending_prompt?: HostKeyPromptInfo | null;
+  /** The session is over (its process exited, or it was closed). */
+  ended?: boolean;
 }
 
 export interface HostKeyPromptInfo {
@@ -850,6 +852,26 @@ export async function listenSessionConnected(
   if (!isTauriEnvironment()) return null;
   const { listen } = await import('@tauri-apps/api/event');
   return listen<string>('session:connected', (event) => callback(event.payload));
+}
+
+/** A session's process ended before it connected (refused, unreachable). */
+export async function listenSessionEnded(
+  callback: (sessionId: string) => void
+): Promise<(() => void) | null> {
+  if (!isTauriEnvironment()) return null;
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<string>('session:ended', (event) => callback(event.payload));
+}
+
+/** For a tab made after `session:ended` went by. */
+export async function isSessionEnded(sessionId: string): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<boolean>('is_session_ended', { sessionId });
+  } catch {
+    return false;
+  }
 }
 
 /** For a page that started listening after the event went by. */

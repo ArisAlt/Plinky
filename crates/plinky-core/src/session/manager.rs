@@ -21,6 +21,10 @@ pub struct AttachInfo {
     /// prompt event is broadcast once, so a view attaching later (tab was
     /// in the background) needs it here to re-show the dialog.
     pub pending_prompt: Option<HostKeyPromptInfo>,
+    /// The session is over: its process exited or it was closed. A view
+    /// attaching to it shows it disconnected; "not live" alone read as a
+    /// login still pending (the amber key on a refused console, Windows VM).
+    pub ended: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -680,6 +684,7 @@ impl SessionRegistry {
             truncated,
             is_live: session.state_machine.is_live(),
             pending_prompt,
+            ended: matches!(session.state_machine.state(), SessionState::Closed(_)) || !session.transport.is_alive(),
         })
     }
 
@@ -867,6 +872,15 @@ impl SessionRegistry {
     /// The process making the session's connection (plink), if it has one.
     pub fn process_id(&self, id: &str) -> Option<u32> {
         self.sessions.lock().unwrap().get(id)?.transport.process_id()
+    }
+
+    /// Whether the session's process has exited or the session was closed.
+    pub fn is_session_ended(&self, id: &str) -> bool {
+        let mut lock = self.sessions.lock().unwrap();
+        match lock.get_mut(id) {
+            Some(s) => matches!(s.state_machine.state(), SessionState::Closed(_)) || !s.transport.is_alive(),
+            None => true,
+        }
     }
 
     pub fn detach_session(&self, id: &str) -> Result<()> {

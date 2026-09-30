@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected } from './services/tauriBridge';
+import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded } from './services/tauriBridge';
 import { tabForOpenRequest, throttle } from './services/cliOpen';
 import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
@@ -231,11 +231,18 @@ export const App: React.FC = () => {
         : t
     )));
   };
+  // And one whose plink exited before connecting (refused, unreachable) is
+  // disconnected: behind the front tab it kept spinning "connecting".
+  const markEnded = (id: string) => {
+    setTabs(prev => prev.map(t => (t.id === id && t.status === 'connecting' ? { ...t, status: 'disconnected' } : t)));
+  };
   useEffect(() => {
     let disposed = false;
-    let unlisten: (() => void) | null = null;
-    void listenSessionConnected(markConnected).then(u => { if (disposed) u?.(); else unlisten = u; });
-    return () => { disposed = true; unlisten?.(); };
+    const unlisten: (() => void)[] = [];
+    const keep = (u: (() => void) | null) => { if (disposed) u?.(); else if (u) unlisten.push(u); };
+    void listenSessionConnected(markConnected).then(keep);
+    void listenSessionEnded(markEnded).then(keep);
+    return () => { disposed = true; unlisten.forEach(u => u()); };
   }, []);
 
   // One tab per console asked for on the command line (T-020). All but the
@@ -259,10 +266,11 @@ export const App: React.FC = () => {
       });
     });
     setTabs(prev => [...prev, ...newTabs]);
-    // A session the backend started may have connected before its tab
-    // existed: the event found nothing to mark.
+    // A session the backend started may have connected, or been refused,
+    // before its tab existed: the event found nothing to mark.
     newTabs.filter((_, i) => requests[i].sessionId).forEach(t => {
       void isSessionConnected(t.id).then(connected => { if (connected) markConnected(t.id); });
+      void isSessionEnded(t.id).then(ended => { if (ended) markEnded(t.id); });
     });
     setActiveTabId(newTabs[newTabs.length - 1].id);
     setActiveView('sessions');

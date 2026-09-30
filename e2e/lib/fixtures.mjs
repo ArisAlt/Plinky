@@ -34,7 +34,7 @@ export async function waitUntil(check, { timeoutMs = 5000, what = 'condition' } 
  * Nothing is printed on connect: a router sitting at its prompt prints
  * nothing until it is sent Enter.
  */
-export async function startConsole({ name = 'R1', negotiate = true } = {}) {
+export async function startConsole({ name = 'R1', negotiate = true, host = '127.0.0.1', onlyFrom = null } = {}) {
   const con = {
     name,
     received: Buffer.alloc(0), // data bytes, telnet commands removed
@@ -48,6 +48,8 @@ export async function startConsole({ name = 'R1', negotiate = true } = {}) {
   const prompt = `${name}>`;
 
   const handle = (sock) => {
+    // Listening beyond this machine (a Windows VM on the LAN): one peer only.
+    if (onlyFrom && sock.remoteAddress?.replace(/^::ffff:/, '') !== onlyFrom) { sock.destroy(); return; }
     con.connections++;
     con.open++;
     con.sockets.add(sock);
@@ -149,7 +151,7 @@ export async function startConsole({ name = 'R1', negotiate = true } = {}) {
   };
 
   const server = net.createServer(handle);
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  await new Promise((r) => server.listen(0, host, r));
   con.port = server.address().port;
 
   con.text = () => con.received.toString('latin1');

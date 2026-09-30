@@ -2,7 +2,7 @@
 // window that is already open, and a long session list.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { startConsole, writePuttySession, waitUntil } from '../lib/fixtures.mjs';
+import { startConsole, writePuttySession, waitUntil, freePort } from '../lib/fixtures.mjs';
 
 export const title = 'The app: local shell, GNS3 hand-over, session list';
 
@@ -76,6 +76,23 @@ export const tests = [
     await sleep(1500);
     const tabs = (await app.tabs()).filter((t) => t.title === 'R2' || t.title === 'R3');
     assert.deepEqual(tabs.map((t) => `${t.title}:${t.status}`).sort(), ['R2:live', 'R3:live']);
+  }],
+
+  ['a console that refuses the connection shows as disconnected, also once opened', async ({ app, consoles }) => {
+    // Seen on Windows: a GNS3 console behind the front tab got "Connection
+    // refused", and its tab showed the amber key ("login pending") instead.
+    const closed = await freePort();
+    await launchAgain(app, [
+      '--telnet', '127.0.0.1', String(closed), '--title', 'Down',
+      '--telnet', '127.0.0.1', String(consoles[0].port), '--title', 'R1 again',
+    ]);
+    await app.waitForTab('R1 again', 'live', { timeoutMs: 5000 });
+    await sleep(1500);
+    const behind = (await app.tabs()).find((t) => t.title === 'Down');
+    await app.run((e) => e.click(e.tabEl('Down')));
+    await sleep(1000);
+    const opened = (await app.tabs()).find((t) => t.title === 'Down');
+    assert.deepEqual({ behind: behind.status, opened: opened.status }, { behind: 'disconnected', opened: 'disconnected' });
   }],
 
   ['a saved telnet session opens ready at once, though the router prints nothing', async ({ app, consoles }) => {

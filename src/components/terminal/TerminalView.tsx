@@ -1008,7 +1008,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           } else {
             addEventLog(`Attached to active session "${tab.sessionName}"`, 'success');
           }
-          onUpdateTab(tab.id, { status: attachInfo.is_live ? 'live' : 'preauth' });
+          // An ended session is disconnected: "not live" alone read as a
+          // login still pending, and a refused console showed the amber key.
+          onUpdateTab(tab.id, { status: attachInfo.ended ? 'disconnected' : attachInfo.is_live ? 'live' : 'preauth' });
           reachedLiveRef.current = attachInfo.is_live;
         } else {
           startFresh();
