@@ -6,10 +6,13 @@ to this script, one per line, # for comments) it types
 
     ssh -l USER <address>
 
-answers the password prompt, applies CHANGES in configure terminal, saves,
-types exit to come back to the jump device, and goes on to the next one.
-A device that can't be reached or rejects a command is reported and
-skipped; the rest carry on.
+answers the password prompt, types the lines of commands.txt one by one
+(waiting for the prompt after each), types exit to come back to the jump
+device, and goes on to the next one. commands.txt holds the commands
+exactly as you would type them, configure terminal, end and write memory
+included; empty lines and lines starting with ! are skipped. A device
+that can't be reached or rejects a command is reported and skipped; the
+rest carry on.
 
 The password is asked for once, in a small window (Python's tkinter), or
 read from the PLINKY_DEVICE_PASSWORD environment variable. It is never
@@ -26,15 +29,16 @@ import re
 from plinky import session
 
 USER = "admin"
-CHANGES = [
-    "ntp server 192.0.2.123",
-    "logging host 192.0.2.50",
-]
 DRY_RUN = True
-SAVE = "write memory"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 IPS_FILE = os.path.join(HERE, "ips.txt")
+COMMANDS_FILE = os.path.join(HERE, "commands.txt")
+
+# A command that asks a question ("Destination filename [startup-config]?"
+# from copy running-config startup-config) waits for this long, then fails:
+# use write memory, or answer it with its own line in the file.
+COMMAND_TIMEOUT = 60
 
 # What can come back after "ssh -l": each alternative is a named group, and
 # expect() stops at whichever shows first.
@@ -66,6 +70,12 @@ def ask_password():
         session.log("No password given; nothing done.")
         raise SystemExit(1)
     return password
+
+
+def read_commands():
+    with open(COMMANDS_FILE, encoding="utf-8") as f:
+        lines = [line.rstrip("\r\n") for line in f]
+    return [line for line in lines if line.strip() and not line.lstrip().startswith("!")]
 
 
 def read_addresses():
@@ -130,28 +140,32 @@ def log_in(address, password, home):
             return re.escape(prompt[:-1]) + r"(\([\w\-]+\))?#\s*$"
 
 
-def configure(address, device_prompt):
-    """Applies CHANGES; returns True when every line was accepted."""
+def configure(address, device_prompt, commands):
+    """Types each command, waiting for the prompt after it. Stops at the
+    first one the device rejects; returns True when every one was accepted.
+    """
     prompt = r"(?m)^" + device_prompt
-    session.command("terminal length 0", prompt=prompt)
-    session.command("configure terminal", prompt=prompt)
-    ok = True
-    for line in CHANGES:
-        reply = session.command(line, prompt=prompt)
-        if "%" in reply:  # "% Invalid input detected", "% Incomplete command"
-            session.log(f"{address}: rejected {line!r}: {reply.strip().splitlines()[-1]}")
-            ok = False
-            break
-    session.command("end", prompt=prompt)
-    if ok:
-        session.command(SAVE, prompt=prompt, timeout=60)
-    return ok
+    for line in commands:
+        reply = session.command(line, prompt=prompt, timeout=COMMAND_TIMEOUT)
+        # IOS errors start "% " ("% Invalid input detected", "% Incomplete
+        # command"); console messages like "%SYS-5-CONFIG_I" have no space.
+        error = next((l.strip() for l in reply.splitlines() if l.lstrip().startswith("% ")), None)
+        if error:
+            session.log(f"{address}: rejected {line!r}: {error}")
+            # Leave configuration mode, whatever mode the file had reached.
+            session.command("end", prompt=prompt)
+            return False
+    return True
 
 
 def main():
     addresses = read_addresses()
     if not addresses:
         session.log(f"No addresses in {IPS_FILE}")
+        raise SystemExit(1)
+    commands = read_commands()
+    if not commands:
+        session.log(f"No commands in {COMMANDS_FILE}")
         raise SystemExit(1)
     home = learn_prompt()
     password = ask_password()
@@ -165,11 +179,11 @@ def main():
             session.expect(home.pattern, timeout=15)
             continue
         if DRY_RUN:
-            session.log(f"{address}: logged in; would apply {CHANGES} (DRY_RUN)")
+            session.log(f"{address}: logged in; would type {len(commands)} lines from commands.txt (DRY_RUN)")
             ok = True
         else:
-            ok = configure(address, device_prompt)
-            session.log(f"{address}: {'changed and saved' if ok else 'NOT changed'}")
+            ok = configure(address, device_prompt, commands)
+            session.log(f"{address}: {'all commands accepted' if ok else 'stopped at an error'}")
         (done if ok else failed).append(address)
         session.send("exit")
         session.expect(home.pattern, timeout=15)

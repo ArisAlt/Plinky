@@ -1,0 +1,8 @@
+! Typed on every device in ips.txt, one line at a time.
+! Empty lines and lines starting with ! are skipped.
+terminal length 0
+configure terminal
+ntp server 192.0.2.123
+logging host 192.0.2.50
+end
+write memory
