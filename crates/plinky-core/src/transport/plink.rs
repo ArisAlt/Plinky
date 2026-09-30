@@ -82,7 +82,6 @@ pub struct PlinkTransport {
     /// v0.1.15). So the console is left as plink set it until the session
     /// has begun. Telnet and raw have no login: begun from the start.
     begun: bool,
-    #[cfg(unix)]
     discipline: LineDiscipline,
 }
 
@@ -112,7 +111,11 @@ pub fn wants_character_mode(saved_protocol: Option<&str>, explicit: Option<Targe
 /// "show vlan\n"), and echoed control keys as ^? ^M ^J ^[[A (e2e suite).
 /// So each write takes the pty over: every key goes to plink as typed, and
 /// Plinky echoes and ends lines the way PuTTY does when it edits locally.
-#[cfg(unix)]
+///
+/// Windows has the same modes in plink's console (ENABLE_ECHO_INPUT and
+/// ENABLE_LINE_INPUT), taken over in `win_console::prepare_input`. There,
+/// typing on such a console showed nothing at all and Enter sent a bare CR
+/// (Windows 11 VM, v0.1.20).
 #[derive(Default)]
 struct LineDiscipline {
     /// plink wants local echo: the server echoes nothing.
@@ -122,9 +125,14 @@ struct LineDiscipline {
     /// and clears it without (measured: an IOS-style console offering WILL
     /// ECHO leaves it off, a bare console keeps it on); this never sets it.
     edit: bool,
-    /// The (lflag, iflag, oflag) this last set. Anything else is plink's:
-    /// it rewrites the modes whenever the server renegotiates.
-    set: Option<(libc::tcflag_t, libc::tcflag_t, libc::tcflag_t)>,
+    /// The modes this last set: (lflag, iflag, oflag) on Unix, the console
+    /// mode on Windows. Anything else is plink's: it rewrites them whenever
+    /// the server renegotiates. On Windows plink only sets or clears its two
+    /// bits in the current mode, so a switch from local editing to none
+    /// after this took over leaves nothing to see; the server negotiates
+    /// within milliseconds of connecting, before the first key.
+    #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
+    set: Option<[u64; 3]>,
     local_echo: LocalEcho,
 }
 
@@ -134,7 +142,7 @@ fn take_over_line_discipline(fd: std::os::unix::io::RawFd, d: &mut LineDisciplin
     // a plain C struct fully written by tcgetattr before it is read.
     unsafe {
         let mut t: libc::termios = std::mem::zeroed();
-        if libc::tcgetattr(fd, &mut t) != 0 || d.set == Some((t.c_lflag, t.c_iflag, t.c_oflag)) {
+        if libc::tcgetattr(fd, &mut t) != 0 || d.set == Some([t.c_lflag as u64, t.c_iflag as u64, t.c_oflag as u64]) {
             return;
         }
         d.echo = t.c_lflag & libc::ECHO != 0;
@@ -144,7 +152,7 @@ fn take_over_line_discipline(fd: std::os::unix::io::RawFd, d: &mut LineDisciplin
         t.c_cc[libc::VMIN] = 1;
         t.c_cc[libc::VTIME] = 0;
         if libc::tcsetattr(fd, libc::TCSANOW, &t) == 0 {
-            d.set = Some((t.c_lflag, t.c_iflag, t.c_oflag));
+            d.set = Some([t.c_lflag as u64, t.c_iflag as u64, t.c_oflag as u64]);
         }
     }
 }
@@ -163,7 +171,6 @@ struct LocalEcho {
 }
 
 impl LocalEcho {
-    #[cfg_attr(not(unix), allow(dead_code))]
     fn echo(&mut self, typed: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         for &b in typed {
@@ -221,7 +228,6 @@ impl LocalEcho {
 /// exactly that, and telnet sends CR NUL LF: plink writes every CR as CR NUL
 /// (RFC 854), which a telnet server reads back as CR. A CR LF already there
 /// is left alone.
-#[cfg_attr(not(unix), allow(dead_code))]
 fn enter_as_crlf(data: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     if !data.contains(&b'\r') {
         return std::borrow::Cow::Borrowed(data);
@@ -311,7 +317,7 @@ mod win_console {
         1
     }
 
-    pub fn prepare_input(pid: u32, char_mode: bool) {
+    pub(super) fn prepare_input(pid: u32, char_mode: bool, d: &mut super::LineDiscipline) {
         HANDLER.call_once(|| {
             // SAFETY: registers a plain function with no captured state.
             unsafe { SetConsoleCtrlHandler(Some(swallow), 1) };
@@ -358,12 +364,22 @@ mod win_console {
                 } else {
                     let mut want = (mode & !ENABLE_PROCESSED_INPUT) | ENABLE_VIRTUAL_TERMINAL_INPUT;
                     if char_mode {
-                        // Echo is only valid with line input on Windows.
+                        // plink's own choice, unless this is what was set
+                        // last time: then plink hasn't changed it since.
+                        if d.set != Some([mode as u64, 0, 0]) {
+                            d.echo = mode & ENABLE_ECHO_INPUT != 0;
+                            d.edit = mode & ENABLE_LINE_INPUT != 0;
+                        }
+                        // Echo is only valid with line input on Windows;
+                        // Plinky echoes instead (LineDiscipline).
                         want &= !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
                     }
                     let set = want == mode || SetConsoleMode(h, want) != 0;
                     let mut now = 0u32;
                     GetConsoleMode(h, &mut now);
+                    if char_mode {
+                        d.set = Some([now as u64, 0, 0]);
+                    }
                     record(format!(
                         "pid {pid}: mode {mode:#06x} -> wanted {want:#06x}, set {set}, now {now:#06x}{}",
                         if freed { " (own console freed)" } else { "" }
@@ -660,7 +676,6 @@ impl PlinkTransport {
             char_mode,
             pid,
             begun: char_mode,
-            #[cfg(unix)]
             discipline: LineDiscipline::default(),
         })
     }
@@ -680,25 +695,26 @@ impl Transport for PlinkTransport {
     }
 
     fn write(&mut self, data: &[u8]) -> Result<()> {
-        #[allow(unused_mut)]
         let mut data = std::borrow::Cow::Borrowed(data);
         #[cfg(unix)]
         if self.char_mode {
             if let Some(fd) = self.master.as_raw_fd() {
                 take_over_line_discipline(fd, &mut self.discipline);
-                if self.discipline.echo {
-                    self.child.inject(self.discipline.local_echo.echo(&data));
-                }
-                if self.discipline.edit {
-                    if let std::borrow::Cow::Owned(crlf) = enter_as_crlf(&data) {
-                        data = std::borrow::Cow::Owned(crlf);
-                    }
-                }
             }
         }
         #[cfg(windows)]
         if let (Some(pid), true) = (self.pid, self.begun) {
-            win_console::prepare_input(pid, self.char_mode);
+            win_console::prepare_input(pid, self.char_mode, &mut self.discipline);
+        }
+        if self.char_mode {
+            if self.discipline.echo {
+                self.child.inject(self.discipline.local_echo.echo(&data));
+            }
+            if self.discipline.edit {
+                if let std::borrow::Cow::Owned(crlf) = enter_as_crlf(&data) {
+                    data = std::borrow::Cow::Owned(crlf);
+                }
+            }
         }
         self.writer
             .write_all(&data)

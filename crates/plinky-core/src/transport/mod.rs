@@ -24,7 +24,6 @@ impl PtyChild {
     /// the echo plink leaves to its terminal (plink.rs, `LocalEcho`). Sent
     /// through the reader's own sender, so it lands in order with the
     /// child's output, and charged to the flow window like it.
-    #[cfg_attr(not(unix), allow(dead_code))]
     pub(crate) fn inject(&self, bytes: Vec<u8>) {
         if bytes.is_empty() {
             return;
