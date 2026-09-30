@@ -46,6 +46,46 @@ struct ScriptEnded {
     stopped: bool,
 }
 
+/// The folder Plinky runs from when it is an AppImage (APPDIR, or the one
+/// holding usr/bin/plinky-desktop), None otherwise.
+fn app_dir() -> Option<std::path::PathBuf> {
+    if let Some(dir) = std::env::var_os("APPDIR").filter(|d| !d.is_empty()) {
+        return Some(dir.into());
+    }
+    let exe = std::env::current_exe().ok()?;
+    let bin = exe.parent()?;
+    let usr = bin.parent()?;
+    (bin.file_name()? == "bin" && usr.file_name()? == "usr" && std::env::var_os("APPIMAGE").is_some())
+        .then(|| usr.parent().map(Path::to_path_buf))
+        .flatten()
+}
+
+/// A path list (PATH, PYTHONPATH...) without the entries inside `dir`, and
+/// without empty ones (an empty PYTHONPATH entry means "the current folder").
+fn without_dir(list: &std::ffi::OsStr, dir: &Path) -> Vec<std::path::PathBuf> {
+    std::env::split_paths(list)
+        .filter(|p| !p.as_os_str().is_empty() && !p.starts_with(dir))
+        .collect()
+}
+
+/// A script runs with the user's environment, not the AppImage's. The
+/// AppImage's AppRun points Python at its own folder (PYTHONHOME and
+/// PYTHONPATH into ~/apps/Plinky/usr) and puts its libraries first: the
+/// system python3 then found no standard library and died at start, "No
+/// module named 'encodings'" (owner, the unpacked AppImage).
+fn user_environment(cmd: &mut Command) {
+    cmd.env_remove("PYTHONHOME");
+    let Some(dir) = app_dir() else { return };
+    for var in ["LD_LIBRARY_PATH", "PATH", "XDG_DATA_DIRS"] {
+        if let Some(value) = std::env::var_os(var) {
+            match std::env::join_paths(without_dir(&value, &dir)) {
+                Ok(kept) if !kept.is_empty() => { cmd.env(var, kept); }
+                _ => { cmd.env_remove(var); }
+            }
+        }
+    }
+}
+
 /// How a script file is run: Python, a shell, PowerShell or cmd by its
 /// extension, anything else as a program of its own.
 fn command_for(path: &Path) -> Command {
@@ -110,10 +150,14 @@ pub fn start(
     std::fs::write(helper_dir.join("plinky.py"), HELPER).map_err(|e| format!("Couldn't write the script helper: {e}"))?;
     let mut python_path = vec![helper_dir.clone()];
     if let Some(existing) = std::env::var_os("PYTHONPATH") {
-        python_path.extend(std::env::split_paths(&existing));
+        match app_dir() {
+            Some(dir) => python_path.extend(without_dir(&existing, &dir)),
+            None => python_path.extend(std::env::split_paths(&existing).filter(|p| !p.as_os_str().is_empty())),
+        }
     }
 
     let mut cmd = command_for(script);
+    user_environment(&mut cmd);
     cmd.env("PYTHONPATH", std::env::join_paths(python_path).map_err(|e| e.to_string())?)
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONIOENCODING", "utf-8")
@@ -217,5 +261,22 @@ pub fn stop(app: &AppHandle, session_id: &str) {
     if let Some(run) = app.state::<Scripts>().0.lock().unwrap().get(session_id) {
         run.stopped.store(true, Ordering::Relaxed);
         let _ = run.child.lock().unwrap().kill();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_appimage_s_own_folders_are_left_out_of_a_script_s_paths() {
+        // What the unpacked AppImage handed its children: PYTHONPATH into its
+        // own usr/share/pyshared, and a trailing empty entry.
+        let dir = Path::new("/home/u/apps/Plinky");
+        let list = std::ffi::OsString::from("/home/u/apps/Plinky/usr/share/pyshared/:/home/u/lib/py:");
+        assert_eq!(without_dir(&list, dir), vec![std::path::PathBuf::from("/home/u/lib/py")]);
+        let path = std::ffi::OsString::from("/home/u/apps/Plinky/usr/bin:/usr/local/bin:/usr/bin");
+        assert_eq!(without_dir(&path, dir), vec![std::path::PathBuf::from("/usr/local/bin"), std::path::PathBuf::from("/usr/bin")]);
     }
 }

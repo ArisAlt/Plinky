@@ -12,9 +12,18 @@ import { startConsole, waitUntil } from '../lib/fixtures.mjs';
 
 export const title = 'Telnet console, opened the way GNS3 opens it';
 
-export async function setup() {
+export async function setup({ home }) {
   const r1 = await startConsole({ name: 'R1' });
+  // The environment the unpacked AppImage gives Plinky: its AppRun points
+  // Python into its own folder. A script's python3 must not inherit it
+  // (it died with "No module named 'encodings'").
+  const appDir = path.join(home, 'AppDir');
   return {
+    env: {
+      APPDIR: appDir,
+      PYTHONHOME: path.join(appDir, 'usr'),
+      PYTHONPATH: `${path.join(appDir, 'usr/share/pyshared')}/:`,
+    },
     args: ['--telnet', '127.0.0.1', String(r1.port), '--title', 'R1'],
     state: { r1 },
     cleanup: () => r1.stop(),
