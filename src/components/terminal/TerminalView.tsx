@@ -38,6 +38,7 @@ import {
   pickScriptFile,
   runScript,
   stopScript,
+  listenScriptStarted,
   listenScriptLog,
   listenScriptEnded,
   pastePaced,
@@ -458,6 +459,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     let disposed = false;
     const unlisten: (() => void)[] = [];
     const keep = (u: (() => void) | null) => { if (disposed) u?.(); else if (u) unlisten.push(u); };
+    void listenScriptStarted(e => {
+      if (e.sessionId === tab.id) setRunningScript(e.name);
+    }).then(keep);
     void listenScriptLog(e => {
       if (e.sessionId === tab.id) terminalRef.current?.write(`\r\n\x1b[2m[script] ${e.line}\x1b[0m\r\n`);
     }).then(keep);
@@ -478,7 +482,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const name = path.split(/[\\/]/).pop() || path;
     try {
       await runScript(tab.id, tab.sessionName, path);
-      setRunningScript(name);
       addEventLog(`Running script ${name}`, 'info');
     } catch (e) {
       terminalRef.current?.write(`\r\n\x1b[31m[Plinky: ${String(e)}]\x1b[0m\r\n`);

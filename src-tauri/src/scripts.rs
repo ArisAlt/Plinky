@@ -40,6 +40,13 @@ struct ScriptLog {
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ScriptStarted {
+    session_id: String,
+    name: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ScriptEnded {
     session_id: String,
     code: Option<i32>,
@@ -254,6 +261,10 @@ pub fn start(
         });
     }
 
+    // The page shows the running bar (and Stop) on this, however the script
+    // was started.
+    let name = script.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(path.clone());
+    let _ = app.emit("script:started", ScriptStarted { session_id, name });
     Ok(())
 }
 

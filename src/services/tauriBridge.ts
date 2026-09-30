@@ -1335,6 +1335,14 @@ export async function stopScript(sessionId: string): Promise<void> {
   await invoke('stop_script', { sessionId });
 }
 
+export async function listenScriptStarted(
+  callback: (e: { sessionId: string; name: string }) => void
+): Promise<(() => void) | null> {
+  if (!isTauriEnvironment()) return null;
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<{ sessionId: string; name: string }>('script:started', (event) => callback(event.payload));
+}
+
 export async function listenScriptLog(
   callback: (e: { sessionId: string; line: string }) => void
 ): Promise<(() => void) | null> {

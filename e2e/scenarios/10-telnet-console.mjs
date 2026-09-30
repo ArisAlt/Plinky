@@ -428,4 +428,29 @@ export const tests = [
     await app.waitForScreen('[script] got you typed: show clock', { timeoutMs: 8000 });
     await app.waitForScreen('[script finished]', { timeoutMs: 8000 });
   }, { timeoutMs: 30000 }],
+
+  ['Stop ends a script, sends Ctrl+C to what it started, and gives the keyboard back', async ({ app, r1, ctx }) => {
+    // A ping that never ends on Linux kept running after Stop, and the
+    // terminal took no keys until clicked (owner).
+    const script = path.join(ctx.home, 'forever.py');
+    fs.writeFileSync(script, 'from plinky import session\nimport time\nsession.send("ping 192.0.2.1")\ntime.sleep(120)\n');
+    r1.clear();
+    await app.run(async (e, file) => {
+      const id = document.querySelector('[data-tab-active="true"]').dataset.tabId;
+      return window.__TAURI_INTERNALS__.invoke('run_script', { sessionId: id, sessionName: 'R1', path: file });
+    }, script);
+    await r1.waitForLine('ping 192.0.2.1', { timeoutMs: 8000 });
+    await app.waitFor((e) => {
+      const b = [...document.querySelectorAll('[role="status"] button')].find((x) => x.textContent.trim() === 'Stop');
+      if (b) { b.focus(); e.click(b); }
+      return !!b;
+    }, [], { what: 'the Stop button' });
+    await r1.waitForBytes('\x03', { timeoutMs: 5000 });
+    await app.waitForScreen('[script stopped]', { timeoutMs: 5000 });
+    const focused = await app.run(() => document.activeElement?.classList.contains('xterm-helper-textarea'));
+    assert.equal(focused, true, 'the terminal has the keyboard again');
+    const bar = await app.run(() => [...document.querySelectorAll('[role="status"]')].some((x) => x.textContent.includes('Running')));
+    assert.equal(bar, false, 'the running bar is gone');
+  }, { timeoutMs: 30000 }],
 ];
+
