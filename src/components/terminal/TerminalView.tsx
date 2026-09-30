@@ -1948,7 +1948,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             <FileCode className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
             <span>Running {runningScript}</span>
             <button
-              onClick={() => { void stopScript(tab.id); }}
+              // Stop ends the script and sends Ctrl+C to what it started
+              // (scripts.rs); the keyboard goes back to the terminal, which
+              // was left on this button (owner).
+              onClick={() => { void stopScript(tab.id); terminalRef.current?.focus(); }}
               className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-rose-600/60 text-slate-200 text-meta"
             >
               Stop
