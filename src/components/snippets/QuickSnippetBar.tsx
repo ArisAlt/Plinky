@@ -8,6 +8,7 @@ import {
   ChevronUp, 
   ChevronDown, 
   Sparkles, 
+  Pencil,
   X
 } from 'lucide-react';
 
@@ -29,6 +30,34 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
   const [newName, setNewName] = useState('');
   const [newCommand, setNewCommand] = useState('');
   const [newCategory, setNewCategory] = useState<SnippetItem['category']>('Custom');
+  // The snippet being edited; null when the window creates a new one.
+  // Snippets could only be added and deleted: fixing a typo meant
+  // deleting it and typing it all again (owner request).
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setNewName('');
+    setNewCommand('');
+    setNewCategory('Custom');
+    setIsAddModalOpen(true);
+  };
+
+  const openEdit = (snippet: SnippetItem, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setEditingId(snippet.id);
+    setNewName(snippet.name);
+    // Stored with the Enter that runs it; shown without.
+    setNewCommand(snippet.command.replace(/\n$/, ''));
+    setNewCategory(snippet.category);
+    setIsAddModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsAddModalOpen(false);
+    setEditingId(null);
+  };
 
   const categories = ['All', 'System', 'Docker', 'Network', 'Logs', 'Custom'];
 
@@ -58,17 +87,16 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
     if (!newName.trim() || !newCommand.trim()) return;
 
     const formattedCommand = newCommand.endsWith('\n') ? newCommand : `${newCommand}\n`;
-    const newSnippet: SnippetItem = {
-      id: Date.now().toString(),
-      name: newName.trim(),
-      command: formattedCommand,
-      category: newCategory,
-    };
+    const edited = { name: newName.trim(), command: formattedCommand, category: newCategory };
 
-    updateSnippets(prev => [...prev, newSnippet]);
+    if (editingId) {
+      updateSnippets(prev => prev.map(s => (s.id === editingId ? { ...s, ...edited } : s)));
+    } else {
+      updateSnippets(prev => [...prev, { id: Date.now().toString(), ...edited }]);
+    }
     setNewName('');
     setNewCommand('');
-    setIsAddModalOpen(false);
+    closeModal();
   };
 
   const handleDeleteSnippet = (id: string, e: React.MouseEvent) => {
@@ -100,7 +128,8 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
               <button
                 key={snippet.id}
                 onClick={() => runSnippet(snippet)}
-                title={`Run: ${snippet.command.trim()} on ${activeSessionName || 'active terminal'}`}
+                onContextMenu={(e) => openEdit(snippet, e)}
+                title={`Run: ${snippet.command.trim()} on ${activeSessionName || 'active terminal'} (right-click to edit)`}
                 className="group flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-850 hover:bg-sky-600/30 border border-plinky-700 hover:border-sky-500/40 text-meta text-slate-300 hover:text-sky-200 transition whitespace-nowrap"
               >
                 <Play className="w-2.5 h-2.5 text-sky-400 opacity-60 group-hover:opacity-100" />
@@ -112,7 +141,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
 
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={openCreate}
             title="Create Custom Snippet"
             className="flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 text-meta transition"
           >
@@ -149,6 +178,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
               <div
                 key={snippet.id}
                 onClick={() => runSnippet(snippet)}
+                onContextMenu={(e) => openEdit(snippet, e)}
                 title={`Execute: ${snippet.command.trim()}`}
                 className="group relative flex flex-col p-2 rounded-lg bg-plinky-900 border border-plinky-800 hover:border-sky-500/50 hover:bg-plinky-850 cursor-pointer transition shadow-xs"
               >
@@ -156,6 +186,15 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                   <span className={`px-1.5 py-px rounded border text-meta font-medium ${getCategoryColor(snippet.category)}`}>
                     {snippet.category}
                   </span>
+                  <div className="flex items-center">
+                  <button
+                    onClick={(e) => openEdit(snippet, e)}
+                    aria-label={`Edit ${snippet.name}`}
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 text-plinky-muted hover:text-sky-300 transition"
+                    title="Edit Snippet"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
                   <button
                     onClick={(e) => handleDeleteSnippet(snippet.id, e)}
                     className="opacity-0 group-hover:opacity-100 p-0.5 text-plinky-muted hover:text-rose-400 transition"
@@ -163,6 +202,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                   >
                     <X className="w-3 h-3" />
                   </button>
+                  </div>
                 </div>
                 <span className="font-semibold text-slate-200 text-xs truncate group-hover:text-sky-300 transition">
                   {snippet.name}
@@ -193,10 +233,10 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             <div className="flex items-center justify-between mb-4 border-b border-plinky-800 pb-2">
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-4 h-4 text-slate-400" />
-                <h3 className="text-base font-semibold">Create Quick Snippet</h3>
+                <h3 className="text-base font-semibold">{editingId ? 'Edit Quick Snippet' : 'Create Quick Snippet'}</h3>
               </div>
               <button aria-label="Close"
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={closeModal}
                 className="p-1 text-slate-400 hover:text-white"
               >
                 <X className="w-4 h-4" />
@@ -251,7 +291,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
               <div className="flex justify-end space-x-2 pt-2 border-t border-plinky-800">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={closeModal}
                   className="px-3 py-1.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300 text-xs"
                 >
                   Cancel
@@ -260,7 +300,7 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
                   type="submit"
                   className="px-3 py-1.5 rounded bg-sky-700 hover:brightness-110 text-on-accent font-medium text-xs shadow-xs"
                 >
-                  Save Snippet
+                  {editingId ? 'Save Changes' : 'Save Snippet'}
                 </button>
               </div>
             </form>

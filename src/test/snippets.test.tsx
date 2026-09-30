@@ -57,6 +57,31 @@ describe('the snippet bar', () => {
 
   const open = () => fireEvent.click(screen.getByText('Quick Snippets'));
 
+  it('edits a snippet in place, from its pencil or a right click on its chip', () => {
+    // Snippets could only be added or deleted; a typo meant typing it all
+    // again (owner request).
+    const run = vi.fn();
+    render(<QuickSnippetBar onExecuteSnippet={run} />);
+    open();
+    fireEvent.click(screen.getByLabelText('Edit No paging'));
+    expect(screen.getByText('Edit Quick Snippet')).toBeTruthy();
+    const command = screen.getByLabelText('Command String') as HTMLTextAreaElement;
+    expect(command.value).toBe('terminal length 0');
+    fireEvent.change(command, { target: { value: 'terminal length 0\nterminal width 200' } });
+    fireEvent.click(screen.getByText('Save Changes'));
+
+    const saved = loadSnippets();
+    const edited = saved.filter((s) => s.name === 'No paging');
+    expect(edited).toHaveLength(1);
+    expect(edited[0].command).toBe('terminal length 0\nterminal width 200\n');
+    expect(saved).toHaveLength(DEFAULT_SNIPPETS.length);
+
+    // The chip in the collapsed bar opens the same window on a right click.
+    fireEvent.contextMenu(screen.getAllByText('No paging')[0]);
+    expect((screen.getByLabelText('Command String') as HTMLTextAreaElement).value).toBe('terminal length 0\nterminal width 200');
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('runs a snippet without parameters straight away', () => {
     const run = vi.fn();
     render(<QuickSnippetBar onExecuteSnippet={run} />);
