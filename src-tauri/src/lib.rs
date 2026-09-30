@@ -163,8 +163,8 @@ fn run_script(
 }
 
 #[tauri::command]
-fn stop_script(app: tauri::AppHandle, session_id: String) {
-    scripts::stop(&app, &session_id);
+fn stop_script(app: tauri::AppHandle, registry: State<'_, Arc<SessionRegistry>>, session_id: String) {
+    scripts::stop(&app, &registry, &session_id);
 }
 
 /// Asks for a .ppk file. The Host Keys screen's "Inspect .ppk" used a

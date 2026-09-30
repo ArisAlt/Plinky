@@ -257,10 +257,21 @@ pub fn start(
     Ok(())
 }
 
-pub fn stop(app: &AppHandle, session_id: &str) {
-    if let Some(run) = app.state::<Scripts>().0.lock().unwrap().get(session_id) {
-        run.stopped.store(true, Ordering::Relaxed);
-        let _ = run.child.lock().unwrap().kill();
+/// Ends the script, then sends Ctrl+C to the session: what the script
+/// started on the device (a ping that never ends on Linux, a login to the
+/// next device) kept running after Stop until Ctrl+C was pressed by hand
+/// (owner). A script that ends by itself leaves the session alone.
+pub fn stop(app: &AppHandle, registry: &SessionRegistry, session_id: &str) {
+    let running = {
+        let scripts = app.state::<Scripts>();
+        let map = scripts.0.lock().unwrap();
+        map.get(session_id).map(|run| {
+            run.stopped.store(true, Ordering::Relaxed);
+            let _ = run.child.lock().unwrap().kill();
+        })
+    };
+    if running.is_some() {
+        let _ = registry.write_input(session_id, b"\x03");
     }
 }
 
