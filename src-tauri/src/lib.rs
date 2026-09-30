@@ -1,6 +1,7 @@
 mod cli;
 #[cfg(unix)]
 mod handoff;
+mod scripts;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -129,6 +130,41 @@ async fn remove_putty_hostkey(key_type: String, hostname: String, port: u16) -> 
         putty_compat::remove_host_key(&key_type, &hostname, port)
             .map_err(|e| format!("Failed to remove the host key for {hostname}:{port}: {e}"))
     }).await?
+}
+
+/// Asks for a script to run on a terminal (Run Script).
+#[tauri::command]
+async fn pick_script_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Run a script on this session")
+        .add_filter("Scripts", &["py", "sh", "ps1", "bat", "cmd"])
+        .add_filter("All files", &["*"])
+        .pick_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx.await.map_err(|_| "The file dialog closed unexpectedly".to_string())? else {
+        return Ok(None);
+    };
+    Ok(Some(picked.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn run_script(
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<SessionRegistry>>,
+    session_id: String,
+    session_name: String,
+    path: String,
+) -> Result<(), String> {
+    scripts::start(&app, registry.inner().clone(), session_id, session_name, path)
+}
+
+#[tauri::command]
+fn stop_script(app: tauri::AppHandle, session_id: String) {
+    scripts::stop(&app, &session_id);
 }
 
 /// Asks for a .ppk file. The Host Keys screen's "Inspect .ppk" used a
@@ -1641,6 +1677,7 @@ pub fn run() {
         .manage(VaultState::new())
         .manage(PasteJobs::default())
         .manage(ConnectedSessions::default())
+        .manage(scripts::Scripts::default())
         .setup(move |app| {
             // The first launch's own consoles connect while the page loads.
             open_console_requests(app.handle(), startup_requests);
@@ -1676,6 +1713,9 @@ pub fn run() {
             take_open_requests,
             is_session_connected,
             is_session_ended,
+            pick_script_file,
+            run_script,
+            stop_script,
             read_clipboard_text,
             write_clipboard_text,
             paste_paced,

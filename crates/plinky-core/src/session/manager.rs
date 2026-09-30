@@ -53,6 +53,16 @@ pub fn starts_live(
     }
 }
 
+impl ActiveSession {
+    fn feed_tap(&mut self, chunk: &[u8]) {
+        if let Some(tap) = &self.tap {
+            if let Err(std::sync::mpsc::TrySendError::Disconnected(_)) = tap.try_send(chunk.to_vec()) {
+                self.tap = None;
+            }
+        }
+    }
+}
+
 pub struct ActiveSession {
     pub id: String,
     pub name: String,
@@ -73,6 +83,10 @@ pub struct ActiveSession {
     /// Answers the jump host's and the final host's password prompts, for a
     /// session through a jump host (see `jump_login`). Dropped once Live.
     pub jump_login: Option<super::jump_login::JumpLogin>,
+    /// A copy of the output for a script running on this session (Run
+    /// Script). Bounded: a script that stops reading loses output rather
+    /// than holding up the session.
+    pub tap: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
     /// A jump through a device's CLI (see `expect`): runs its steps on the
     /// output, before and after Live, until done or stopped.
     pub expect: Option<super::expect::Expect>,
@@ -186,6 +200,7 @@ impl SessionRegistry {
                     let mut lock = registry_clone.sessions.lock().unwrap();
                     if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
                         session.scrollback.push(&chunk);
+                        session.feed_tap(&chunk);
                         // PuTTY-style "all session output" logging: every raw
                         // byte the PTY produces, regardless of PreAuth/Live
                         // state -- a failed write just leaves the session
@@ -292,6 +307,7 @@ impl SessionRegistry {
             instance,
             jump_login: None,
             expect: None,
+            tap: None,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -411,6 +427,7 @@ impl SessionRegistry {
                     let mut lock = registry_clone.sessions.lock().unwrap();
                     if let Some(session) = lock.get_mut(&id_for_task).filter(|s| s.instance == instance) {
                         session.scrollback.push(&chunk);
+                        session.feed_tap(&chunk);
                         if let Some(log) = session.log.as_mut() {
                             // A log that can't be written any more (disk
                             // full, drive gone) is closed, not retried per
@@ -604,6 +621,7 @@ impl SessionRegistry {
             instance,
             jump_login,
             expect,
+            tap: None,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -872,6 +890,15 @@ impl SessionRegistry {
     /// The process making the session's connection (plink), if it has one.
     pub fn process_id(&self, id: &str) -> Option<u32> {
         self.sessions.lock().unwrap().get(id)?.transport.process_id()
+    }
+
+    /// Sends a copy of the session's output to a script from now on, or
+    /// stops when `tap` is None.
+    pub fn set_output_tap(&self, id: &str, tap: Option<std::sync::mpsc::SyncSender<Vec<u8>>>) -> Result<()> {
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        session.tap = tap;
+        Ok(())
     }
 
     /// Whether the session's process has exited or the session was closed.

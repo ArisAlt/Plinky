@@ -6,6 +6,8 @@
 // keys "ESC[n~"), because that is what the devices on the other end, and
 // the people using them, are used to.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { startConsole, waitUntil } from '../lib/fixtures.mjs';
 
 export const title = 'Telnet console, opened the way GNS3 opens it';
@@ -394,4 +396,27 @@ export const tests = [
     await waitUntil(() => r1.connections === before + 1, { what: 'a new connection', timeoutMs: 5000 });
     await app.waitForTab('R1', 'live', { timeoutMs: 3000 });
   }],
+
+  ['a Python script runs on the session: it types, reads the reply, and its notes show', async ({ app, r1, ctx }) => {
+    // Run Script (scripts.rs): the script's stdout goes to the device, the
+    // device's output to its stdin, its stderr to the terminal.
+    const script = path.join(ctx.home, 'clock.py');
+    fs.writeFileSync(script, [
+      'from plinky import session',
+      'reply = session.command("show clock")',
+      'session.log("got", reply.strip())',
+      '',
+    ].join('\n'));
+    await app.waitForTab('R1', 'live', { timeoutMs: 5000 });
+    r1.clear();
+    // The page's own call, as the menu makes it once a file is picked.
+    await app.run(async (e, file) => {
+      const active = e.tabs().find((t) => t.active);
+      const id = [...document.querySelectorAll('[data-tab-status]')].find((el) => el.dataset.tabActive === 'true')?.dataset.tabId;
+      return window.__TAURI_INTERNALS__.invoke('run_script', { sessionId: id, sessionName: active.title, path: file });
+    }, script);
+    await r1.waitForLine('show clock', { timeoutMs: 8000 });
+    await app.waitForScreen('[script] got you typed: show clock', { timeoutMs: 8000 });
+    await app.waitForScreen('[script finished]', { timeoutMs: 8000 });
+  }, { timeoutMs: 30000 }],
 ];

@@ -35,6 +35,11 @@ import {
   readPuttySession,
   listenSessionConnected,
   isSessionConnected,
+  pickScriptFile,
+  runScript,
+  stopScript,
+  listenScriptLog,
+  listenScriptEnded,
   pastePaced,
   cancelPaste,
   listenPasteProgress,
@@ -58,6 +63,7 @@ import { terminalShortcut, keySequenceFor } from '../../services/shortcuts';
 import { readClipboard, writeClipboard } from '../../services/clipboard';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
+  FileCode,
   Radio,
   Sparkles,
   ShieldAlert, 
@@ -414,6 +420,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // paste is sent one line at a time by the backend (paste_paced).
   const pasteDelayRef = useRef(0);
   const [pasteJob, setPasteJob] = useState<{ sent: number; total: number } | null>(null);
+  // Run Script (scripts.rs): the script running on this tab, by file name.
+  const [runningScript, setRunningScript] = useState<string | null>(null);
   const autoReconnectRef = useRef(false);
 
   useEffect(() => {
@@ -444,6 +452,40 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }).then(u => { if (disposed) u?.(); else unlisten = u; });
     return () => { disposed = true; unlisten?.(); };
   }, [tab.id]);
+
+  // A script's notes (its stderr) and its end, shown in the terminal only.
+  useEffect(() => {
+    let disposed = false;
+    const unlisten: (() => void)[] = [];
+    const keep = (u: (() => void) | null) => { if (disposed) u?.(); else if (u) unlisten.push(u); };
+    void listenScriptLog(e => {
+      if (e.sessionId === tab.id) terminalRef.current?.write(`\r\n\x1b[2m[script] ${e.line}\x1b[0m\r\n`);
+    }).then(keep);
+    void listenScriptEnded(e => {
+      if (e.sessionId !== tab.id) return;
+      setRunningScript(null);
+      const how = e.stopped ? 'stopped' : e.code === 0 ? 'finished' : `ended with code ${e.code ?? '?'}`;
+      terminalRef.current?.write(`\r\n\x1b[2m[script ${how}]\x1b[0m\r\n`);
+      addEventLog(`Script ${how}`, e.stopped || e.code === 0 ? 'info' : 'warn');
+    }).then(keep);
+    return () => { disposed = true; unlisten.forEach(u => u()); };
+  }, [tab.id]);
+
+  const handleRunScript = async () => {
+    setContextMenu(null);
+    const path = await pickScriptFile();
+    if (!path) return;
+    const name = path.split(/[\\/]/).pop() || path;
+    try {
+      await runScript(tab.id, tab.sessionName, path);
+      setRunningScript(name);
+      addEventLog(`Running script ${name}`, 'info');
+    } catch (e) {
+      terminalRef.current?.write(`\r\n\x1b[31m[Plinky: ${String(e)}]\x1b[0m\r\n`);
+      addEventLog(String(e), 'error');
+    }
+    terminalRef.current?.focus();
+  };
 
   /** Every paste goes through here: paced when the session asks for it. */
   const pasteText = async (text: string) => {
@@ -1901,6 +1943,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         )}
 
         {/* Paced paste in progress (T-015): how far, and a way to stop it. */}
+        {runningScript && (
+          <div role="status" className="absolute bottom-3 left-3 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-sky-500/60 text-sky-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
+            <FileCode className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+            <span>Running {runningScript}</span>
+            <button
+              onClick={() => { void stopScript(tab.id); }}
+              className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-rose-600/60 text-slate-200 text-meta"
+            >
+              Stop
+            </button>
+          </div>
+        )}
+
         {pasteJob && (
           <div role="status" className="absolute bottom-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-sky-500/60 text-sky-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
             <Clipboard className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
@@ -2100,6 +2155,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               >
                 <Copy className="w-3.5 h-3.5 text-slate-400" />
                 <span>Duplicate Session</span>
+              </button>
+            )}
+            {isTauriEnvironment() && tab.status !== 'disconnected' && !runningScript && (
+              <button
+                onClick={() => { void handleRunScript(); }}
+                className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+              >
+                <FileCode className="w-3.5 h-3.5 text-slate-400" />
+                <span>Run Script...</span>
               </button>
             )}
             {onOpenSettings && (

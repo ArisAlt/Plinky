@@ -654,6 +654,7 @@ export const App: React.FC = () => {
                         // Read by the end-to-end suite (e2e/): the status
                         // icon alone does not name the state.
                         data-tab-status={tab.status}
+                        data-tab-id={tab.id}
                         data-tab-active={isActive}
                         style={broadcastLit.has(tab.id) ? { boxShadow: `0 0 0 1px ${glowColor(tab.syncChannel)}, 0 0 10px ${glowColor(tab.syncChannel)}` } : undefined}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${

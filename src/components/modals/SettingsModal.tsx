@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle, Keyboard } from 'lucide-react';
+import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle, Keyboard, FileCode } from 'lucide-react';
 import { UI_THEMES, applyUiTheme, useUiTheme } from '../../themes/uiThemes';
 import { TERMINAL_THEMES, MATCH_INTERFACE, setTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
 import { TERMINAL_FONTS } from '../../themes/fonts';
@@ -386,6 +386,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               ))}
             </dl>
             <p className="text-meta text-plinky-muted">Ctrl+C and Ctrl+V go to the device, as in PuTTY.</p>
+          </div>
+
+          {/* Section: Scripts (src-tauri/src/scripts.rs, scripting/plinky.py) */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
+              <FileCode className="w-3.5 h-3.5 text-slate-400" />
+              <span>Scripts</span>
+            </div>
+            <div className="p-3 bg-plinky-950 rounded border border-plinky-800 space-y-2 text-meta text-slate-300 leading-relaxed">
+              <p>
+                Right-click a terminal and choose <strong>Run Script...</strong> to run a script on that session.
+                What the script prints is typed into the session, and what the device prints is the script's input.
+                Anything it writes to stderr shows in the terminal as a note and is not sent. <strong>Stop</strong> ends it.
+              </p>
+              <p>
+                Python (<code>.py</code>) runs with <code>python3</code> (<code>python</code> on Windows); <code>.sh</code> with bash,
+                {' '}<code>.ps1</code> with PowerShell, <code>.bat</code>/<code>.cmd</code> with cmd; anything else as a program.
+              </p>
+              <pre className="p-2 rounded bg-plinky-900 border border-plinky-800 font-mono text-slate-200 overflow-x-auto">{`from plinky import session
+
+session.send("terminal length 0")
+session.wait_for_prompt()
+config = session.command("show running-config")
+open("backup.txt", "w").write(config)
+session.log("saved", len(config), "characters")`}</pre>
+              <p>
+                <code>send(text)</code> types a line; <code>expect(regex)</code> waits for output;
+                {' '}<code>wait_for_prompt()</code> waits for <code>#</code>, <code>&gt;</code> or <code>$</code>;
+                {' '}<code>command(cmd)</code> returns a command's output; <code>log(...)</code> writes a note.
+                Scripts never see the vault.
+              </p>
+            </div>
           </div>
 
           {/* Section: PuTTY Environment */}
