@@ -374,8 +374,28 @@ mod tests {
         #[cfg(windows)]
         let mut child = std::process::Command::new("ping").args(["-n", "3", "127.0.0.1"])
             .stdout(std::process::Stdio::null()).spawn().unwrap();
+        // Started the way portable_pty starts plink: stdio only, every other
+        // descriptor closed. A plain spawn hands the child whatever this
+        // process inherited without close-on-exec. On the CI runner, sleep
+        // was seen holding an established connection on 2 of 3 runs
+        // (Some(true)), most likely one the runner left open.
         #[cfg(not(windows))]
-        let mut child = std::process::Command::new("sleep").arg("2").spawn().unwrap();
+        let mut child = {
+            use std::os::unix::process::CommandExt;
+            let mut cmd = std::process::Command::new("sleep");
+            cmd.arg("2")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            // SAFETY: close_range is a single async-signal-safe system call.
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32);
+                    Ok(())
+                });
+            }
+            cmd.spawn().unwrap()
+        };
         assert_eq!(has_established_tcp(child.id()), Some(false));
         let _ = child.kill();
         let _ = child.wait();

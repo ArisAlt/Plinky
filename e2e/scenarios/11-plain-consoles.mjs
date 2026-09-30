@@ -66,6 +66,28 @@ const lineTests = (label, stateKey, title) => [
     await sleep(150);
     assert.deepEqual(con.lines, ['show clock'], `the router received ${JSON.stringify(con.text())}`);
   }],
+
+  [`${label}: the echo looks like PuTTY's: Backspace erases, no ^? ^M ^J or ^[[A`, async ({ app, ...s }) => {
+    // The pty echoed control keys as ^X: "shw^?ow clock^M^J", and Up as
+    // ^[[A. Plinky echoes these consoles itself now, as PuTTY does.
+    const con = s[stateKey];
+    await showTab(app, title);
+    con.clear();
+    await app.type('shw');
+    await app.key('Backspace');
+    await app.type('ow ip');
+    await app.key('Up');
+    await sleep(200);
+    const typed = (await app.screen()).filter((l) => l.trim()).at(-1);
+    assert.match(typed, />show ip$/, 'Backspace erased the w and Up showed nothing');
+    await app.key('Enter');
+    // Up went to the console as typed (its line holds the arrow's "[A").
+    await waitUntil(() => con.lines.length > 0, { what: 'a line', timeoutMs: 3000 });
+    assert.ok(con.lines[0].startsWith('show ip'), JSON.stringify(con.lines));
+    await app.waitForScreen('you typed: show ip');
+    const screen = (await app.screen()).join('\n');
+    assert.doesNotMatch(screen, /\^[?MJ[]/, `no control characters echoed as ^X:\n${screen}`);
+  }],
 ];
 
 export const tests = [
