@@ -3108,12 +3108,13 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "windows-sys 0.52.0",
  "zeroize",
 ]
 
 [[package]]
 name = "plinky-desktop"
-version = "0.1.27"
+version = "0.1.28"
 dependencies = [
  "libc",
  "plinky-core",

@@ -27,6 +27,19 @@ tempfile = "3.10"
 # Export the vault to a KeePass (KDBX4) database.
 keepass = { version = "0.15", features = ["save_kdbx4"] }
 
+[target.'cfg(windows)'.dependencies]
+# Overlapped serial I/O, as PuTTY does it (transport/serial.rs). The version
+# serialport already uses, so nothing new is downloaded.
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Devices_Communication",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+
 [target.'cfg(unix)'.dependencies]
 # Reads and sets the pty's termios (character mode for telnet/raw consoles).
 libc = "0.2"

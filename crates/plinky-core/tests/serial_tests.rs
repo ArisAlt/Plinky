@@ -159,3 +159,43 @@ fn test_missing_device_is_a_clear_error() {
         .unwrap_err();
     assert!(err.to_string().contains("/dev/plinky-no-such-tty"), "{err}");
 }
+
+#[tokio::test]
+async fn test_a_typed_key_reaches_the_device_and_echoes_back_without_waiting() {
+    // A report: "the echo on the serial has lag". Each key is sent on its
+    // own, as the terminal sends it, while the line is idle; the device
+    // echoes it. The time from the keystroke to its echo in the terminal is
+    // the lag a user sees. A pty answers in well under a millisecond, so
+    // anything near the reader's 100 ms timeout is the transport waiting.
+    let (mut device, path) = fake_device();
+    device.set_timeout(Duration::from_millis(5)).unwrap();
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    registry.create_serial_session("echo", "Console", &config_for(&path), None, tx).unwrap();
+
+    let echo = std::thread::spawn(move || {
+        let mut buf = [0u8; 64];
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut echoed = 0;
+        while echoed < 20 && Instant::now() < deadline {
+            if let Ok(n) = device.read(&mut buf) {
+                device.write_all(&buf[..n]).unwrap();
+                echoed += n;
+            }
+        }
+    });
+
+    let mut worst = Duration::ZERO;
+    for key in b"show ip int brief\r\r\r".iter().take(20) {
+        // Idle line: the reader is mid-wait when the key is typed.
+        tokio::time::sleep(Duration::from_millis(37)).await;
+        let started = Instant::now();
+        registry.write_input("echo", &[*key]).unwrap();
+        let got = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await;
+        assert!(matches!(got, Ok(Some(ref c)) if c.contains(key)), "no echo for {:?}: {got:?}", *key as char);
+        worst = worst.max(started.elapsed());
+    }
+    echo.join().unwrap();
+    assert!(worst < Duration::from_millis(30), "a key took {worst:?} to echo");
+    registry.close_session("echo").unwrap();
+}
