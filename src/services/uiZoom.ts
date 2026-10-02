@@ -5,6 +5,8 @@ import { isTauriEnvironment } from './tauriBridge';
 // or for tired eyes that is too small, and the terminal's own font size
 // setting never reached the chrome around it. Scaling the whole webview keeps
 // every ratio of the type scale intact instead of adding a second scale.
+// Set in Settings only: Ctrl+Shift+=/- change the terminal's font size
+// (terminalFontKeys.ts).
 
 const STORAGE_KEY = 'plinky_ui_zoom';
 const CHANGE_EVENT = 'plinky:ui-zoom';
@@ -55,20 +57,6 @@ export const zoomIn = () => setUiZoom(current + STEP);
 export const zoomOut = () => setUiZoom(current - STEP);
 export const zoomReset = () => setUiZoom(1);
 
-/** Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0. Shift keeps plain Ctrl+-
- *  and Ctrl+0 for the shell, where readline and tmux users bind them. The
- *  listener captures, so a focused terminal cannot swallow it. */
-export function handleZoomKey(e: KeyboardEvent): boolean {
-  if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return false;
-  if (e.code === 'Equal' || e.code === 'NumpadAdd') zoomIn();
-  else if (e.code === 'Minus' || e.code === 'NumpadSubtract') zoomOut();
-  else if (e.code === 'Digit0' || e.code === 'Numpad0') zoomReset();
-  else return false;
-  e.preventDefault();
-  e.stopPropagation();
-  return true;
-}
-
 let initialised = false;
 
 export function initUiZoom() {
@@ -76,7 +64,6 @@ export function initUiZoom() {
   initialised = true;
   current = readStored();
   if (current !== 1) apply(current).catch((e) => console.warn('UI zoom failed:', e));
-  window.addEventListener('keydown', handleZoomKey, true);
 }
 
 export function useUiZoom(): number {

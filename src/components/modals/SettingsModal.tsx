@@ -3,6 +3,7 @@ import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Tra
 import { UI_THEMES, applyUiTheme, useUiTheme } from '../../themes/uiThemes';
 import { TERMINAL_THEMES, MATCH_INTERFACE, setTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
 import { TERMINAL_FONTS } from '../../themes/fonts';
+import { TERMINAL_FONT_MIN, TERMINAL_FONT_MAX } from '../../services/terminalFontKeys';
 import { useUiZoom, zoomIn, zoomOut, zoomReset, UI_ZOOM_MIN, UI_ZOOM_MAX } from '../../services/uiZoom';
 import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
 import { usePasteConfirmMode, setPasteConfirmMode, PasteConfirmMode } from '../../services/pasteConfirm';
@@ -157,7 +158,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-slate-300 font-semibold">Interface size</div>
-                <div className="text-meta text-plinky-muted">Ctrl+Shift+= / Ctrl+Shift+- · Ctrl+Shift+0 resets</div>
+                <div className="text-meta text-plinky-muted">Sessions, tabs and dialogs. Set here only.</div>
               </div>
               <div className="flex items-center gap-1" role="group" aria-label="Interface size">
                 <button type="button" onClick={zoomOut} disabled={uiZoom <= UI_ZOOM_MIN} aria-label="Smaller interface"
@@ -253,11 +254,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Font Size & Cursor Style */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label htmlFor="settings-modal-font-size-px" className="text-meta text-slate-400 font-medium">Font Size ({fontSize}px)</label>
+                <label htmlFor="settings-modal-font-size-px" className="text-meta text-slate-400 font-medium" title="Ctrl+Shift+= / Ctrl+Shift+- · Ctrl+Shift+0 resets">Font Size ({fontSize}px)</label>
                 <input id="settings-modal-font-size-px"
                   type="range"
-                  min="10"
-                  max="24"
+                  min={TERMINAL_FONT_MIN}
+                  max={TERMINAL_FONT_MAX}
                   step="1"
                   value={fontSize}
                   onChange={(e) => onChangeFontSize(parseInt(e.target.value, 10))}

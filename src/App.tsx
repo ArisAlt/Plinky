@@ -25,6 +25,7 @@ import { TabTitle } from './components/layout/TabTitle';
 import { getRecentSessions, recordRecentSession } from './services/recentSessions';
 import { useBroadcastGlow, glowColor } from './services/broadcast';
 import { SettingsModal } from './components/modals/SettingsModal';
+import { fontSizeForKey, TERMINAL_FONT_MIN, TERMINAL_FONT_MAX, TERMINAL_FONT_DEFAULT } from './services/terminalFontKeys';
 import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
   X, 
@@ -99,8 +100,8 @@ export const App: React.FC = () => {
   const [terminalFontSize, setFontSizeState] = useState<number>(() => {
     try {
       const n = Number(localStorage.getItem('plinky_terminal_font_size'));
-      return n >= 8 && n <= 32 ? n : 14;
-    } catch { return 14; }
+      return n >= TERMINAL_FONT_MIN && n <= TERMINAL_FONT_MAX ? n : TERMINAL_FONT_DEFAULT;
+    } catch { return TERMINAL_FONT_DEFAULT; }
   });
   const setTerminalFontFamily = (stack: string) => {
     try { localStorage.setItem('plinky_terminal_font', stack); } catch { /* not remembered */ }
@@ -112,6 +113,24 @@ export const App: React.FC = () => {
     try { localStorage.setItem('plinky_terminal_font_size', String(n)); } catch { /* not remembered */ }
     setFontSizeState(n);
   };
+  // Ctrl+Shift+=/-/0 (terminalFontKeys.ts). Captured, so a focused terminal
+  // can't swallow them; the ref keeps the listener on the current size.
+  const fontSizeRef = useRef(terminalFontSize);
+  fontSizeRef.current = terminalFontSize;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const n = fontSizeForKey(e, fontSizeRef.current);
+      if (n === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (n === fontSizeRef.current) return;
+      fontSizeRef.current = n;
+      try { localStorage.setItem('plinky_terminal_font_size', String(n)); } catch { /* not remembered */ }
+      setFontSizeState(n);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
   const [terminalCursorStyle, setTerminalCursorStyle] = useState<'block' | 'bar' | 'underline'>('bar');
   // The session picked with a session's SFTP button. Without one, SFTP
   // follows the active terminal tab. (It used to default to a hardcoded

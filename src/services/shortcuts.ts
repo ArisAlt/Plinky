@@ -81,6 +81,6 @@ export const SHORTCUT_LIST: { keys: string[]; action: string }[] = [
   { keys: ['Ctrl+Shift+W'], action: 'Close the tab' },
   { keys: ['Ctrl+Shift+O'], action: 'Search sessions' },
   { keys: ['Ctrl+Shift+B'], action: 'Show or hide the broadcast bar' },
-  { keys: ['Ctrl+Shift+=', 'Ctrl+Shift+-'], action: 'Make the interface larger or smaller' },
-  { keys: ['Ctrl+Shift+0'], action: 'Reset the interface size' },
+  { keys: ['Ctrl+Shift+=', 'Ctrl+Shift+-'], action: 'Make the terminal text larger or smaller' },
+  { keys: ['Ctrl+Shift+0'], action: 'Reset the terminal text size' },
 ];
