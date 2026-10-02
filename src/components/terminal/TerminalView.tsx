@@ -571,6 +571,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     highlighterRef.current?.setEnabled(tab.activeHighlighting !== false);
   }, [tab.activeHighlighting]);
   const reachedLiveRef = useRef(false);
+  // The tab's broadcast channel, for a reconnect to put the session back on.
+  const syncChannelRef = useRef(tab.syncChannel);
+  syncChannelRef.current = tab.syncChannel;
   const sshBannerToldRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -930,6 +933,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       .then(u => { if (disposed) u?.(); else unlistenConnected = u; });
 
     const startFresh = () => {
+      // A reconnect closed the old session, which took it off its channel.
+      setSyncChannel(tab.id, syncChannelRef.current === 'none' ? null : syncChannelRef.current);
       // Fresh start
       addEventLog(isLocalSession
         ? 'Starting local shell'
@@ -1202,7 +1207,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (unlistenPrompts) {
         unlistenPrompts();
       }
-      setSyncChannel(tab.id, null);
+      // The session keeps its broadcast channel: unmounting is switching
+      // tabs, not leaving the channel. Clearing it here left every tab not
+      // on screen -- and the one on screen, after one round trip -- off its
+      // channel in the backend while its badge still said B: "Not sent: no
+      // live session on CH-B" with two live routers on B. Closing the tab
+      // takes it off (the backend's close_session).
       terminalManager.unregisterTerminal(tab.id);
       // Nothing will draw this session's output now: let it run into
       // scrollback rather than wait for acknowledgements (ADR-006).
@@ -1495,10 +1505,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const chooseChannel = (nextChannel: SyncChannel) => {
     setChannelMenuOpen(false);
-    onUpdateTab(tab.id, { syncChannel: nextChannel });
+    onUpdateTab(tab.id, { syncChannel: nextChannel }); // the effect below tells the backend
     terminalManager.setSyncChannel(tab.id, nextChannel);
-    setSyncChannel(tab.id, nextChannel === 'none' ? null : nextChannel);
   };
+
+  // The backend's router decides who gets a broadcast; the tab's channel is
+  // what the user chose. Told on every mount (a tab shown again, a restored
+  // layout) and on every change, so the two can't drift apart.
+  useEffect(() => {
+    void setSyncChannel(tab.id, tab.syncChannel === 'none' ? null : tab.syncChannel);
+  }, [tab.id, tab.syncChannel]);
 
   const handleInjectHooks = async (shell: HookShell) => {
     setHooksError(null);
