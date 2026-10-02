@@ -19,6 +19,7 @@ import {
   Lock,
   Play,
   Copy,
+  ArrowDownAZ,
 } from 'lucide-react';
 import {
   getUserFolders,
@@ -47,6 +48,7 @@ import {
 } from '../../services/folderTree';
 import { setSessionFolders, deletePuttySession, readPuttySession, writePuttySession, copyName } from '../../services/tauriBridge';
 import { askConfirm } from '../../services/confirm';
+import { getSessionOrder, placeSession, clearFolderOrder, hasFolderOrder, rebaseFolderOrder } from '../../services/sessionOrder';
 import { STATUS_DOT, STATUS_TEXT, bestStatus } from '../../services/sessionStatus';
 
 /** Shared by every row without a tab, so it needs no allocation. */
@@ -75,6 +77,10 @@ type FolderEdit =
   | { mode: 'new-sub'; path: string; value: string }
   | { mode: 'rename'; path: string; value: string };
 
+/** dragOverFolder's value while a session is over "Drop here for a new
+ *  folder": not a folder path (a path can't hold a NUL). */
+const NEW_FOLDER_DROP = '\u0000new';
+
 /** "Corp 1/Site 1" shown as "Corp 1 / Site 1". */
 const displayPath = (path: string) => path.split('/').join(' / ');
 
@@ -102,6 +108,10 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [newFolderInput, setNewFolderInput] = useState('');
   const [dragging, setDragging] = useState<Dragging | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  // Where a dragged session would land among the rows: before or after one.
+  const [dropMark, setDropMark] = useState<{ name: string; after: boolean } | null>(null);
+  // A session dropped on "New folder": it moves there once the folder is named.
+  const [pendingMove, setPendingMove] = useState<PuttySession | null>(null);
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [createFolderName, setCreateFolderName] = useState('');
   const [folderEdit, setFolderEdit] = useState<FolderEdit | null>(null);
@@ -273,7 +283,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   // User-created folders (kept even when empty) plus every folder a session
   // names, nested by path.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const tree = React.useMemo(() => buildFolderTree(getUserFolders(), sessions), [sessions, folderVersion]);
+  const tree = React.useMemo(() => buildFolderTree(getUserFolders(), sessions, getSessionOrder()), [sessions, folderVersion]);
 
   /** The folder node at `path`, for opening its menu from the keyboard. */
   const findFolderNode = (path: string): FolderNode | undefined => {
@@ -344,6 +354,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
       // follow once every session file has changed.
       await setSessionFolders(plan.sessionChanges);
       setUserFolders(plan.userFolders);
+      rebaseFolderOrder(from, to);
       updateCollapsed(rebaseCollapsed(collapsedFolders, from, to));
       setFolderVersion(v => v + 1);
       await onFoldersChanged?.();
@@ -435,6 +446,36 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     },
   });
 
+  /** Dropping a dragged session on row `target`: it goes before or after
+   *  it, into `target`'s folder if it came from another one. */
+  const sessionRowDrop = (target: PuttySession) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (dragging?.kind !== 'session') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const r = e.currentTarget.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height / 2;
+      setDragOverFolder(null);
+      setDropMark(m => (m?.name === target.name && m.after === after ? m : { name: target.name, after }));
+    },
+    onDragLeave: () => setDropMark(m => (m?.name === target.name ? null : m)),
+    onDrop: (e: React.DragEvent) => {
+      if (dragging?.kind !== 'session') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const moved = dragging.session;
+      const after = dropMark?.name === target.name ? dropMark.after : false;
+      setDropMark(null);
+      setDragging(null);
+      if (moved.name === target.name) return;
+      const folder = sessionFolder(target);
+      const shown = (findFolderNode(folder)?.sessions ?? []).map(x => x.name);
+      placeSession(folder, shown, moved.name, target.name, after);
+      if (sessionFolder(moved) !== folder) onMoveToFolder(moved, folder);
+      setFolderVersion(v => v + 1);
+    },
+  });
+
   const getProtocolBadge = (protocol: string) => {
     switch (protocol) {
       case 'SSH':
@@ -491,7 +532,9 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         onDragEnd={() => {
           setDragging(null);
           setDragOverFolder(null);
+          setDropMark(null);
         }}
+        {...sessionRowDrop(session)}
         onDoubleClick={() => onConnectSession(session, true)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -505,6 +548,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             : 'hover:bg-plinky-800/70'
         }`}
       >
+        {dropMark?.name === session.name && (
+          <span
+            data-drop-mark={dropMark.after ? 'after' : 'before'}
+            aria-hidden
+            className={`pointer-events-none absolute left-1 right-1 h-0.5 rounded bg-sky-400 ${dropMark.after ? '-bottom-px' : '-top-px'}`}
+          />
+        )}
         {/* Status slot: fixed width so names line up whether or not a tab is open. */}
         <span className="w-1.5 shrink-0 flex justify-center" aria-hidden>
           {status && (
@@ -690,9 +740,17 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     ?? (allFolderPaths.includes(createFolderName.trim()) ? `"${createFolderName.trim()}" already exists.` : null) : null;
   const submitCreateFolder = () => {
     if (!createFolderName.trim() || createFolderError) return;
-    createFolder(createFolderName.trim());
+    const path = createFolderName.trim();
+    createFolder(path);
+    if (pendingMove) onMoveToFolder(pendingMove, path);
+    setPendingMove(null);
     setCreateFolderName('');
     setIsAddingFolder(false);
+  };
+  const cancelCreateFolder = () => {
+    setIsAddingFolder(false);
+    setCreateFolderName('');
+    setPendingMove(null);
   };
 
   const moveInputError = newFolderInput ? folderNameError(newFolderInput) : null;
@@ -714,7 +772,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         </div>
         <div className="flex items-center space-x-1 shrink-0">
           <button
-            onClick={() => setIsAddingFolder(v => !v)}
+            onClick={() => { if (isAddingFolder) cancelCreateFolder(); else setIsAddingFolder(true); }}
             title="Create New Folder"
             aria-label="Create New Folder"
             className="p-1 rounded text-slate-400 hover:text-sky-300 hover:bg-plinky-800 transition shrink-0"
@@ -741,15 +799,14 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               type="text"
               autoFocus
               aria-label="New folder name"
-              placeholder="Folder name, Enter to create"
+              placeholder={pendingMove ? `New folder for ${pendingMove.name}, Enter` : 'Folder name, Enter to create'}
               value={createFolderName}
               onChange={(e) => setCreateFolderName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   submitCreateFolder();
                 } else if (e.key === 'Escape') {
-                  setIsAddingFolder(false);
-                  setCreateFolderName('');
+                  cancelCreateFolder();
                 }
               }}
               className="flex-1 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-xs text-slate-200 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
@@ -762,10 +819,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               Add
             </button>
             <button aria-label="Cancel new folder"
-              onClick={() => {
-                setIsAddingFolder(false);
-                setCreateFolderName('');
-              }}
+              onClick={cancelCreateFolder}
               className="p-0.5 rounded text-slate-400 hover:text-slate-200"
             >
               <X className="w-3.5 h-3.5" />
@@ -826,6 +880,31 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         className="flex-1 overflow-y-auto p-2 space-y-3 outline-none"
       >
         {visibleTree.map(renderFolder)}
+
+        {dragging?.kind === 'session' && (
+          <div
+            data-new-folder-drop
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropMark(null); setDragOverFolder(NEW_FOLDER_DROP); }}
+            onDragLeave={() => setDragOverFolder(prev => (prev === NEW_FOLDER_DROP ? null : prev))}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const moved = dragging.session;
+              setDragging(null);
+              setDragOverFolder(null);
+              setPendingMove(moved);
+              setCreateFolderName('');
+              setIsAddingFolder(true);
+            }}
+            className={`py-2 px-2 flex items-center justify-center gap-1.5 rounded border border-dashed transition text-meta ${
+              dragOverFolder === NEW_FOLDER_DROP
+                ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                : 'border-plinky-700 text-plinky-muted'
+            }`}
+          >
+            <FolderPlus className="w-3.5 h-3.5" /> Drop here for a new folder
+          </div>
+        )}
 
         {dragging?.kind === 'folder' && parentPath(dragging.path) !== '' && (
           <div
@@ -926,6 +1005,20 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
               <Pencil className="w-3.5 h-3.5 text-slate-400" />
               <span>Rename Folder...</span>
             </button>
+            {hasFolderOrder(node.path) && (
+              <button
+                className={item}
+                title="Undo the order you dragged the sessions into"
+                onClick={() => {
+                  clearFolderOrder(node.path);
+                  setFolderVersion(v => v + 1);
+                  setFolderMenu(null);
+                }}
+              >
+                <ArrowDownAZ className="w-3.5 h-3.5 text-slate-400" />
+                <span>Sort by Name</span>
+              </button>
+            )}
             <button
               className={item}
               disabled={inFolder.length === 0}

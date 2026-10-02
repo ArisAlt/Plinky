@@ -25,6 +25,7 @@ import { TabTitle } from './components/layout/TabTitle';
 import { getRecentSessions, recordRecentSession } from './services/recentSessions';
 import { useBroadcastGlow, glowColor } from './services/broadcast';
 import { SettingsModal } from './components/modals/SettingsModal';
+import { placeName } from './services/sessionOrder';
 import { fontSizeForKey, TERMINAL_FONT_MIN, TERMINAL_FONT_MAX, TERMINAL_FONT_DEFAULT } from './services/terminalFontKeys';
 import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
@@ -514,6 +515,20 @@ export const App: React.FC = () => {
     setIsNewSessionOpen(true);
   };
 
+  // Tabs dragged into a new order. The split and grid panes take tabs in
+  // this order too (paneTabs), so a tab dragged to the front fills the
+  // first pane.
+  // A ref: dragover follows dragstart before React has rendered again.
+  const draggingTabRef = useRef<string | null>(null);
+  const [tabDropMark, setTabDropMark] = useState<{ id: string; after: boolean } | null>(null);
+  const moveTab = (id: string, target: string, after: boolean) => {
+    setTabs(prev => {
+      const ids = placeName(prev.map(t => t.id), id, target, after);
+      const byId = new Map(prev.map(t => [t.id, t]));
+      return ids.map(i => byId.get(i)!);
+    });
+  };
+
   const handleMoveSessionToFolder = async (session: PuttySession, folder: string) => {
     if ((session.folder || 'Uncategorized') === folder) return;
     await writePuttySession({ 
@@ -668,6 +683,35 @@ export const App: React.FC = () => {
                       <div
                         key={tab.id}
                         onClick={() => setActiveTabId(tab.id)}
+                        // Not while its title is being edited: the drag
+                        // would take the text selection.
+                        draggable={renamingTabId !== tab.id}
+                        onDragStart={(e) => {
+                          draggingTabRef.current = tab.id;
+                          // A type of its own: nothing else (a terminal, the
+                          // session list) takes it as text.
+                          e.dataTransfer.setData('application/x-plinky-tab', tab.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          if (!draggingTabRef.current) return;
+                          e.preventDefault();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          const after = e.clientX > r.left + r.width / 2;
+                          setTabDropMark(m => (m?.id === tab.id && m.after === after ? m : { id: tab.id, after }));
+                        }}
+                        onDragLeave={() => setTabDropMark(m => (m?.id === tab.id ? null : m))}
+                        onDrop={(e) => {
+                          const from = draggingTabRef.current;
+                          if (!from) return;
+                          e.preventDefault();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          const after = e.clientX > r.left + r.width / 2;
+                          if (from !== tab.id) moveTab(from, tab.id, after);
+                          draggingTabRef.current = null;
+                          setTabDropMark(null);
+                        }}
+                        onDragEnd={() => { draggingTabRef.current = null; setTabDropMark(null); }}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -686,6 +730,13 @@ export const App: React.FC = () => {
                             : 'bg-plinky-900/60 border-transparent text-slate-400 hover:text-slate-200 hover:bg-plinky-850'
                         }`}
                       >
+                        {tabDropMark?.id === tab.id && draggingTabRef.current !== tab.id && (
+                          <span
+                            data-tab-drop-mark={tabDropMark.after ? 'after' : 'before'}
+                            aria-hidden
+                            className={`pointer-events-none absolute top-1 bottom-1 w-0.5 rounded bg-sky-400 ${tabDropMark.after ? '-right-px' : '-left-px'}`}
+                          />
+                        )}
                         {renderTabStatusIcon(tab, isActive)}
                         <TabTitle
                           title={tab.title}

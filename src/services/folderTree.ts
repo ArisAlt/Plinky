@@ -101,9 +101,14 @@ export interface FolderNode {
  * The folder tree for `folderPaths` (folders that exist even when empty)
  * plus every folder a session names. Ancestors are implied: a session in
  * "a/b/c" makes "a" and "a/b" appear even if nothing else lives there.
- * Folders and sessions are sorted by name at every level.
+ * Folders and sessions are sorted by name at every level, except a
+ * folder's sessions that `order` places (dragged into place: sessionOrder.ts).
  */
-export function buildFolderTree(folderPaths: string[], sessions: PuttySession[]): FolderNode[] {
+export function buildFolderTree(
+  folderPaths: string[],
+  sessions: PuttySession[],
+  order: Record<string, string[]> = {},
+): FolderNode[] {
   const nodes = new Map<string, FolderNode>();
   const roots: FolderNode[] = [];
 
@@ -129,12 +134,20 @@ export function buildFolderTree(folderPaths: string[], sessions: PuttySession[])
   const sortDeep = (list: FolderNode[]) => {
     list.sort(byName);
     for (const n of list) {
-      n.sessions.sort(byName);
+      n.sessions = applyOrder(n.sessions.sort(byName), order[n.path]);
       sortDeep(n.children);
     }
   };
   sortDeep(roots);
   return roots;
+}
+
+/** `items` in `order`; the ones it doesn't name keep their order after. */
+export function applyOrder<T extends { name: string }>(items: T[], order: string[] | undefined): T[] {
+  if (!order || order.length === 0) return items;
+  const rank = new Map(order.map((n, i) => [n, i]));
+  const listed = items.filter(i => rank.has(i.name)).sort((a, b) => rank.get(a.name)! - rank.get(b.name)!);
+  return [...listed, ...items.filter(i => !rank.has(i.name))];
 }
 
 /** Every session in `node` and all of its subfolders. */
