@@ -192,14 +192,18 @@ export const App: React.FC = () => {
     loadSessions();
   }, []);
 
-  // R1-R3: Auto-persist layout changes
+  // R1-R3: Auto-persist layout changes. Not before startup has read the
+  // saved layout: on the first render there are no tabs yet, and this
+  // cleared the saved layout before loadSessions (after its await) got to
+  // it -- so no tab ever came back after a restart.
   useEffect(() => {
+    if (!startupDone) return;
     if (tabs.length > 0) {
       saveLayout(layoutMode, activeTabId, tabs);
     } else {
       clearLayout();
     }
-  }, [layoutMode, activeTabId, tabs]);
+  }, [startupDone, layoutMode, activeTabId, tabs]);
 
   // The list only. loadSessions also restores the saved tab layout, which
   // must happen once at startup, not after every delete or duplicate.
