@@ -1,6 +1,6 @@
 [package]
 name = "plinky-desktop"
-version = "0.1.30"
+version = "0.1.31"
 description = "Plinky - a terminal and session manager built on PuTTY"
 edition = "2021"
 license = "GPL-3.0-only"
