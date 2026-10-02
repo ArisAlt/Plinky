@@ -1814,9 +1814,26 @@ mod tests {
         assert!(has("windows", "main"));
         assert!(has("permissions", "core:event:allow-listen"));
         assert!(has("permissions", "core:event:allow-unlisten"));
-        // The interface size setting (Settings, Ctrl+Shift+=/-/0) calls
-        // setZoom on the webview; without this grant it silently does nothing.
+        // The interface size setting (Settings) calls setZoom on the
+        // webview; without this grant it silently does nothing.
         assert!(has("permissions", "core:webview:allow-set-webview-zoom"));
+    }
+
+    /// Tauri takes over WebView2's drag and drop for file drops unless the
+    /// window turns that off, and then the page's own drag and drop never
+    /// starts on Windows. Owner, v0.1.30 on Windows: dragging sessions in
+    /// the list and tabs in the tab bar did nothing (the SFTP pane's drag
+    /// between panes was dead there too). Plinky takes no file drops from
+    /// the desktop, so nothing is lost.
+    #[test]
+    fn the_page_handles_its_own_drag_and_drop() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let windows = conf["app"]["windows"].as_array().expect("windows in tauri.conf.json");
+        assert!(!windows.is_empty());
+        for w in windows {
+            assert_eq!(w["dragDropEnabled"], serde_json::Value::Bool(false), "{w}");
+        }
     }
     use super::{find_session_entry_for, session_url_for_entry_with, vault_key_candidates};
     use plinky_core::{Vault, VaultEntry};
