@@ -34,7 +34,7 @@ export async function waitUntil(check, { timeoutMs = 5000, what = 'condition' } 
  * Nothing is printed on connect: a router sitting at its prompt prints
  * nothing until it is sent Enter.
  */
-export async function startConsole({ name = 'R1', negotiate = true, host = '127.0.0.1', onlyFrom = null } = {}) {
+export async function startConsole({ name = 'R1', negotiate = true, host = '127.0.0.1', onlyFrom = null, greet = false } = {}) {
   const con = {
     name,
     received: Buffer.alloc(0), // data bytes, telnet commands removed
@@ -56,6 +56,9 @@ export async function startConsole({ name = 'R1', negotiate = true, host = '127.
     sock.on('close', () => { con.open--; con.sockets.delete(sock); });
     sock.on('error', () => {});
     if (negotiate) sock.write(Buffer.from([IAC, WILL, ECHO, IAC, WILL, SGA, IAC, DO, NAWS]));
+    // A device that shows its prompt on connect (an SSH login's shell, a
+    // console server's banner), unlike a silent GNS3 console.
+    if (greet) sock.write(Buffer.from(`\r\n${name}>`, 'utf8'));
 
     let line = '';
     let lastWasCr = false;

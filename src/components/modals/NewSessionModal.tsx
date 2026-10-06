@@ -11,6 +11,7 @@ import {
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
+import { TAB_COLORS, LogonAction, parseLogonActions, serializeLogonActions } from '../../services/tabColors';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
 
 type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
@@ -95,6 +96,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [keepalive, setKeepalive] = useState('');
   const [tcpKeepalives, setTcpKeepalives] = useState(false);
   const [autoReconnect, setAutoReconnect] = useState(false);
+  // SecureCRT-style logon actions and a tab colour (tabColors.ts).
+  const [logonActions, setLogonActions] = useState<LogonAction[]>([]);
+  const [tabColor, setTabColor] = useState('');
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -224,7 +228,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setKeepalive(ka ? String(ka) : '');
       setTcpKeepalives(extra.TCPKeepalives === '1');
       setAutoReconnect(extra.PlinkyAutoReconnect === '1');
+      setLogonActions(parseLogonActions(extra.PlinkyLogonActions));
+      setTabColor(extra.PlinkyTabColor || '');
     } else {
+      setLogonActions([]);
+      setTabColor('');
       setName('');
       setHostname('');
       setPort('22');
@@ -507,6 +515,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     }
     const autoReconnectOn = autoReconnect && !isSerial;
     if (autoReconnectOn) extra.PlinkyAutoReconnect = '1'; else delete extra.PlinkyAutoReconnect;
+    const logon = serializeLogonActions(logonActions);
+    if (logon) extra.PlinkyLogonActions = logon; else delete extra.PlinkyLogonActions;
+    if (tabColor) extra.PlinkyTabColor = tabColor; else delete extra.PlinkyTabColor;
     const pasteLineDelayMs = pasteLineDelayFrom({ PlinkyPasteLineDelayMs: pasteDelay });
     if (pasteLineDelayMs > 0) extra.PlinkyPasteLineDelayMs = String(pasteLineDelayMs);
     else delete extra.PlinkyPasteLineDelayMs;
@@ -547,7 +558,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     { id: 'credentials', label: 'Credentials & Vault', on: useVault || (protocol === 'SSH' && !!publicKeyFile.trim()) },
     ...(protocol === 'SSH' ? [{ id: 'jump' as const, label: 'Jump Host', on: enableJumpHost }] : []),
     ...(isSerial ? [{ id: 'serial' as const, label: 'Serial' }] : []),
-    { id: 'advanced', label: 'Advanced', on: (!isSerial && (parseInt(keepalive, 10) > 0 || autoReconnect)) || parseInt(pasteDelay, 10) > 0 },
+    { id: 'advanced', label: 'Advanced', on: (!isSerial && (parseInt(keepalive, 10) > 0 || autoReconnect)) || parseInt(pasteDelay, 10) > 0 || logonActions.some(a => a.send.trim()) },
   ];
   // Switching protocol can take away the tab that was open (Jump Host).
   const tab: SessionTab = visibleTabs.some(t => t.id === pickedTab) ? pickedTab : 'general';
@@ -837,6 +848,35 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 </div>
               </div>
 
+              {/* Tab colour (tabColors.ts) */}
+              <div className="space-y-1">
+                <span className="text-slate-300 font-medium">Tab colour</span>
+                <div role="radiogroup" aria-label="Tab colour" className="flex items-center space-x-1.5">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={tabColor === ''}
+                    onClick={() => setTabColor('')}
+                    className={`px-2 py-0.5 rounded border text-meta ${tabColor === '' ? 'border-sky-500 text-sky-300' : 'border-plinky-700 text-slate-400'}`}
+                  >
+                    None
+                  </button>
+                  {TAB_COLORS.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={tabColor === c.id}
+                      aria-label={c.label}
+                      title={c.label}
+                      onClick={() => setTabColor(c.id)}
+                      style={{ backgroundColor: c.hex }}
+                      className={`w-5 h-5 rounded-full border-2 ${tabColor === c.id ? 'border-white' : 'border-transparent'}`}
+                    />
+                  ))}
+                </div>
+                <p className="text-meta text-plinky-muted">Marks this session's tabs and its row in the list, for example red for production.</p>
+              </div>
             </div>
 
             <div data-tab="credentials" hidden={tab !== 'credentials'} className="space-y-3">
@@ -1390,6 +1430,50 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   Sends a multi-line paste one line at a time, this far apart, for console ports and network gear that
                   drop characters. 0 pastes normally. Up to {MAX_PASTE_LINE_DELAY_MS} ms.
                 </p>
+              </div>
+
+              {/* Logon actions (expect.rs logon_actions) */}
+              <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1.5 text-meta">
+                <div className="text-slate-300 font-medium">Logon actions</div>
+                <p className="text-plinky-muted">
+                  Typed once the login is over, in order: wait until the output ends with the text on the left, then send
+                  the line on the right. Leave "wait for" empty to wait for any prompt (# &gt; $ %).
+                  Not for passwords: they are saved in the session file as plain text. Use the vault.
+                </p>
+                {logonActions.map((a, i) => (
+                  <div key={i} className="flex items-center space-x-1.5">
+                    <input
+                      value={a.wait}
+                      onChange={e => setLogonActions(list => list.map((x, j) => (j === i ? { ...x, wait: e.target.value } : x)))}
+                      placeholder="#"
+                      aria-label={`Logon action ${i + 1}: wait for`}
+                      className="w-24 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs font-mono focus:outline-none focus:border-sky-500"
+                    />
+                    <span className="text-plinky-muted">then send</span>
+                    <input
+                      value={a.send}
+                      onChange={e => setLogonActions(list => list.map((x, j) => (j === i ? { ...x, send: e.target.value } : x)))}
+                      placeholder="terminal length 0"
+                      aria-label={`Logon action ${i + 1}: send`}
+                      className="flex-1 min-w-0 bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs font-mono focus:outline-none focus:border-sky-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLogonActions(list => list.filter((_, j) => j !== i))}
+                      aria-label={`Remove logon action ${i + 1}`}
+                      className="p-1 text-plinky-muted hover:text-rose-400"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLogonActions(list => [...list, { wait: '#', send: '' }])}
+                  className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-300"
+                >
+                  Add a logon action
+                </button>
               </div>
 
             </div>

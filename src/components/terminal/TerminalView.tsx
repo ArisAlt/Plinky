@@ -39,6 +39,7 @@ import {
   runScript,
   stopScript,
   listenScriptStarted,
+  setSessionLocked,
   listenScriptLog,
   listenScriptEnded,
   pastePaced,
@@ -66,6 +67,7 @@ import { readClipboard, writeClipboard } from '../../services/clipboard';
 import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
 import {
   FileCode,
+  Lock,
   Radio,
   Sparkles,
   ShieldAlert, 
@@ -425,6 +427,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // paste is sent one line at a time by the backend (paste_paced).
   const pasteDelayRef = useRef(0);
   const [pasteJob, setPasteJob] = useState<{ sent: number; total: number } | null>(null);
+  // Locked read only (tab menu): keys are dropped here, and the backend
+  // refuses every other input. A note says why typing does nothing.
+  const lockedRef = useRef(!!tab.locked);
+  lockedRef.current = !!tab.locked;
+  const [lockNotice, setLockNotice] = useState(false);
+  const lockNoticeTimer = useRef<number | null>(null);
+  const showLockNotice = () => {
+    setLockNotice(true);
+    if (lockNoticeTimer.current !== null) window.clearTimeout(lockNoticeTimer.current);
+    lockNoticeTimer.current = window.setTimeout(() => setLockNotice(false), 1500);
+  };
+
   // Run Script (scripts.rs): the script running on this tab, by file name.
   const [runningScript, setRunningScript] = useState<string | null>(null);
   const autoReconnectRef = useRef(false);
@@ -1119,6 +1133,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Handle user keyboard input
     term.onData((data) => {
+      if (lockedRef.current) {
+        showLockNotice();
+        return;
+      }
       typedRef.current = trackTypedInput(typedRef.current, data, Date.now());
       if (isLivePtyRef.current) {
         writeTerminalInput(tab.id, new TextEncoder().encode(data));
@@ -1973,6 +1991,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         )}
 
         {/* Paced paste in progress (T-015): how far, and a way to stop it. */}
+        {tab.locked && (
+          <div role="status" className="absolute top-3 right-14 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
+            <Lock className="w-3.5 h-3.5 text-amber-400" />
+            <span>{lockNotice ? 'This tab is locked: typing is not sent' : 'Locked: read only'}</span>
+            <button
+              onClick={() => {
+                onUpdateTab(tab.id, { locked: false });
+                void setSessionLocked(tab.id, false);
+                terminalRef.current?.focus();
+              }}
+              className="px-2 py-0.5 rounded bg-plinky-800 hover:bg-plinky-700 text-slate-200 text-meta"
+            >
+              Unlock
+            </button>
+          </div>
+        )}
+
         {runningScript && (
           <div role="status" className="absolute bottom-3 left-3 z-30 flex items-center space-x-2 bg-plinky-900/95 border border-sky-500/60 text-sky-200 px-3 py-1.5 rounded-lg shadow-2xl text-xs">
             <FileCode className="w-3.5 h-3.5 text-sky-400 animate-pulse" />

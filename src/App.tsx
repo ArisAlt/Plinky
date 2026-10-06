@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded } from './services/tauriBridge';
+import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded, setSessionLocked } from './services/tauriBridge';
+import { tabColorHex } from './services/tabColors';
 import { tabForOpenRequest, throttle } from './services/cliOpen';
 import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
@@ -30,6 +31,7 @@ import { fontSizeForKey, TERMINAL_FONT_MIN, TERMINAL_FONT_MAX, TERMINAL_FONT_DEF
 import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
   X, 
+  Lock,
   Plus, 
   Terminal, 
   Columns, 
@@ -501,6 +503,13 @@ export const App: React.FC = () => {
     handleCloseTab(tab.id);
   };
 
+  // Lock a tab read only: the backend refuses its input; output goes on.
+  const handleToggleLock = (tab: TerminalTab) => {
+    const locked = !tab.locked;
+    handleUpdateTab(tab.id, { locked });
+    void setSessionLocked(tab.id, locked);
+  };
+
   const handleUpdateTab = (tabId: string, updates: Partial<TerminalTab>) => {
     setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, ...updates } : t)));
   };
@@ -721,9 +730,16 @@ export const App: React.FC = () => {
                         // Read by the end-to-end suite (e2e/): the status
                         // icon alone does not name the state.
                         data-tab-status={tab.status}
+                        data-tab-locked={!!tab.locked}
                         data-tab-id={tab.id}
                         data-tab-active={isActive}
-                        style={broadcastLit.has(tab.id) ? { boxShadow: `0 0 0 1px ${glowColor(tab.syncChannel)}, 0 0 10px ${glowColor(tab.syncChannel)}` } : undefined}
+                        style={{
+                          ...(broadcastLit.has(tab.id) ? { boxShadow: `0 0 0 1px ${glowColor(tab.syncChannel)}, 0 0 10px ${glowColor(tab.syncChannel)}` } : {}),
+                          // The saved session's tab colour (tabColors.ts).
+                          ...(tabColorHex(sessions.find(x => x.name === tab.sessionName)?.extra?.PlinkyTabColor)
+                            ? { borderTopColor: tabColorHex(sessions.find(x => x.name === tab.sessionName)?.extra?.PlinkyTabColor), borderTopWidth: 2 }
+                            : {}),
+                        }}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${
                           isActive
                             ? 'bg-plinky-950 border-plinky-800 text-sky-300 font-medium shadow-xs'
@@ -738,6 +754,7 @@ export const App: React.FC = () => {
                           />
                         )}
                         {renderTabStatusIcon(tab, isActive)}
+                        {tab.locked && <span title="Locked: read only"><Lock className="w-3 h-3 shrink-0 text-amber-400" aria-label="Locked" /></span>}
                         <TabTitle
                           title={tab.title}
                           editing={renamingTabId === tab.id}
@@ -806,6 +823,9 @@ export const App: React.FC = () => {
                         >
                           <button role="menuitem" className={item} onClick={() => { setTabMenu(null); setRenamingTabId(menuTab.id); }}>Rename</button>
                           <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleDuplicateTab(menuTab); }}>Duplicate</button>
+                          <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleToggleLock(menuTab); }}>
+                            {menuTab.locked ? 'Unlock' : 'Lock (read only)'}
+                          </button>
                           <div className="border-t border-plinky-800 my-1" />
                           <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleCloseTab(menuTab.id); }}>Close</button>
                         </div>

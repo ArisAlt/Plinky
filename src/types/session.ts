@@ -35,6 +35,8 @@ export interface TerminalTab {
   username?: string;
   protocol?: Protocol;
   vaultKey?: string;
+  /** Locked read only (tab menu): typing, pastes and broadcasts refused. */
+  locked?: boolean;
 }
 
 export interface TunnelEntry {

@@ -342,6 +342,11 @@ async fn start_terminal_session(
             .ok()
             .and_then(|s| putty_session_log(&s, unix_now()))
     };
+    let logon = if is_local {
+        None
+    } else {
+        putty_compat::sessions::read_session(&session_name).ok().and_then(|s| logon_script(&s))
+    };
     let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
     forward_output(rx, on_data);
     spawn_terminal_session(
@@ -349,6 +354,9 @@ async fn start_terminal_session(
         hostname, port, username, log_file_name, protocol,
     )
     .await?;
+    if let Some(script) = logon {
+        let _ = registry.set_logon_actions(&session_id, script);
+    }
     if !is_local {
         watch_connection(&app, session_id.clone());
     }
@@ -361,6 +369,21 @@ async fn start_terminal_session(
         }
     }
     Ok(())
+}
+
+/// A saved session's logon actions: PlinkyLogonActions, a JSON list of
+/// [wait for, send] pairs written by the session settings. Nothing, or
+/// anything that doesn't read, means none.
+fn logon_script(s: &putty_compat::sessions::PuttySession) -> Option<plinky_core::session::expect::Expect> {
+    let raw = s.extra.get("PlinkyLogonActions")?;
+    let pairs: Vec<(String, String)> = serde_json::from_str(raw).ok()?;
+    plinky_core::session::expect::logon_actions(&pairs)
+}
+
+/// Locks a tab read only, or unlocks it (session_manager's input lock).
+#[tauri::command]
+fn set_session_locked(registry: State<'_, Arc<SessionRegistry>>, session_id: String, locked: bool) {
+    registry.set_input_locked(&session_id, locked);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1713,6 +1736,7 @@ pub fn run() {
             take_open_requests,
             is_session_connected,
             is_session_ended,
+            set_session_locked,
             pick_script_file,
             run_script,
             stop_script,

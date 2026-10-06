@@ -127,6 +127,27 @@ impl Expect {
     }
 }
 
+/// A session's logon actions (Session settings), as SecureCRT's Logon
+/// Actions: for each pair, wait until the output ends with `wait` (plain
+/// text, not a pattern) and send `send` and Return. An empty `wait` means
+/// any prompt (# > $ %). Lines are sent in order, each once.
+pub fn logon_actions(pairs: &[(String, String)]) -> Option<Expect> {
+    let steps: Vec<Step> = pairs
+        .iter()
+        .filter(|(_, send)| !send.trim().is_empty())
+        .map(|(wait, send)| Step {
+            expect: if wait.trim().is_empty() {
+                Regex::new(r"[#>$%]\s*$").unwrap()
+            } else {
+                Regex::new(&format!(r"{}\s*$", regex::escape(wait.trim()))).unwrap()
+            },
+            reply: Reply::Line(send.clone()),
+            label: "logon action",
+        })
+        .collect();
+    (!steps.is_empty()).then(|| Expect::new(steps, Vec::new()))
+}
+
 /// The password prompt of a device's login, OpenSSH style ("admin@10.1.1.2's
 /// password: "), plink's keyboard-interactive ("| Password: ") or a CLI
 /// client's ("Password: ").
@@ -244,5 +265,27 @@ mod tests {
     fn commands_fill_in_the_target() {
         assert_eq!(hop_command("ssh -l {user} {host}", "ops", "192.0.2.9", 22), "ssh -l ops 192.0.2.9");
         assert_eq!(hop_command("telnet {host} {port}", "", "192.0.2.9", 2323), "telnet 192.0.2.9 2323");
+    }
+
+    #[test]
+    fn logon_actions_wait_for_their_text_at_the_end_and_send_in_order() {
+        let pairs = vec![
+            ("#".to_string(), "terminal length 0".to_string()),
+            (String::new(), "terminal width 0".to_string()),
+            ("x".to_string(), "   ".to_string()), // nothing to send: dropped
+        ];
+        let mut script = logon_actions(&pairs).unwrap();
+        // A banner mentioning "#" mid-line is not the prompt.
+        assert_eq!(script.feed(b"Use # to comment\r\nmore"), Event::None);
+        match script.feed(b"\r\nR1#") {
+            Event::Send { bytes, .. } => assert_eq!(&bytes[..], b"terminal length 0\r"),
+            other => panic!("{other:?}"),
+        }
+        match script.feed(b"terminal length 0\r\nR1#") {
+            Event::Send { bytes, .. } => assert_eq!(&bytes[..], b"terminal width 0\r"),
+            other => panic!("{other:?}"),
+        }
+        assert!(script.is_done());
+        assert!(logon_actions(&[]).is_none());
     }
 }

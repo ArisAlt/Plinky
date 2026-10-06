@@ -54,6 +54,22 @@ pub fn starts_live(
 }
 
 impl ActiveSession {
+    /// Logon actions run only once the login is over (never into a
+    /// password prompt), after any jump script has finished, and not while
+    /// the tab is locked.
+    fn run_logon(&mut self, chunk: &[u8], locked: bool) {
+        if locked || self.expect.is_some() || !self.state_machine.is_live() {
+            return;
+        }
+        let Some(script) = self.logon.as_mut() else { return };
+        if let super::expect::Event::Send { bytes, .. } = script.feed(chunk) {
+            let _ = self.transport.write(&bytes);
+        }
+        if script.is_done() {
+            self.logon = None;
+        }
+    }
+
     fn feed_tap(&mut self, chunk: &[u8]) {
         if let Some(tap) = &self.tap {
             if let Err(std::sync::mpsc::TrySendError::Disconnected(_)) = tap.try_send(chunk.to_vec()) {
@@ -87,6 +103,9 @@ pub struct ActiveSession {
     /// Script). Bounded: a script that stops reading loses output rather
     /// than holding up the session.
     pub tap: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
+    /// The session's logon actions (Session settings): "wait for, then
+    /// send" lines typed once the login is over.
+    pub logon: Option<super::expect::Expect>,
     /// A jump through a device's CLI (see `expect`): runs its steps on the
     /// output, before and after Live, until done or stopped.
     pub expect: Option<super::expect::Expect>,
@@ -97,6 +116,10 @@ static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone)]
 pub struct SessionRegistry {
     sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
+    /// Tabs locked read-only, by session id. Kept by id, not on the
+    /// session: a reconnect makes a new session under the same id and must
+    /// stay locked.
+    locked: Arc<Mutex<std::collections::HashSet<String>>>,
     prompt_tx: broadcast::Sender<PromptEvent>,
     sync_router: Arc<Mutex<crate::sync::router::SyncInputRouter>>,
 }
@@ -106,6 +129,7 @@ impl SessionRegistry {
         let (prompt_tx, _) = broadcast::channel(64);
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            locked: Arc::new(Mutex::new(std::collections::HashSet::new())),
             prompt_tx,
             sync_router: Arc::new(Mutex::new(crate::sync::router::SyncInputRouter::new())),
         }
@@ -213,7 +237,10 @@ impl SessionRegistry {
                                 session.log = None;
                             }
                         }
-                        session.state_machine.feed_bytes(&chunk)
+                        let action = session.state_machine.feed_bytes(&chunk);
+                        let locked = registry_clone.is_input_locked(&id_for_task);
+                        session.run_logon(&chunk, locked);
+                        action
                     } else {
                         reported = true;
                         break;
@@ -308,6 +335,7 @@ impl SessionRegistry {
             jump_login: None,
             expect: None,
             tap: None,
+            logon: None,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -462,7 +490,10 @@ impl SessionRegistry {
                                 session.expect = None;
                             }
                         }
-                        session.state_machine.feed_bytes(&chunk)
+                        let action = session.state_machine.feed_bytes(&chunk);
+                        let locked = registry_clone.is_input_locked(&id_for_task);
+                        session.run_logon(&chunk, locked);
+                        action
                     } else {
                         reported = true;
                         break;
@@ -622,6 +653,7 @@ impl SessionRegistry {
             jump_login,
             expect,
             tap: None,
+            logon: None,
         };
 
         self.insert_new_session(id_owned, active)?;
@@ -753,6 +785,7 @@ impl SessionRegistry {
     /// prompt, since PreAuth (not HostKeyPending) is what a password/
     /// passphrase prompt state maps to today.
     pub fn write_input(&self, id: &str, data: &[u8]) -> Result<()> {
+        self.refuse_if_locked(id)?;
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
 
@@ -793,6 +826,7 @@ impl SessionRegistry {
     /// each submitted to the remote server as a separate password guess,
     /// exhausting the server's auth-attempt limit and disconnecting it.
     pub fn write_input_live_only(&self, id: &str, data: &[u8]) -> Result<()> {
+        self.refuse_if_locked(id)?;
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
 
@@ -890,6 +924,34 @@ impl SessionRegistry {
     /// The process making the session's connection (plink), if it has one.
     pub fn process_id(&self, id: &str) -> Option<u32> {
         self.sessions.lock().unwrap().get(id)?.transport.process_id()
+    }
+
+    /// Locks a tab read-only, or unlocks it. A locked tab takes no typing,
+    /// pastes, snippets, scripts or broadcasts: everything that goes
+    /// through write_input or write_input_live_only. Output keeps coming.
+    /// A host-key answer still goes through (a dialog the user answers).
+    pub fn set_input_locked(&self, id: &str, locked: bool) {
+        let mut set = self.locked.lock().unwrap();
+        if locked { set.insert(id.to_string()); } else { set.remove(id); }
+    }
+
+    pub fn is_input_locked(&self, id: &str) -> bool {
+        self.locked.lock().unwrap().contains(id)
+    }
+
+    fn refuse_if_locked(&self, id: &str) -> Result<()> {
+        if self.is_input_locked(id) {
+            return Err(PlinkyError::ProcessError("This tab is locked (read only). Unlock it to type.".into()));
+        }
+        Ok(())
+    }
+
+    /// The session's logon actions, run once its login is over.
+    pub fn set_logon_actions(&self, id: &str, script: super::expect::Expect) -> Result<()> {
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        session.logon = Some(script);
+        Ok(())
     }
 
     /// Sends a copy of the session's output to a script from now on, or

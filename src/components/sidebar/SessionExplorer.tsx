@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFittedMenu } from '../../services/menuFit';
 import { writeClipboard } from '../../services/clipboard';
+import { tabColorHex } from '../../services/tabColors';
 import { PuttySession, TerminalTab } from '../../types/session';
 import {
   Folder,
@@ -556,6 +557,13 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           />
         )}
         {/* Status slot: fixed width so names line up whether or not a tab is open. */}
+        {tabColorHex(session.extra?.PlinkyTabColor) && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-1 bottom-1 w-0.5 rounded"
+            style={{ backgroundColor: tabColorHex(session.extra?.PlinkyTabColor) }}
+          />
+        )}
         <span className="w-1.5 shrink-0 flex justify-center" aria-hidden>
           {status && (
             <span

@@ -866,3 +866,25 @@ fn explicit_telnet_and_raw_targets_start_live_but_ssh_waits_for_auth() {
     assert!(!starts_live(Some(""), None), "PuTTY's default protocol is SSH");
 }
 
+
+/// A tab locked read only (tab menu) refuses every input path the page and
+/// scripts use: typing and scripts (write_input), pastes, snippets and
+/// broadcasts (write_input_live_only). Unlocked, the same call goes on to
+/// the session as before.
+#[test]
+fn a_locked_session_refuses_input_and_takes_it_again_once_unlocked() {
+    let registry = plinky_core::SessionRegistry::new();
+    registry.set_input_locked("tab-1", true);
+    assert!(registry.is_input_locked("tab-1"));
+    let err = registry.write_input("tab-1", b"reload\r").unwrap_err().to_string();
+    assert!(err.contains("locked"), "{err}");
+    assert!(registry.write_input_live_only("tab-1", b"reload\r").is_err());
+    // Another tab is not locked by it.
+    assert!(!registry.is_input_locked("tab-2"));
+
+    registry.set_input_locked("tab-1", false);
+    // No such session in this test: the error now comes from the lookup,
+    // past the lock.
+    let err = registry.write_input("tab-1", b"x").unwrap_err().to_string();
+    assert!(!err.contains("locked"), "{err}");
+}

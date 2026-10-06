@@ -1358,3 +1358,11 @@ export async function listenScriptEnded(
   const { listen } = await import('@tauri-apps/api/event');
   return listen<{ sessionId: string; code: number | null; stopped: boolean }>('script:ended', (event) => callback(event.payload));
 }
+
+/** Locks a tab read only, or unlocks it: the backend then refuses typing,
+ *  pastes, snippets, scripts and broadcasts for it. */
+export async function setSessionLocked(sessionId: string, locked: boolean): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('set_session_locked', { sessionId, locked });
+}
