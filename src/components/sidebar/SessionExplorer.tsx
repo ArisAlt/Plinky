@@ -12,6 +12,8 @@ import {
   Terminal,
   Monitor,
   Cable,
+  ShieldCheck,
+  Network,
   Search,
   Plus,
   HardDrive,
@@ -86,6 +88,21 @@ const NEW_FOLDER_DROP = '\u0000new';
 
 /** "Corp 1/Site 1" shown as "Corp 1 / Site 1". */
 const displayPath = (path: string) => path.split('/').join(' / ');
+
+/** Each protocol its own icon in the session tree (owner): SSH a shield
+ *  (the connection is encrypted), Telnet a monitor, raw TCP a network, a
+ *  serial line a plug. The tooltip starts with the protocol's name. */
+const PROTOCOL_ICONS: Record<string, typeof Monitor> = {
+  ssh: ShieldCheck,
+  telnet: Monitor,
+  raw: Network,
+  serial: Cable,
+};
+const protocolIcon = (protocol: string | undefined) => PROTOCOL_ICONS[(protocol || 'ssh').toLowerCase()] ?? Monitor;
+const protocolName = (protocol: string | undefined) => {
+  const p = (protocol || 'SSH').toLowerCase();
+  return p === 'ssh' ? 'SSH' : p === 'raw' ? 'Raw' : p.charAt(0).toUpperCase() + p.slice(1);
+};
 
 export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   sessions,
@@ -537,7 +554,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
         // One line per session, as SecureCRT's tree: a device icon (tinted
         // by its tabs' state) and the name; where it goes is in the tooltip
         // (owner). It was two lines, name and host, with a status dot.
-        title={`${target}${tags ? ` · ${tags}` : ''}`}
+        title={`${protocolName(session.protocol)} · ${target}${tags ? ` · ${tags}` : ''}`}
         className={`group relative flex items-center gap-1.5 pl-1.5 pr-1.5 py-0.5 rounded cursor-pointer select-none transition-colors outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
           isActiveTab
             ? 'bg-sky-500/15'
@@ -559,7 +576,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           />
         )}
         {(() => {
-          const Icon = session.protocol === 'Serial' ? Cable : Monitor;
+          const Icon = protocolIcon(session.protocol);
           return (
             <span
               className="shrink-0 flex"

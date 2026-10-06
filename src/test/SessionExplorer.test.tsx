@@ -136,7 +136,9 @@ describe('SessionExplorer Component', () => {
     };
     render(
       <SessionExplorer
-        sessions={[...mockSessions, serial]}
+        sessions={[...mockSessions, serial,
+          { name: 'gns3-r1', protocol: 'Telnet', hostname: '192.0.2.5', port: 5000 },
+          { name: 'ser2net-sw', protocol: 'RAW', hostname: '192.0.2.6', port: 2001 }]}
         tabs={[]}
         activeTabId={null}
         onConnectSession={onConnect}
@@ -151,12 +153,16 @@ describe('SessionExplorer Component', () => {
     // port and tags are in its tooltip (default port hidden, a non-default
     // one shown, tags after the host).
     const rowOf = (name: string) => screen.getByText(name).closest('[data-session-row]') as HTMLElement;
-    expect(rowOf('Default Settings').title).toBe('localhost');
-    expect(rowOf('Prod-WebServer').title).toMatch(/^192\.168\.1\.100:2222 · .*web, frontend/);
+    expect(rowOf('Default Settings').title).toBe('SSH · localhost');
+    expect(rowOf('Prod-WebServer').title).toMatch(/^SSH · 192\.168\.1\.100:2222 · .*web, frontend/);
     // A serial session says which line and speed, and has the plug icon.
-    expect(rowOf('console-sw-lab').title).toBe('/dev/ttyUSB0 @ 9600');
+    expect(rowOf('console-sw-lab').title).toBe('Serial · /dev/ttyUSB0 @ 9600');
     expect(rowOf('console-sw-lab').querySelector('.lucide-cable')).not.toBeNull();
-    expect(rowOf('Default Settings').querySelector('.lucide-monitor')).not.toBeNull();
+    // Each protocol its own icon (owner): SSH a shield.
+    expect(rowOf('Default Settings').querySelector('.lucide-shield-check')).not.toBeNull();
+    expect(rowOf('gns3-r1').querySelector('.lucide-monitor')).not.toBeNull();
+    expect(rowOf('gns3-r1').title).toBe('Telnet · 192.0.2.5:5000');
+    expect(rowOf('ser2net-sw').querySelector('.lucide-network')).not.toBeNull();
     // No second line and no protocol chips any more.
     expect(screen.queryByText('localhost')).toBeNull();
     expect(screen.queryAllByText('SSH')).toHaveLength(0);
