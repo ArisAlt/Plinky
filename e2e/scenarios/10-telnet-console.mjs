@@ -480,7 +480,7 @@ export const tests = [
     assert.equal(await termFocused(), true, 'the mouse over the terminal gave it the keyboard');
   }],
 
-  ['a longer scrollback from Settings keeps a long listing whole for Copy All', async ({ app, r1 }) => {
+  ['a longer scrollback from Settings keeps a long listing whole for Select All and copy', async ({ app, r1 }) => {
     // xterm's fixed 1,000 lines cut a long show tech-support off at the top.
     await app.run((e) => e.click(document.querySelector('[aria-label="Settings"]')));
     await app.waitFor(() => !!document.getElementById('settings-scrollback'), [], { what: 'the Scrollback setting' });
@@ -495,11 +495,15 @@ export const tests = [
     await command(app, r1, 'show big 3000');
     await app.waitForScreen('END-OF-OUTPUT 3000', { timeoutMs: 15000 });
     await app.run((e) => e.rightClick([...document.querySelectorAll('.xterm')].find(e.visible).querySelector('.xterm-screen')));
+    // Select All in the menu, then copy (the menu has no Copy All: Select
+    // All covers it).
     await app.waitFor((e) => {
-      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Copy All to Clipboard' && e.visible(x));
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith('Select All') && e.visible(x));
       if (b) e.click(b);
       return !!b;
-    }, [], { what: 'Copy All to Clipboard' });
+    }, [], { what: 'Select All in the menu' });
+    await app.run((e) => e.focusTerminal());
+    await app.key('Ctrl+Shift+C');
     const copied = await waitUntil(async () => {
       const c = await getClipboard(app);
       return c.includes('END-OF-OUTPUT 3000') ? c : null;

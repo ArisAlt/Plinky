@@ -1405,21 +1405,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setContextMenu(null);
   };
 
-  const handleCopyAll = () => {
-    if (!terminalRef.current) return;
-    const buffer = terminalRef.current.buffer.active;
-    let fullText = '';
-    for (let i = 0; i < buffer.length; i++) {
-      const line = buffer.getLine(i);
-      if (line) {
-        fullText += line.translateToString(true) + '\n';
-      }
-    }
-    void writeClipboard(fullText.trimEnd());
-    addEventLog(`Copied entire scrollback (${buffer.length} lines) to clipboard`, 'info');
-    setContextMenu(null);
-  };
-
   // The menu's Paste (and a right click set to paste) sends what the paste
   // keys send. It wrote the clipboard raw: a line break reached a router as
   // LF, and text copied on Windows as CR LF, two Enters per line, where
@@ -2098,18 +2083,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
               <span className="text-meta text-plinky-muted">Ctrl+Shift+C</span>
             </button>
             <button
-              onClick={handleCopyAll}
-              className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
-            >
-              <CopyCheck className="w-3.5 h-3.5 text-slate-400" />
-              <span>Copy All to Clipboard</span>
-            </button>
-            <button
               onClick={handlePaste}
               className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
             >
               <Clipboard className="w-3.5 h-3.5 text-slate-400" />
-              <span className="flex-1">Paste Clipboard</span>
+              <span className="flex-1">Paste</span>
               <span className="text-meta text-plinky-muted">Ctrl+Shift+V</span>
             </button>
             <button

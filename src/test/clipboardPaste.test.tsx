@@ -104,7 +104,7 @@ describe('pasting into a terminal', () => {
     const { container } = await act(async () => render(<TerminalView tab={tab} onUpdateTab={() => {}} />));
     const surface = container.querySelector('[class*="relative"]') ?? container.firstElementChild!;
     await act(async () => { fireEvent.contextMenu(surface, { clientX: 20, clientY: 20 }); });
-    await act(async () => { fireEvent.click(screen.getByText('Paste Clipboard')); });
+    await act(async () => { fireEvent.click(screen.getByText('Paste')); });
     await act(async () => { await new Promise(r => setTimeout(r, 10)); });
     expect(term.pasted).toEqual(['show ip route']);
     expect(env.invoked.map(i => i.cmd)).not.toContain('write_terminal_input');
