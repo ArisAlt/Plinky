@@ -1298,6 +1298,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     onHoverFocus?.();
   };
 
+  // And while the mouse stays over it: after a menu closes, a button is
+  // clicked or a dialog shuts, the mouse is already inside and no enter
+  // comes, so the terminal stayed without the keyboard (owner: "if the
+  // mouse is over the terminal, the focus should be on the terminal").
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const term = terminalRef.current;
+    if (!term || contextMenu || document.activeElement === term.textarea) return;
+    if (!shouldTakeHoverFocus(e.buttons, document.activeElement, !!pendingPrompt)) return;
+    term.focus();
+    onHoverFocus?.();
+  };
+
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     // Close context menu on left click
     if (contextMenu) {
@@ -1404,6 +1416,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const handlePaste = async () => {
     setContextMenu(null);
     await pasteFromClipboard(deliverTypedPaste);
+    // Back to the terminal, not the menu item that was just removed.
+    terminalRef.current?.focus();
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -1896,6 +1910,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         ref={containerRef}
         onClick={handleCanvasClick}
         onMouseEnter={handleMouseEnter}
+        onMouseMove={handleMouseMove}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

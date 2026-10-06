@@ -22,6 +22,16 @@ describe('focus follows the mouse into a terminal', () => {
     expect(shouldTakeHoverFocus(0, el('<select><option>A</option></select>'), false)).toBe(false);
   });
 
+  it('never takes it from a dialog or a menu, buttons included', () => {
+    // Moving the mouse over a terminal behind the paste window must not
+    // take Enter away from its Paste button.
+    expect(shouldTakeHoverFocus(0, el('<div role="dialog"><button>Paste</button></div>').querySelector('button'), false)).toBe(false);
+    expect(shouldTakeHoverFocus(0, el('<div role="menu"><button>Copy</button></div>').querySelector('button'), false)).toBe(false);
+    expect(shouldTakeHoverFocus(0, el('<div aria-modal="true"><button>OK</button></div>').querySelector('button'), false)).toBe(false);
+    // A button elsewhere (the tab bar, the session list) does let it go.
+    expect(shouldTakeHoverFocus(0, el('<button>New session</button>'), false)).toBe(true);
+  });
+
   it('not mid-drag, and not while a host-key question waits in that pane', () => {
     expect(shouldTakeHoverFocus(1, document.body, false)).toBe(false);
     expect(shouldTakeHoverFocus(0, document.body, true)).toBe(false);

@@ -1,6 +1,5 @@
 /**
- * Whether a terminal the mouse just moved into should take the keyboard
- * focus. Focus follows the mouse between terminals (a split or grid pane
+ * Whether a terminal the mouse is over should take the keyboard focus. Focus follows the mouse between terminals (a split or grid pane
  * can be typed into without a click), but never away from something the
  * user is typing into -- the broadcast bar, a search box, a dialog field --
  * and never in the middle of a drag, such as a text selection that crosses
@@ -13,6 +12,9 @@ export function shouldTakeHoverFocus(
 ): boolean {
   if (buttonsHeld !== 0 || promptPending) return false;
   if (!focused || focused === focused.ownerDocument?.body) return true;
+  // A dialog or menu that has the keyboard keeps it: the paste window's
+  // Paste button takes Enter, and its buttons are not text fields.
+  if (focused.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [aria-modal="true"]')) return false;
   // Another terminal: xterm types through its hidden helper textarea.
   if (focused.classList.contains('xterm-helper-textarea')) return true;
   const el = focused as HTMLElement;

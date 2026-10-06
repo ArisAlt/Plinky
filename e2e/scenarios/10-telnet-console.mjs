@@ -452,5 +452,32 @@ export const tests = [
     const bar = await app.run(() => [...document.querySelectorAll('[role="status"]')].some((x) => x.textContent.includes('Running')));
     assert.equal(bar, false, 'the running bar is gone');
   }, { timeoutMs: 30000 }],
+
+  ['after Paste from the menu, and whenever the mouse is over it, the terminal has the keyboard', async ({ app, r1 }) => {
+    // Owner: after a right-click Paste, typing went nowhere until clicked.
+    const termFocused = () => app.run(() => !!document.activeElement?.classList.contains('xterm-helper-textarea'));
+    await setClipboard(app, 'show users');
+    r1.clear();
+    await app.run((e) => e.rightClick([...document.querySelectorAll('.xterm')].find(e.visible).querySelector('.xterm-screen')));
+    await app.waitFor((e) => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith('Paste') && e.visible(x));
+      if (b) { b.focus(); e.click(b); }
+      return !!b;
+    }, [], { what: 'Paste in the menu' });
+    await r1.waitForBytes('show users');
+    await app.waitFor(() => !!document.activeElement?.classList.contains('xterm-helper-textarea'), [], { what: 'the terminal to have the keyboard after Paste' });
+    await app.key('Ctrl+C');
+
+    // The keyboard is elsewhere (the tab bar), the mouse moves over the terminal.
+    await app.run(() => { const b = document.querySelector('[aria-label="Open a tab"]'); b.focus(); return document.activeElement === b; });
+    assert.equal(await termFocused(), false);
+    await app.run((e) => {
+      const screenEl = [...document.querySelectorAll('.xterm')].find(e.visible).querySelector('.xterm-screen');
+      const r = screenEl.getBoundingClientRect();
+      screenEl.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.left + 20, clientY: r.top + 20, buttons: 0 }));
+      return true;
+    });
+    assert.equal(await termFocused(), true, 'the mouse over the terminal gave it the keyboard');
+  }],
 ];
 
