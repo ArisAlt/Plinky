@@ -12,9 +12,11 @@ import {
 } from '../../services/tauriBridge';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { TAB_COLORS, LogonAction, parseLogonActions, serializeLogonActions } from '../../services/tabColors';
-import { SESSION_SAVED_EVENT, SessionSavedDetail, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
+import { TERMINAL_THEMES, MATCH_INTERFACE } from '../../themes/terminalThemes';
+import { TERMINAL_FONTS } from '../../themes/fonts';
+import { SESSION_SAVED_EVENT, SessionSavedDetail, sessionLookFrom, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
 
-type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'advanced';
+type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'appearance' | 'advanced';
 
 /** The hop command a router jump types (NX-OS syntax; the backend's default too). */
 const DEFAULT_HOP_COMMAND = 'ssh {user}@{host}';
@@ -99,6 +101,10 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // SecureCRT-style logon actions and a tab colour (tabColors.ts).
   const [logonActions, setLogonActions] = useState<LogonAction[]>([]);
   const [tabColor, setTabColor] = useState('');
+  // The session's own appearance; '' follows Settings (appEvents SessionLook).
+  const [lookScheme, setLookScheme] = useState('');
+  const [lookFont, setLookFont] = useState('');
+  const [lookSize, setLookSize] = useState('');
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -230,9 +236,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setAutoReconnect(extra.PlinkyAutoReconnect === '1');
       setLogonActions(parseLogonActions(extra.PlinkyLogonActions));
       setTabColor(extra.PlinkyTabColor || '');
+      setLookScheme(extra.PlinkyColourScheme || '');
+      setLookFont(extra.PlinkyFontFamily || '');
+      setLookSize(extra.PlinkyFontSize || '');
     } else {
       setLogonActions([]);
       setTabColor('');
+      setLookScheme('');
+      setLookFont('');
+      setLookSize('');
       setName('');
       setHostname('');
       setPort('22');
@@ -518,6 +530,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     const logon = serializeLogonActions(logonActions);
     if (logon) extra.PlinkyLogonActions = logon; else delete extra.PlinkyLogonActions;
     if (tabColor) extra.PlinkyTabColor = tabColor; else delete extra.PlinkyTabColor;
+    if (lookScheme) extra.PlinkyColourScheme = lookScheme; else delete extra.PlinkyColourScheme;
+    if (lookFont) extra.PlinkyFontFamily = lookFont; else delete extra.PlinkyFontFamily;
+    if (lookSize) extra.PlinkyFontSize = lookSize; else delete extra.PlinkyFontSize;
     const pasteLineDelayMs = pasteLineDelayFrom({ PlinkyPasteLineDelayMs: pasteDelay });
     if (pasteLineDelayMs > 0) extra.PlinkyPasteLineDelayMs = String(pasteLineDelayMs);
     else delete extra.PlinkyPasteLineDelayMs;
@@ -541,7 +556,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     onSave(session);
     // Open terminals of this session apply the new delay right away.
     window.dispatchEvent(new CustomEvent<SessionSavedDetail>(SESSION_SAVED_EVENT, {
-      detail: { name: session.name, pasteLineDelayMs, autoReconnect: autoReconnectOn },
+      detail: { name: session.name, pasteLineDelayMs, autoReconnect: autoReconnectOn, look: sessionLookFrom(extra) },
     }));
     onClose();
   };
@@ -558,6 +573,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     { id: 'credentials', label: 'Credentials & Vault', on: useVault || (protocol === 'SSH' && !!publicKeyFile.trim()) },
     ...(protocol === 'SSH' ? [{ id: 'jump' as const, label: 'Jump Host', on: enableJumpHost }] : []),
     ...(isSerial ? [{ id: 'serial' as const, label: 'Serial' }] : []),
+    { id: 'appearance', label: 'Appearance', on: !!(lookScheme || lookFont || lookSize) },
     { id: 'advanced', label: 'Advanced', on: (!isSerial && (parseInt(keepalive, 10) > 0 || autoReconnect)) || parseInt(pasteDelay, 10) > 0 || logonActions.some(a => a.send.trim()) },
   ];
   // Switching protocol can take away the tab that was open (Jump Host).
@@ -1370,6 +1386,52 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </div>
                 </div>
                   </div>
+            </div>
+
+            {/* Appearance: this session's own scheme and font, over Settings
+                (the gear), which stays the default for every session. */}
+            <div data-tab="appearance" hidden={tab !== 'appearance'} className="space-y-3">
+              <p className="text-meta text-plinky-muted">
+                For this session only. "Use default" follows Settings (the gear), the default for every session.
+              </p>
+              <div className="space-y-1">
+                <label htmlFor="session-look-scheme" className="text-slate-300 font-medium">Colour scheme</label>
+                <select
+                  id="session-look-scheme"
+                  value={lookScheme}
+                  onChange={e => setLookScheme(e.target.value)}
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="">Use default (from Settings)</option>
+                  <option value={MATCH_INTERFACE}>Match interface theme</option>
+                  {TERMINAL_THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="session-look-font" className="text-slate-300 font-medium">Font</label>
+                <select
+                  id="session-look-font"
+                  value={lookFont}
+                  onChange={e => setLookFont(e.target.value)}
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="">Use default (from Settings)</option>
+                  {lookFont && !TERMINAL_FONTS.some(f => f.value === lookFont) && <option value={lookFont}>Custom (saved)</option>}
+                  {TERMINAL_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}{f.note ? ` (${f.note})` : ''}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="session-look-size" className="text-slate-300 font-medium">Font size</label>
+                <select
+                  id="session-look-size"
+                  value={lookSize}
+                  onChange={e => setLookSize(e.target.value)}
+                  className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="">Use default (from Settings)</option>
+                  {Array.from({ length: 25 }, (_, i) => i + 8).map(n => <option key={n} value={String(n)}>{n} px</option>)}
+                </select>
+              </div>
             </div>
 
             <div data-tab="advanced" hidden={tab !== 'advanced'} className="space-y-3">

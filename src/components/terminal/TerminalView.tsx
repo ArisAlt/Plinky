@@ -55,8 +55,8 @@ import {
 import { KeywordHighlighter } from '../../services/keywordHighlight';
 import { shouldTakeHoverFocus } from '../../services/hoverFocus';
 import { useBroadcastGlow, glowColor } from '../../services/broadcast';
-import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
-import { useTerminalTheme } from '../../themes/terminalThemes';
+import { SESSION_SAVED_EVENT, SessionSavedDetail, SessionLook, sessionLookFrom, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
+import { useTerminalTheme, findTerminalTheme } from '../../themes/terminalThemes';
 import { useScrollback } from '../../services/scrollback';
 import { newId } from '../../services/ids';
 import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
@@ -65,7 +65,7 @@ import { fatalHint, sshBannerHint } from '../../services/fatalHint';
 import { askPaste, needsPasteConfirm } from '../../services/pasteConfirm';
 import { terminalShortcut, keySequenceFor } from '../../services/shortcuts';
 import { readClipboard, writeClipboard } from '../../services/clipboard';
-import { DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
+import { DEFAULT_TERMINAL_FONT, loadTerminalFont } from '../../themes/fonts';
 import {
   FileCode,
   Lock,
@@ -126,8 +126,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   onCwdChange,
   onDuplicateTab,
   onOpenSettings,
-  fontFamily,
-  fontSize,
+  fontFamily: globalFontFamily,
+  fontSize: globalFontSize,
   cursorStyle,
   copyOnSelect = true,
   rightClickAction = 'contextMenu',
@@ -160,7 +160,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [hooksError, setHooksError] = useState<string | null>(null);
   // Only consider local if it's explicitly "Local Shell" or flagged as local.
   // PuTTY sessions or SSH targets (even localhost:22) must connect via plink.
-  const terminalTheme = useTerminalTheme();
+  // The session's own scheme and font (Change Session Settings >
+  // Appearance) win over Settings' defaults; unset, Settings applies.
+  const [sessionLook, setSessionLook] = useState<SessionLook>({});
+  const globalTerminalTheme = useTerminalTheme();
+  const terminalTheme = sessionLook.scheme ? findTerminalTheme(sessionLook.scheme) : globalTerminalTheme;
+  const fontFamily = sessionLook.fontFamily || globalFontFamily;
+  const fontSize = sessionLook.fontSize || globalFontSize;
   const scrollback = useScrollback();
   const scrollbackRef = useRef(scrollback);
   scrollbackRef.current = scrollback;
@@ -446,11 +452,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   useEffect(() => {
     let active = true;
+    // A session's own font is loaded before it is applied: xterm measures
+    // its cell once, when the font changes.
+    const applyLook = (look: SessionLook) => {
+      const ready = look.fontFamily ? loadTerminalFont(look.fontFamily, look.fontSize ?? 14) : Promise.resolve();
+      void ready.then(() => { if (active) setSessionLook(look); });
+    };
     readPuttySession(tab.sessionName)
       .then(s => {
         if (!active) return;
         pasteDelayRef.current = pasteLineDelayFrom(s?.extra);
         autoReconnectRef.current = s?.extra?.PlinkyAutoReconnect === '1';
+        applyLook(sessionLookFrom(s?.extra));
       })
       .catch(() => {});
     const onSaved = (e: Event) => {
@@ -458,6 +471,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (d?.name === tab.sessionName) {
         pasteDelayRef.current = d.pasteLineDelayMs;
         autoReconnectRef.current = d.autoReconnect;
+        if (d.look) applyLook(d.look);
       }
     };
     window.addEventListener(SESSION_SAVED_EVENT, onSaved);

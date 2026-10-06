@@ -84,5 +84,55 @@ export const tests = [
       await again.stop();
     }
   }],
+
+  ['a session\'s own colour scheme and font from Change Session Settings, over the Settings default', async ({ app }) => {
+    // Owner: settings per saved session; the gear stays the default.
+    const look = () => app.run((e) => {
+      const tabEl = e.tabEl('Core R5');
+      if (tabEl.dataset.tabActive !== 'true') e.click(tabEl);
+      const x = [...document.querySelectorAll('.xterm')].find(e.visible);
+      return { bg: getComputedStyle(x.querySelector('.xterm-viewport')).backgroundColor,
+               size: getComputedStyle(x.querySelector('.xterm-rows')).fontSize };
+    });
+    const pick = (id, value) => app.run((e, i, v) => {
+      const sel = document.getElementById(i);
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, v);
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return sel.value === v;
+    }, id, value);
+
+    await app.run((e) => e.rightClick(document.querySelector('[data-session-row="Core R5"]')));
+    await app.waitFor((e) => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Change Session Settings…' && e.visible(x));
+      if (b) e.click(b);
+      return !!b;
+    }, [], { what: 'Change Session Settings in the menu' });
+    await app.waitFor((e) => {
+      const t = [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim() === 'Appearance');
+      if (t) e.click(t);
+      return !!t && !!document.getElementById('session-look-scheme');
+    }, [], { what: 'the Appearance tab' });
+    assert.ok(await pick('session-look-scheme', 'classic-light'));
+    assert.ok(await pick('session-look-size', '20'));
+    await app.waitFor((e) => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Save Changes' && e.visible(x));
+      if (b) e.click(b);
+      return !!b;
+    }, [], { what: 'Save Changes' });
+    await app.waitFor(() => !document.getElementById('session-look-scheme'), [], { what: 'the window to close' });
+
+    await waitUntil(async () => {
+      const l = await look();
+      return l.bg === 'rgb(255, 255, 255)' && l.size === '20px';
+    }, { what: 'the open tab to take Classic Light at 20 px', timeoutMs: 5000 });
+
+    // A different default in Settings does not change this session.
+    await app.run((e) => e.click(document.querySelector('[aria-label="Settings"]')));
+    await app.waitFor(() => !!document.getElementById('settings-terminal-scheme'), [], { what: 'Settings' });
+    assert.ok(await pick('settings-terminal-scheme', 'putty'));
+    await app.run((e) => e.click(document.querySelector('[aria-label="Close settings"]')));
+    await sleep(400);
+    assert.deepEqual(await look(), { bg: 'rgb(255, 255, 255)', size: '20px' });
+  }],
 ];
 

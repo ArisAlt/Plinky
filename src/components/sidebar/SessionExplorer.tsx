@@ -1148,7 +1148,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-plinky-800 transition text-left"
           >
             <Pencil className="w-3.5 h-3.5 text-slate-400" />
-            <span>Edit Session</span>
+            <span>Change Session Settings…</span>
           </button>
           <button
             onClick={(e) => {

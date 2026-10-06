@@ -15,6 +15,26 @@ export interface SessionSavedDetail {
   pasteLineDelayMs: number;
   /** Reconnect by itself when the connection drops. */
   autoReconnect: boolean;
+  /** The session's own colour scheme and font, over Settings' defaults. */
+  look?: SessionLook;
+}
+
+/** A saved session's own appearance (Change Session Settings > Appearance);
+ *  anything unset follows Settings. Stored as PlinkyColourScheme,
+ *  PlinkyFontFamily and PlinkyFontSize. */
+export interface SessionLook {
+  scheme?: string;
+  fontFamily?: string;
+  fontSize?: number;
+}
+
+export function sessionLookFrom(extra: Record<string, string> | undefined): SessionLook {
+  const size = Number(extra?.PlinkyFontSize);
+  return {
+    scheme: extra?.PlinkyColourScheme || undefined,
+    fontFamily: extra?.PlinkyFontFamily || undefined,
+    fontSize: size >= 8 && size <= 32 ? size : undefined,
+  };
 }
 
 /** Highest line delay the backend accepts (paste.rs MAX_LINE_DELAY_MS). */

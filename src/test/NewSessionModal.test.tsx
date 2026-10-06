@@ -564,7 +564,7 @@ describe('NewSessionModal Component', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     window.removeEventListener('plinky:session-saved', listener);
     expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBe('250');
-    expect(heard).toEqual([{ name: 'Console-SW', pasteLineDelayMs: 250, autoReconnect: false }]);
+    expect(heard).toEqual([{ name: 'Console-SW', pasteLineDelayMs: 250, autoReconnect: false, look: {} }]);
   });
 
   it('removes the paste line delay when set back to 0', async () => {
@@ -616,12 +616,12 @@ describe('the session editor tabs (T-014)', () => {
 
   it('shows the tabs the protocol has', () => {
     render(<NewSessionModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} />);
-    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Jump Host', 'Advanced']);
+    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Jump Host', 'Appearance', 'Advanced']);
     const protocol = screen.getByDisplayValue(/SSH/i);
     fireEvent.change(protocol, { target: { value: 'Serial' } });
-    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Serial', 'Advanced']);
+    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Serial', 'Appearance', 'Advanced']);
     fireEvent.change(protocol, { target: { value: 'Telnet' } });
-    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Advanced']);
+    expect(tabs()).toEqual(['General', 'Credentials & Vault', 'Appearance', 'Advanced']);
   });
 
   it('keeps what was typed on every tab when switching between them', () => {

@@ -180,6 +180,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Type className="w-3.5 h-3.5 text-sky-400" />
               <span>Terminal</span>
             </div>
+            <p className="text-meta text-plinky-muted">
+              The default for every session. A saved session can have its own colour scheme and font: right-click it,
+              Change Session Settings, Appearance.
+            </p>
 
             {/* Colour scheme + live preview */}
             <div className="space-y-1">
