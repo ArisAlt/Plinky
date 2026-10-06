@@ -10,6 +10,14 @@ export const STATUS_DOT: Record<TerminalTab['status'], string> = {
   disconnected: 'bg-rose-500',
 };
 
+/** The session list's device icon, tinted by its tabs' state. */
+export const STATUS_ICON: Record<TerminalTab['status'], string> = {
+  connecting: 'text-amber-400 animate-pulse',
+  preauth: 'text-amber-400',
+  live: 'text-emerald-400',
+  disconnected: 'text-rose-500',
+};
+
 export const STATUS_TEXT: Record<TerminalTab['status'], string> = {
   connecting: 'Connecting',
   preauth: 'Waiting for login',

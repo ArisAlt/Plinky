@@ -128,7 +128,7 @@ describe('SessionExplorer Component', () => {
   // names to "we..." (web-prod-1 and web-prod-2 looked the same); the card
   // view fit 6 of 12 sessions. The row keeps the name whole, puts the host
   // under it, and shows a protocol chip only when it isn't SSH.
-  it('shows each session as one row: full name, host underneath, no SSH chip', () => {
+  it('shows each session as one line, SecureCRT style: icon and name, where it goes in the tooltip', () => {
     const onConnect = vi.fn();
     const serial: PuttySession = {
       name: 'console-sw-lab', protocol: 'Serial', hostname: '', port: 0,
@@ -147,14 +147,20 @@ describe('SessionExplorer Component', () => {
       />
     );
 
-    // Default port hidden, a non-default one shown; tags follow the host.
-    expect(screen.getByText('localhost')).toBeDefined();
-    expect(screen.getByText('192.168.1.100:2222')).toBeDefined();
-    expect(screen.getByText(/web, frontend/)).toBeDefined();
-    // A serial row says which line and speed; only non-SSH rows get a chip.
-    expect(screen.getByText('/dev/ttyUSB0 @ 9600')).toBeDefined();
+    // Owner: a compact tree like SecureCRT's. The name is the row; host,
+    // port and tags are in its tooltip (default port hidden, a non-default
+    // one shown, tags after the host).
+    const rowOf = (name: string) => screen.getByText(name).closest('[data-session-row]') as HTMLElement;
+    expect(rowOf('Default Settings').title).toBe('localhost');
+    expect(rowOf('Prod-WebServer').title).toMatch(/^192\.168\.1\.100:2222 · .*web, frontend/);
+    // A serial session says which line and speed, and has the plug icon.
+    expect(rowOf('console-sw-lab').title).toBe('/dev/ttyUSB0 @ 9600');
+    expect(rowOf('console-sw-lab').querySelector('.lucide-cable')).not.toBeNull();
+    expect(rowOf('Default Settings').querySelector('.lucide-monitor')).not.toBeNull();
+    // No second line and no protocol chips any more.
+    expect(screen.queryByText('localhost')).toBeNull();
     expect(screen.queryAllByText('SSH')).toHaveLength(0);
-    expect(screen.getAllByText('COM').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('COM')).toHaveLength(0);
     // There is no density toggle any more.
     expect(screen.queryByLabelText('Toggle view density')).toBeNull();
 

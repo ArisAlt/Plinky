@@ -10,6 +10,8 @@ import {
   FolderInput,
   FolderPlus,
   Terminal,
+  Monitor,
+  Cable,
   Search,
   Plus,
   HardDrive,
@@ -50,7 +52,7 @@ import {
 import { setSessionFolders, deletePuttySession, readPuttySession, writePuttySession, copyName } from '../../services/tauriBridge';
 import { askConfirm } from '../../services/confirm';
 import { getSessionOrder, placeSession, clearFolderOrder, hasFolderOrder, rebaseFolderOrder } from '../../services/sessionOrder';
-import { STATUS_DOT, STATUS_TEXT, bestStatus } from '../../services/sessionStatus';
+import { STATUS_ICON, STATUS_TEXT, bestStatus } from '../../services/sessionStatus';
 
 /** Shared by every row without a tab, so it needs no allocation. */
 const NO_TABS: TerminalTab[] = [];
@@ -477,17 +479,6 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     },
   });
 
-  const getProtocolBadge = (protocol: string) => {
-    switch (protocol) {
-      case 'SSH':
-        return <span className="px-1.5 py-0.5 rounded text-meta font-mono bg-plinky-800 text-slate-300">SSH</span>;
-      case 'Serial':
-        return <span className="px-1.5 py-0.5 rounded text-meta font-mono bg-plinky-800 text-slate-300">COM</span>;
-      default:
-        return <span className="px-1.5 py-0.5 rounded text-meta font-mono bg-slate-700 text-slate-300">{protocol}</span>;
-    }
-  };
-
   /** Default port per protocol: a row shows the port only when it differs. */
   const DEFAULT_PORTS: Record<string, number> = { SSH: 22, Telnet: 23, Rlogin: 513 };
 
@@ -543,7 +534,11 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           setFolderMenu(null);
           setContextMenu({ x: e.clientX, y: e.clientY, session });
         }}
-        className={`group relative flex items-center gap-2 pl-1.5 pr-1.5 py-1 rounded cursor-pointer select-none transition-colors outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
+        // One line per session, as SecureCRT's tree: a device icon (tinted
+        // by its tabs' state) and the name; where it goes is in the tooltip
+        // (owner). It was two lines, name and host, with a status dot.
+        title={`${target}${tags ? ` · ${tags}` : ''}`}
+        className={`group relative flex items-center gap-1.5 pl-1.5 pr-1.5 py-0.5 rounded cursor-pointer select-none transition-colors outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
           isActiveTab
             ? 'bg-sky-500/15'
             : 'hover:bg-plinky-800/70'
@@ -556,7 +551,6 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             className={`pointer-events-none absolute left-1 right-1 h-0.5 rounded bg-sky-400 ${dropMark.after ? '-bottom-px' : '-top-px'}`}
           />
         )}
-        {/* Status slot: fixed width so names line up whether or not a tab is open. */}
         {tabColorHex(session.extra?.PlinkyTabColor) && (
           <span
             aria-hidden
@@ -564,34 +558,27 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             style={{ backgroundColor: tabColorHex(session.extra?.PlinkyTabColor) }}
           />
         )}
-        <span className="w-1.5 shrink-0 flex justify-center" aria-hidden>
-          {status && (
+        {(() => {
+          const Icon = session.protocol === 'Serial' ? Cable : Monitor;
+          return (
             <span
-              className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`}
-              title={`${STATUS_TEXT[status]}${sessionTabs.length > 1 ? ` (${sessionTabs.length} tabs)` : ''}`}
-            />
-          )}
-        </span>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1 min-w-0">
-            <span className={`text-sm font-medium truncate ${isActiveTab ? 'text-sky-100' : 'text-slate-100'}`}>
-              {session.name}
+              className="shrink-0 flex"
+              data-status-icon={status ?? 'none'}
+              title={status ? `${STATUS_TEXT[status]}${sessionTabs.length > 1 ? ` (${sessionTabs.length} tabs)` : ''}` : undefined}
+            >
+              <Icon aria-hidden className={`w-3.5 h-3.5 ${status ? STATUS_ICON[status] : 'text-plinky-muted'}`} />
             </span>
-            {session.extra?.PlinkyVaultKey && (
-              <Lock
-                className="w-2.5 h-2.5 text-plinky-muted shrink-0"
-                aria-label="Password saved in the vault"
-              />
-            )}
-          </div>
-          <div className="font-mono text-meta leading-tight text-plinky-muted truncate">
-            {target}
-            {tags && <span className="font-sans text-plinky-muted"> · {tags}</span>}
-          </div>
-        </div>
-
-        {session.protocol !== 'SSH' && getProtocolBadge(session.protocol)}
+          );
+        })()}
+        <span className={`flex-1 min-w-0 text-sm truncate ${isActiveTab ? 'text-sky-100' : 'text-slate-200'}`}>
+          {session.name}
+        </span>
+        {session.extra?.PlinkyVaultKey && (
+          <Lock
+            className="w-2.5 h-2.5 text-plinky-muted shrink-0"
+            aria-label="Password saved in the vault"
+          />
+        )}
 
         {/* Actions: over the row's end, visible on hover or keyboard focus. */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex group-focus-within:flex items-center gap-0.5 pl-3 bg-gradient-to-l from-plinky-800 via-plinky-800 to-transparent rounded-r">
@@ -659,7 +646,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
     const renaming = folderEdit?.mode === 'rename' && folderEdit.path === node.path;
     const addingSub = folderEdit?.mode === 'new-sub' && folderEdit.path === node.path;
     return (
-      <div key={node.path} className="space-y-1">
+      <div key={node.path} className="space-y-px">
         {renaming ? (
           renderFolderEditor(folderEdit)
         ) : (
@@ -688,7 +675,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             data-tree-item
             role="treeitem"
             tabIndex={-1}
-            className={`w-full flex items-center space-x-1.5 px-1 py-1 rounded text-sm font-medium transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
+            className={`w-full flex items-center space-x-1.5 px-1 py-0.5 rounded text-sm font-medium transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-sky-500/70 ${
               dragOverFolder === node.path
                 ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/50'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-plinky-800/50'
