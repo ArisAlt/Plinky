@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
 import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded, setSessionLocked } from './services/tauriBridge';
-import { tabColorHex } from './services/tabColors';
+import { tabColorHex, TAB_COLORS } from './services/tabColors';
 import { tabForOpenRequest, throttle } from './services/cliOpen';
 import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
@@ -233,6 +233,7 @@ export const App: React.FC = () => {
         username: t.username,
         // A GNS3 console reconnects as telnet, not SSH to a telnet port.
         protocol: t.protocol as TerminalTab['protocol'],
+        color: t.color,
       }));
       setTabs(restoredTabs);
       setActiveTabId(savedLayout.activeTabId || restoredTabs[0]?.id || null);
@@ -503,6 +504,10 @@ export const App: React.FC = () => {
     handleCloseTab(tab.id);
   };
 
+  // A tab's colour: picked from its menu, else its saved session's.
+  const colorOfTab = (tab: TerminalTab) =>
+    tabColorHex(tab.color) ?? tabColorHex(sessions.find(x => x.name === tab.sessionName)?.extra?.PlinkyTabColor);
+
   // Lock a tab read only: the backend refuses its input; output goes on.
   const handleToggleLock = (tab: TerminalTab) => {
     const locked = !tab.locked;
@@ -736,9 +741,7 @@ export const App: React.FC = () => {
                         style={{
                           ...(broadcastLit.has(tab.id) ? { boxShadow: `0 0 0 1px ${glowColor(tab.syncChannel)}, 0 0 10px ${glowColor(tab.syncChannel)}` } : {}),
                           // The saved session's tab colour (tabColors.ts).
-                          ...(tabColorHex(sessions.find(x => x.name === tab.sessionName)?.extra?.PlinkyTabColor)
-                            ? { borderTopColor: tabColorHex(sessions.find(x => x.name === tab.sessionName)?.extra?.PlinkyTabColor), borderTopWidth: 2 }
-                            : {}),
+                          ...(colorOfTab(tab) ? { borderTopColor: colorOfTab(tab), borderTopWidth: 2 } : {}),
                         }}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${
                           isActive
@@ -817,8 +820,8 @@ export const App: React.FC = () => {
                         <div
                           role="menu"
                           aria-label={`Tab ${menuTab.title}`}
-                          style={{ top: tabMenu.y, left: Math.min(tabMenu.x, window.innerWidth - 170) }}
-                          className="fixed w-40 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl py-1 text-xs text-slate-300"
+                          style={{ top: tabMenu.y, left: Math.min(tabMenu.x, window.innerWidth - 190) }}
+                          className="fixed w-44 bg-plinky-900 border border-plinky-700 rounded-lg shadow-2xl py-1 text-xs text-slate-300"
                           onMouseDown={(e) => e.stopPropagation()}
                         >
                           <button role="menuitem" className={item} onClick={() => { setTabMenu(null); setRenamingTabId(menuTab.id); }}>Rename</button>
@@ -826,6 +829,35 @@ export const App: React.FC = () => {
                           <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleToggleLock(menuTab); }}>
                             {menuTab.locked ? 'Unlock' : 'Lock (read only)'}
                           </button>
+                          {/* Tab colour, for this tab only (owner). Default
+                              goes back to the saved session's colour. */}
+                          <div className="px-3 py-1.5" role="group" aria-label="Tab colour">
+                            <div className="text-meta text-plinky-muted mb-1">Colour</div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                role="menuitemradio"
+                                aria-checked={!menuTab.color}
+                                title="Default"
+                                aria-label="Default colour"
+                                onClick={() => { setTabMenu(null); handleUpdateTab(menuTab.id, { color: undefined }); }}
+                                className={`w-4 h-4 rounded-full border ${!menuTab.color ? 'border-white' : 'border-plinky-600'} bg-plinky-800 text-[9px] leading-none text-slate-400`}
+                              >
+                                ×
+                              </button>
+                              {TAB_COLORS.map(c => (
+                                <button
+                                  key={c.id}
+                                  role="menuitemradio"
+                                  aria-checked={menuTab.color === c.id}
+                                  title={c.label}
+                                  aria-label={c.label}
+                                  onClick={() => { setTabMenu(null); handleUpdateTab(menuTab.id, { color: c.id }); }}
+                                  style={{ backgroundColor: c.hex }}
+                                  className={`w-4 h-4 rounded-full border-2 ${menuTab.color === c.id ? 'border-white' : 'border-transparent'}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
                           <div className="border-t border-plinky-800 my-1" />
                           <button role="menuitem" className={item} onClick={() => { setTabMenu(null); handleCloseTab(menuTab.id); }}>Close</button>
                         </div>

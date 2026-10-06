@@ -64,4 +64,25 @@ export const tests = [
     await app.key('Enter');
     await r5.waitForLine('show users');
   }],
+
+  ['a tab\'s colour is picked from its own menu, over the session\'s, and kept after a restart', async ({ app, ctx }) => {
+    // Owner: change the colour from the tab itself.
+    await app.run((e) => e.rightClick(e.tabEl('Core R5')));
+    await app.waitFor((e) => {
+      const b = document.querySelector('[role="group"][aria-label="Tab colour"] [aria-label="Green"]');
+      if (b) e.click(b);
+      return !!b;
+    }, [], { what: 'Green in the tab menu' });
+    await app.waitFor((e) => e.tabEl('Core R5').style.borderTopColor === 'rgb(34, 197, 94)', [], { what: 'the tab to turn green' });
+
+    // The saved layout keeps it: a new start of the app in the same profile.
+    await sleep(500);
+    const again = await ctx.launch({});
+    try {
+      await again.waitFor((e) => e.tabEl('Core R5')?.style.borderTopColor === 'rgb(34, 197, 94)', [], { what: 'the restored tab to be green', timeoutMs: 10000 });
+    } finally {
+      await again.stop();
+    }
+  }],
 ];
+

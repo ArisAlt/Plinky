@@ -37,6 +37,9 @@ export interface TerminalTab {
   vaultKey?: string;
   /** Locked read only (tab menu): typing, pastes and broadcasts refused. */
   locked?: boolean;
+  /** Colour picked from the tab's menu (tabColors.ts id); overrides the
+   *  saved session's colour. */
+  color?: string;
 }
 
 export interface TunnelEntry {

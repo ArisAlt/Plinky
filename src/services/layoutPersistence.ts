@@ -10,6 +10,8 @@ export interface SavedTab {
   username?: string;
   /** For a tab that isn't a saved session: a GNS3 console is telnet. */
   protocol?: string;
+  /** Colour picked from the tab's menu. */
+  color?: string;
 }
 
 export interface LayoutState {
@@ -45,6 +47,7 @@ export function saveLayout(
         port: t.port,
         username: t.username,
         protocol: t.protocol,
+        color: t.color,
       })),
       timestamp: Date.now(),
     };
