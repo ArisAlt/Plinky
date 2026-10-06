@@ -744,9 +744,13 @@ export const App: React.FC = () => {
                           ...(colorOfTab(tab) ? { borderTopColor: colorOfTab(tab), borderTopWidth: 2 } : {}),
                         }}
                         className={`group relative flex items-center space-x-2 px-3 py-1 text-xs rounded-t border-t border-l border-r cursor-pointer transition max-w-[220px] ${
+                          // Inactive tabs are boxes of their own (they were
+                          // bare text on the bar, owner: hard to see); the
+                          // active one takes the terminal's background and
+                          // covers the bar's bottom line, joined to it.
                           isActive
-                            ? 'bg-plinky-950 border-plinky-800 text-sky-300 font-medium shadow-xs'
-                            : 'bg-plinky-900/60 border-transparent text-slate-400 hover:text-slate-200 hover:bg-plinky-850'
+                            ? 'relative z-10 -mb-px bg-plinky-950 border-plinky-700 border-b border-b-plinky-950 text-sky-300 font-medium shadow-xs'
+                            : 'bg-plinky-850 border-plinky-800 text-slate-300 hover:text-slate-100 hover:bg-plinky-800'
                         }`}
                       >
                         {tabDropMark?.id === tab.id && draggingTabRef.current !== tab.id && (
