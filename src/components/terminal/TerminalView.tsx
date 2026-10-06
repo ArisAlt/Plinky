@@ -56,6 +56,7 @@ import { shouldTakeHoverFocus } from '../../services/hoverFocus';
 import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import { useTerminalTheme } from '../../themes/terminalThemes';
+import { useScrollback } from '../../services/scrollback';
 import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { fatalHint, sshBannerHint } from '../../services/fatalHint';
@@ -157,6 +158,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // Only consider local if it's explicitly "Local Shell" or flagged as local.
   // PuTTY sessions or SSH targets (even localhost:22) must connect via plink.
   const terminalTheme = useTerminalTheme();
+  const scrollback = useScrollback();
+  const scrollbackRef = useRef(scrollback);
+  scrollbackRef.current = scrollback;
   const terminalThemeRef = useRef(terminalTheme);
   terminalThemeRef.current = terminalTheme;
   const isLocalSession = tab.sessionName === 'Local Shell' || (tab as any).isLocal === true;
@@ -634,6 +638,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Initialize xterm.js instance with modern dark theme
     const term = new Terminal({
+      scrollback: scrollbackRef.current,
       cursorBlink: true,
       cursorStyle: cursorStyle || (isFreeType ? 'bar' : 'block'),
       fontFamily: fontFamily || DEFAULT_TERMINAL_FONT,
@@ -1281,6 +1286,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       fitAddonRef.current?.fit();
     }
   }, [fontFamily, fontSize, cursorStyle]);
+
+  // A shorter length drops the oldest lines at once; a longer one keeps
+  // what is there and grows from now.
+  useEffect(() => {
+    if (terminalRef.current) terminalRef.current.options.scrollback = scrollback;
+  }, [scrollback]);
 
   useEffect(() => {
     if (terminalRef.current) terminalRef.current.options.theme = terminalTheme.theme;

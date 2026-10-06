@@ -479,5 +479,34 @@ export const tests = [
     });
     assert.equal(await termFocused(), true, 'the mouse over the terminal gave it the keyboard');
   }],
+
+  ['a longer scrollback from Settings keeps a long listing whole for Copy All', async ({ app, r1 }) => {
+    // xterm's fixed 1,000 lines cut a long show tech-support off at the top.
+    await app.run((e) => e.click(document.querySelector('[aria-label="Settings"]')));
+    await app.waitFor(() => !!document.getElementById('settings-scrollback'), [], { what: 'the Scrollback setting' });
+    await app.run(() => {
+      const s = document.getElementById('settings-scrollback');
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, '5000');
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    });
+    await app.run((e) => e.click(document.querySelector('[aria-label="Close settings"]')));
+    await app.run((e) => e.focusTerminal());
+    await command(app, r1, 'show big 3000');
+    await app.waitForScreen('END-OF-OUTPUT 3000', { timeoutMs: 15000 });
+    await app.run((e) => e.rightClick([...document.querySelectorAll('.xterm')].find(e.visible).querySelector('.xterm-screen')));
+    await app.waitFor((e) => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Copy All to Clipboard' && e.visible(x));
+      if (b) e.click(b);
+      return !!b;
+    }, [], { what: 'Copy All to Clipboard' });
+    const copied = await waitUntil(async () => {
+      const c = await getClipboard(app);
+      return c.includes('END-OF-OUTPUT 3000') ? c : null;
+    }, { what: 'the copy', timeoutMs: 5000 });
+    assert.match(copied, /line 000001 of 3000/, 'the first of 3,000 lines is still there');
+    // Back to the default for the tests after this one.
+    await app.run(() => { localStorage.removeItem('plinky_scrollback'); return true; });
+  }, { timeoutMs: 40000 }],
 ];
 

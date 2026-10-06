@@ -8,6 +8,7 @@ import { useUiZoom, zoomIn, zoomOut, zoomReset, UI_ZOOM_MIN, UI_ZOOM_MAX } from 
 import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
 import { usePasteConfirmMode, setPasteConfirmMode, PasteConfirmMode } from '../../services/pasteConfirm';
 import { SHORTCUT_LIST } from '../../services/shortcuts';
+import { SCROLLBACK_CHOICES, DEFAULT_SCROLLBACK, setScrollback, useScrollback } from '../../services/scrollback';
 
 const PASTE_OPTIONS: { mode: PasteConfirmMode; label: string; hint: string }[] = [
   { mode: 'multiline', label: 'Multi-line pastes', hint: 'Asks before pasting several lines' },
@@ -51,6 +52,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const pasteMode = usePasteConfirmMode();
   const uiTheme = useUiTheme();
   const termTheme = useTerminalTheme();
+  const scrollback = useScrollback();
   const knownFont = TERMINAL_FONTS.some(f => f.value === fontFamily);
   const [puttyInfo, setPuttyInfo] = useState<PuttyDetectInfo | null>(null);
   const [resetDone, setResetDone] = useState(false);
@@ -285,6 +287,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Scrollback (scrollback.ts) */}
+            <div className="space-y-1">
+              <label htmlFor="settings-scrollback" className="text-meta text-slate-400 font-medium">Scrollback</label>
+              <select
+                id="settings-scrollback"
+                value={scrollback}
+                onChange={(e) => setScrollback(Number(e.target.value))}
+                className="w-full bg-plinky-950 border border-plinky-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+              >
+                {SCROLLBACK_CHOICES.map(n => (
+                  <option key={n} value={n}>
+                    {n.toLocaleString('en-US')} lines{n === 2000 ? ' (PuTTY)' : n === DEFAULT_SCROLLBACK ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-meta text-plinky-muted">
+                Lines kept above the screen, for scrolling back and Copy All to Clipboard. More lines use more memory in every open tab.
+              </p>
             </div>
           </div>
 
