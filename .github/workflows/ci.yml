@@ -9,6 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Tests read the code and nothing else (CodeQL: actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
 jobs:
   test-linux:
     name: Linux (Ubuntu) - Test, Build, Deny & Smoke

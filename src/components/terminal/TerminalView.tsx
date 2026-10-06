@@ -58,6 +58,7 @@ import { useBroadcastGlow, glowColor } from '../../services/broadcast';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, pasteLineDelayFrom, isMultiLinePaste, RECONNECT_DELAYS_S } from '../../services/appEvents';
 import { useTerminalTheme } from '../../themes/terminalThemes';
 import { useScrollback } from '../../services/scrollback';
+import { newId } from '../../services/ids';
 import { STATUS_DOT, STATUS_TEXT } from '../../services/sessionStatus';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { fatalHint, sshBannerHint } from '../../services/fatalHint';
@@ -644,7 +645,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const addEventLog = useCallback((message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
     const time = new Date().toTimeString().split(' ')[0];
-    setEventLogs(prev => [...prev.slice(-200), { id: `${Date.now()}-${Math.random()}`, time, message, level }]);
+    setEventLogs(prev => [...prev.slice(-200), { id: newId('log'), time, message, level }]);
   }, []);
 
   useEffect(() => {

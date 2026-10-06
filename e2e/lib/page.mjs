@@ -33,7 +33,7 @@ export function installHelpers() {
     let keyCode, code, key;
     if (KEYS[name]) {
       [keyCode, code, key] = KEYS[name];
-      key = key ?? code.replace(/^Arrow/, 'Arrow');
+      key = key ?? code;
       if (name.startsWith('F') && name.length <= 3) key = name;
     } else if (name.length === 1) {
       const upper = name.toUpperCase();

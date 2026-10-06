@@ -5,7 +5,7 @@ use std::path::Path;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, Rng};
 use zeroize::Zeroizing;
 
 use crate::errors::{PlinkyError, Result};
@@ -38,8 +38,9 @@ pub struct VaultHeader {
 
 impl VaultHeader {
     pub fn new_default() -> Self {
-        let mut salt = [0u8; 16];
-        thread_rng().fill_bytes(&mut salt);
+        // Drawn whole from the system's generator. Filling a zeroed array
+        // did the same, but CodeQL read the zeros as a hard-coded salt.
+        let salt: [u8; 16] = thread_rng().gen();
         Self {
             version: CURRENT_VERSION,
             m_cost: DEFAULT_M_COST,
@@ -50,8 +51,9 @@ impl VaultHeader {
     }
 
     pub fn new_fast() -> Self {
-        let mut salt = [0u8; 16];
-        thread_rng().fill_bytes(&mut salt);
+        // Drawn whole from the system's generator. Filling a zeroed array
+        // did the same, but CodeQL read the zeros as a hard-coded salt.
+        let salt: [u8; 16] = thread_rng().gen();
         Self {
             version: CURRENT_VERSION,
             m_cost: TEST_M_COST,
@@ -98,8 +100,7 @@ impl VaultHeader {
         let m_cost = u32::from_be_bytes(bytes[8..12].try_into().unwrap());
         let t_cost = u32::from_be_bytes(bytes[12..16].try_into().unwrap());
         let p_cost = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
-        let mut salt = [0u8; 16];
-        salt.copy_from_slice(&bytes[20..36]);
+        let salt: [u8; 16] = bytes[20..36].try_into().unwrap();
 
         Ok(Self {
             version,
@@ -148,8 +149,7 @@ pub fn encrypt_vault_payload(
 ) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
 
-    let mut nonce_bytes = [0u8; NONCE_SIZE];
-    thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce_bytes: [u8; NONCE_SIZE] = thread_rng().gen();
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let aad = header.aad();
@@ -228,7 +228,7 @@ pub fn save_atomic(path: impl AsRef<Path>, data: &[u8]) -> Result<()> {
     let tmp_path = parent.join(format!(
         ".{}.tmp.{}",
         path.file_name().and_then(|n| n.to_str()).unwrap_or("vault"),
-        thread_rng().next_u64()
+        thread_rng().gen::<u64>()
     ));
 
     {

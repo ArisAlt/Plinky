@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { newId } from '../../services/ids';
 import { askConfirm } from '../../services/confirm';
 import { SftpFileEntry, SftpTransferItem } from '../../types/session';
 import {
@@ -255,7 +256,7 @@ export const SftpDualPane: React.FC<SftpDualPaneProps> = ({
     work: () => Promise<void>,
     after: () => Promise<void>,
   ) => {
-    const id = `${direction}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const id = newId(direction);
     // psftp reports no progress in batch mode, so a transfer is shown as
     // running until it really finishes -- never an invented percentage.
     setTransfers(prev => [{ id, filename: entry.name, direction, size: entry.size, transferred: 0, status: 'transferring' }, ...prev]);

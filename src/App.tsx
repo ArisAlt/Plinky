@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
 import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded, setSessionLocked } from './services/tauriBridge';
 import { tabColorHex, TAB_COLORS } from './services/tabColors';
+import { newId } from './services/ids';
 import { tabForOpenRequest, throttle } from './services/cliOpen';
 import { terminalManager } from './services/terminalManager';
 import { TitleBar } from './components/layout/TitleBar';
@@ -163,7 +164,7 @@ export const App: React.FC = () => {
 
   const handleDuplicateTab = (targetTab: TerminalTab) => {
     const newTab: TerminalTab = {
-      id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: newId('tab'),
       title: `${targetTab.sessionName} (Copy)`,
       sessionName: targetTab.sessionName,
       syncChannel: targetTab.syncChannel,
@@ -278,9 +279,8 @@ export const App: React.FC = () => {
   // the last console connected.
   const openCliTabs = (requests: OpenRequest[]) => {
     if (requests.length === 0) return;
-    const stamp = Date.now();
     const newTabs = requests.map((r, i) =>
-      tabForOpenRequest(r, `tab-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}`));
+      tabForOpenRequest(r, newId(`tab-${i}`)));
     // The backend has normally started each session already (sessionId):
     // the tab only attaches. One it couldn't start is started here -- the
     // shown tab in its own view, the others in the background. A start that
@@ -343,7 +343,7 @@ export const App: React.FC = () => {
     setRecentNames(getRecentSessions());
 
     const newTab: TerminalTab = {
-      id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: newId('tab'),
       title,
       sessionName: session.name,
       syncChannel: 'none',
@@ -365,7 +365,7 @@ export const App: React.FC = () => {
   const handleOpenLocalShell = () => {
     const open = tabs.filter(t => t.sessionName === 'Local Shell').length;
     const newTab: TerminalTab = {
-      id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: newId('tab'),
       title: open > 0 ? `Local Shell (${open + 1})` : 'Local Shell',
       sessionName: 'Local Shell',
       syncChannel: 'none',
