@@ -1112,7 +1112,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
           aria-label={`Session ${contextMenu.session.name}`}
           ref={sessionMenuRef}
           style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y }}
-          className="z-40 w-44 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          className="z-40 w-56 max-h-[calc(100vh-16px)] overflow-y-auto bg-plinky-950/95 backdrop-blur-sm border border-plinky-700/80 rounded-lg shadow-2xl py-1 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1 text-meta text-plinky-muted font-mono border-b border-plinky-800/80 truncate">
@@ -1148,7 +1148,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             className="w-full flex items-center space-x-2 px-3 py-1.5 text-slate-200 hover:text-white hover:bg-plinky-800 transition text-left"
           >
             <Pencil className="w-3.5 h-3.5 text-slate-400" />
-            <span>Change Session Settings…</span>
+            <span className="whitespace-nowrap">Change Session Settings…</span>
           </button>
           <button
             onClick={(e) => {

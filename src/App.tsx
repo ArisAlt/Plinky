@@ -529,6 +529,13 @@ export const App: React.FC = () => {
     setIsNewSessionOpen(true);
   };
 
+  // A terminal's "Change Session Settings…": only for a tab whose session
+  // is saved (a GNS3 console or local shell has none to change).
+  const sessionSettingsFor = (tab: TerminalTab) => {
+    const saved = sessions.find(x => x.name === tab.sessionName);
+    return saved ? () => handleEditSession(saved) : undefined;
+  };
+
   // Tabs dragged into a new order. The split and grid panes take tabs in
   // this order too (paneTabs), so a tab dragged to the front fills the
   // first pane.
@@ -955,6 +962,7 @@ export const App: React.FC = () => {
                       onCwdChange={cwd => handleCwdChange(activeTab.id, cwd)}
                       onDuplicateTab={handleDuplicateTab}
                       onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(activeTab)}
                       fontFamily={terminalFontFamily}
                       fontSize={terminalFontSize}
                       cursorStyle={terminalCursorStyle}
@@ -974,6 +982,7 @@ export const App: React.FC = () => {
                         onCwdChange={cwd => handleCwdChange(activeTab.id, cwd)}
                         onDuplicateTab={handleDuplicateTab}
                         onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(activeTab)}
                         fontFamily={terminalFontFamily}
                         fontSize={terminalFontSize}
                         cursorStyle={terminalCursorStyle}
@@ -1006,6 +1015,7 @@ export const App: React.FC = () => {
                         onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
                         onDuplicateTab={handleDuplicateTab}
                         onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(splitTabs[0])}
                         fontFamily={terminalFontFamily}
                         fontSize={terminalFontSize}
                         cursorStyle={terminalCursorStyle}
@@ -1027,6 +1037,7 @@ export const App: React.FC = () => {
                           onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
                           onDuplicateTab={handleDuplicateTab}
                           onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(splitTabs[1])}
                           fontFamily={terminalFontFamily}
                           fontSize={terminalFontSize}
                           cursorStyle={terminalCursorStyle}
@@ -1062,6 +1073,7 @@ export const App: React.FC = () => {
                         onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
                         onDuplicateTab={handleDuplicateTab}
                         onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(splitTabs[0])}
                         fontFamily={terminalFontFamily}
                         fontSize={terminalFontSize}
                         cursorStyle={terminalCursorStyle}
@@ -1083,6 +1095,7 @@ export const App: React.FC = () => {
                           onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
                           onDuplicateTab={handleDuplicateTab}
                           onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(splitTabs[1])}
                           fontFamily={terminalFontFamily}
                           fontSize={terminalFontSize}
                           cursorStyle={terminalCursorStyle}
@@ -1120,6 +1133,7 @@ export const App: React.FC = () => {
                           onCwdChange={cwd => handleCwdChange(tab.id, cwd)}
                           onDuplicateTab={handleDuplicateTab}
                           onOpenSettings={() => setIsSettingsOpen(true)}
+                      onEditSessionSettings={sessionSettingsFor(tab)}
                           fontFamily={terminalFontFamily}
                           fontSize={terminalFontSize}
                           cursorStyle={terminalCursorStyle}

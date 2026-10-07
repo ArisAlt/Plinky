@@ -134,5 +134,33 @@ export const tests = [
     await sleep(400);
     assert.deepEqual(await look(), { bg: 'rgb(255, 255, 255)', size: '20px' });
   }],
+
+  ['the terminal\'s menu opens this session\'s settings, with a preview of the scheme', async ({ app }) => {
+    // Owner: the per-session settings from the terminal's right-click menu
+    // too, with the scheme preview Global Settings has.
+    await app.run((e) => { const t = e.tabEl('Core R5'); if (t.dataset.tabActive !== 'true') e.click(t); return true; });
+    await app.run((e) => e.rightClick([...document.querySelectorAll('.xterm')].find(e.visible).querySelector('.xterm-screen')));
+    await app.waitFor((e) => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Change Session Settings…' && e.visible(x));
+      if (b) e.click(b);
+      return !!b;
+    }, [], { what: 'Change Session Settings in the terminal menu' });
+    await app.waitFor((e) => {
+      const t = [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim() === 'Appearance');
+      if (t) e.click(t);
+      return !!document.querySelector('[data-testid="session-look-preview"]');
+    }, [], { what: 'the Appearance tab with its preview' });
+    const previewBg = () => app.run(() => getComputedStyle(document.querySelector('[data-testid="session-look-preview"]')).backgroundColor);
+    // The session was set to Classic Light earlier: a white preview.
+    assert.equal(await previewBg(), 'rgb(255, 255, 255)');
+    await app.run(() => {
+      const sel = document.getElementById('session-look-scheme');
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, 'putty');
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    });
+    assert.equal(await previewBg(), 'rgb(0, 0, 0)', 'the preview follows the pick');
+    await app.run((e) => e.dismissAll());
+  }],
 ];
 

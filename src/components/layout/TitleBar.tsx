@@ -395,7 +395,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
         <button
           onClick={onOpenSettings}
-          title="Settings & PuTTY Path"
+          title="Global settings: the defaults for every session, and PuTTY"
           aria-label="Settings"
           className="p-1.5 rounded hover:bg-plinky-800 text-slate-400 hover:text-slate-200 transition"
         >

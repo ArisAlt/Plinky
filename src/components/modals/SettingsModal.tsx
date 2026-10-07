@@ -8,6 +8,7 @@ import { useUiZoom, zoomIn, zoomOut, zoomReset, UI_ZOOM_MIN, UI_ZOOM_MAX } from 
 import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '../../services/tauriBridge';
 import { usePasteConfirmMode, setPasteConfirmMode, PasteConfirmMode } from '../../services/pasteConfirm';
 import { SHORTCUT_LIST } from '../../services/shortcuts';
+import { TerminalSchemePreview } from '../common/TerminalSchemePreview';
 import { SCROLLBACK_CHOICES, DEFAULT_SCROLLBACK, setScrollback, useScrollback } from '../../services/scrollback';
 
 const PASTE_OPTIONS: { mode: PasteConfirmMode; label: string; hint: string }[] = [
@@ -115,7 +116,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-3 bg-plinky-950 border-b border-plinky-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Settings className="w-4 h-4 text-sky-400" />
-            <h3 id="settings-title" className="font-semibold text-slate-100 text-base">Settings</h3>
+            <div>
+              <h3 id="settings-title" className="font-semibold text-slate-100 text-base">Global Settings</h3>
+              <p className="text-meta text-plinky-muted">The defaults for every session. A saved session can change its own: right-click it, Change Session Settings.</p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -198,42 +202,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {TERMINAL_THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <div
-              data-testid="terminal-preview"
-              aria-label={`Preview of ${termTheme.name}`}
-              className="rounded border border-plinky-700 px-3 py-2 overflow-hidden select-none"
-              style={{
-                background: termTheme.theme.background,
-                color: termTheme.theme.foreground,
-                fontFamily,
-                fontSize: `${fontSize}px`,
-                lineHeight: 1.25,
-              }}
-            >
-              <div className="whitespace-pre">
-                <span style={{ color: termTheme.theme.green }}>admin@core-sw1</span>
-                <span>:</span>
-                <span style={{ color: termTheme.theme.blue }}>~</span>
-                <span>$ show ip int brief</span>
-              </div>
-              <div className="whitespace-pre">
-                <span>Gi0/1  10.0.0.1  </span>
-                <span style={{ color: termTheme.theme.green }}>up</span>
-                <span>    Gi0/2  </span>
-                <span style={{ color: termTheme.theme.red }}>down</span>
-                <span style={{ color: termTheme.theme.yellow }}>  warn</span>
-              </div>
-              <div className="flex gap-1 pt-1.5" aria-hidden>
-                {(['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'] as const).map(k => (
-                  <span key={k} className="flex-1 h-2.5 rounded-sm" style={{ background: termTheme.theme[k] }} />
-                ))}
-              </div>
-              <div className="flex gap-1 pt-1" aria-hidden>
-                {(['brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'] as const).map(k => (
-                  <span key={k} className="flex-1 h-2.5 rounded-sm" style={{ background: termTheme.theme[k] }} />
-                ))}
-              </div>
-            </div>
+            <TerminalSchemePreview scheme={termTheme} fontFamily={fontFamily} fontSize={fontSize} testId="terminal-preview" />
 
             {/* Font Family */}
             <div className="space-y-1">

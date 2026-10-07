@@ -12,8 +12,9 @@ import {
 } from '../../services/tauriBridge';
 import { VaultUnlockDialog } from '../vault/VaultUnlockDialog';
 import { TAB_COLORS, LogonAction, parseLogonActions, serializeLogonActions } from '../../services/tabColors';
-import { TERMINAL_THEMES, MATCH_INTERFACE } from '../../themes/terminalThemes';
-import { TERMINAL_FONTS } from '../../themes/fonts';
+import { TERMINAL_THEMES, MATCH_INTERFACE, findTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
+import { TERMINAL_FONTS, DEFAULT_TERMINAL_FONT } from '../../themes/fonts';
+import { TerminalSchemePreview } from '../common/TerminalSchemePreview';
 import { SESSION_SAVED_EVENT, SessionSavedDetail, sessionLookFrom, MAX_PASTE_LINE_DELAY_MS, pasteLineDelayFrom, keepaliveSecondsFrom, keepaliveKeys } from '../../services/appEvents';
 
 type SessionTab = 'general' | 'credentials' | 'jump' | 'serial' | 'appearance' | 'advanced';
@@ -105,6 +106,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [lookScheme, setLookScheme] = useState('');
   const [lookFont, setLookFont] = useState('');
   const [lookSize, setLookSize] = useState('');
+  // The preview shows what this session will look like: its own choice, or
+  // Settings' default where it has none.
+  const defaultScheme = useTerminalTheme();
+  const storedFont = (() => { try { return localStorage.getItem('plinky_terminal_font') || DEFAULT_TERMINAL_FONT; } catch { return DEFAULT_TERMINAL_FONT; } })();
+  const storedSize = (() => { try { const n = Number(localStorage.getItem('plinky_terminal_font_size')); return n >= 8 && n <= 32 ? n : 14; } catch { return 14; } })();
 
   // Serial-specific state
   const [serialPorts, setSerialPorts] = useState<DetectedSerialPort[]>([]);
@@ -597,7 +603,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           <div className="flex items-center space-x-2">
             <Terminal className="w-4 h-4 text-sky-400" />
             <h3 id="new-session-title" className="font-semibold text-slate-100 text-base">
-              {editingSession ? `Edit "${editingSession.name}"` : 'New session'}
+              {editingSession ? `Session Settings — ${editingSession.name}` : 'New session'}
             </h3>
           </div>
           <button aria-label="Close"
@@ -1432,6 +1438,12 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   {Array.from({ length: 25 }, (_, i) => i + 8).map(n => <option key={n} value={String(n)}>{n} px</option>)}
                 </select>
               </div>
+              <TerminalSchemePreview
+                scheme={lookScheme ? findTerminalTheme(lookScheme) : defaultScheme}
+                fontFamily={lookFont || storedFont}
+                fontSize={Number(lookSize) || storedSize}
+                testId="session-look-preview"
+              />
             </div>
 
             <div data-tab="advanced" hidden={tab !== 'advanced'} className="space-y-3">

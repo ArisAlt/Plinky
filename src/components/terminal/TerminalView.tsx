@@ -110,6 +110,9 @@ interface TerminalViewProps {
   onCwdChange?: (cwd: string) => void;
   onDuplicateTab?: (tab: TerminalTab) => void;
   onOpenSettings?: () => void;
+  /** Opens this tab's saved session's settings; absent for a tab with no
+   *  saved session (a GNS3 console, a local shell). */
+  onEditSessionSettings?: () => void;
   fontFamily?: string;
   fontSize?: number;
   cursorStyle?: 'block' | 'bar' | 'underline';
@@ -126,6 +129,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   onCwdChange,
   onDuplicateTab,
   onOpenSettings,
+  onEditSessionSettings,
   fontFamily: globalFontFamily,
   fontSize: globalFontSize,
   cursorStyle,
@@ -2242,6 +2246,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 <span>Run Script...</span>
               </button>
             )}
+            {/* This session's own settings (owner), and the defaults for
+                every session behind the title bar's gear. */}
+            {onEditSessionSettings && (
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  onEditSessionSettings();
+                }}
+                className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
+              >
+                <SettingsIcon className="w-3.5 h-3.5 text-sky-400" />
+                <span>Change Session Settings…</span>
+              </button>
+            )}
             {onOpenSettings && (
               <button
                 onClick={() => {
@@ -2251,7 +2269,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                 className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-sky-600/30 hover:text-sky-200 text-left transition"
               >
                 <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
-                <span>Change Settings...</span>
+                <span>Global Settings…</span>
               </button>
             )}
             {tab.status === 'disconnected' && (

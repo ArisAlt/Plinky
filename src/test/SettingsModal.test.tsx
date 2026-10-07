@@ -53,7 +53,7 @@ describe('SettingsModal Component', () => {
       />
     );
 
-    expect(screen.getByText('Settings')).toBeDefined();
+    expect(screen.getByText('Global Settings')).toBeDefined();
 
     // Change cursor style to underline
     const underlineBtn = screen.getByRole('button', { name: /underline/i });
