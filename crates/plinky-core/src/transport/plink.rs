@@ -62,6 +62,37 @@ fn write_pwfile(password: &crate::vault::SecretString) -> Result<tempfile::Named
     Ok(file)
 }
 
+/// Name prefixes of the files that hold a password for plink or psftp
+/// while they start (`write_pwfile`, sftp's `PsftpPasswordGuard`).
+pub const PASSWORD_FILE_PREFIXES: [&str; 2] = [".plinky_login_", ".plinky_psftp_pw_"];
+
+/// Deletes password files in `dir` older than `min_age`, and returns how
+/// many. Each is deleted a few seconds after plink or psftp starts, by a
+/// guard in this process: if Plinky was killed or crashed in those seconds,
+/// the file stayed in the temp folder, password and all. Called at start.
+/// `min_age` keeps a file another starting session still needs.
+pub fn sweep_password_files(dir: &Path, min_age: std::time::Duration) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
+    let now = std::time::SystemTime::now();
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !PASSWORD_FILE_PREFIXES.iter().any(|p| name.starts_with(p)) {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        let age = meta.modified().ok().and_then(|m| now.duration_since(m).ok()).unwrap_or_default();
+        if age >= min_age && std::fs::remove_file(entry.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 pub struct PlinkTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -760,6 +791,27 @@ mod tests {
         assert_eq!(&*enter_as_crlf(b"a\r\n"), b"a\r\n");
         // No Enter: nothing copied.
         assert!(matches!(enter_as_crlf(b"\x1b[A\x03"), std::borrow::Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn password_files_left_by_a_crash_are_swept_and_nothing_else() {
+        // A password file is deleted by a guard a few seconds after plink
+        // starts; killed in between, Plinky left it in the temp folder.
+        let dir = tempfile::tempdir().unwrap();
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+        for name in [".plinky_login_abc", ".plinky_psftp_pw_def", "notes.txt", ".plinky_loginfoo_not_ours"] {
+            let f = std::fs::File::create(dir.path().join(name)).unwrap();
+            f.set_modified(old).unwrap();
+        }
+        // One a session is starting with right now.
+        std::fs::write(dir.path().join(".plinky_login_fresh"), b"pw\n").unwrap();
+
+        let removed = sweep_password_files(dir.path(), std::time::Duration::from_secs(60));
+        assert_eq!(removed, 2);
+        let left: std::collections::BTreeSet<String> = std::fs::read_dir(dir.path()).unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+        assert!(left.contains("notes.txt") && left.contains(".plinky_login_fresh"), "{left:?}");
+        assert!(!left.contains(".plinky_login_abc") && !left.contains(".plinky_psftp_pw_def"), "{left:?}");
     }
 
     #[test]

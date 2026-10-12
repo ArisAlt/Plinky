@@ -22,6 +22,14 @@ pub const DEFAULT_M_COST: u32 = 65536; // 64 MiB
 pub const DEFAULT_T_COST: u32 = 3;     // 3 iterations
 pub const DEFAULT_P_COST: u32 = 1;     // 1 thread
 
+// The most a vault file may ask unlocking to spend. The parameters are read
+// from the file before anything is checked: a file with m_cost near 4 TiB
+// made unlocking try to allocate it. Far above the defaults, so no vault
+// Plinky made is refused.
+pub const MAX_M_COST: u32 = 1 << 20; // 1 GiB, in KiB
+pub const MAX_T_COST: u32 = 64;
+pub const MAX_P_COST: u32 = 16;
+
 // Fast parameters for test runs
 pub const TEST_M_COST: u32 = 19456;    // 19 MiB
 pub const TEST_T_COST: u32 = 1;        // 1 iteration
@@ -101,6 +109,12 @@ impl VaultHeader {
         let t_cost = u32::from_be_bytes(bytes[12..16].try_into().unwrap());
         let p_cost = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
         let salt: [u8; 16] = bytes[20..36].try_into().unwrap();
+        if m_cost > MAX_M_COST || t_cost == 0 || t_cost > MAX_T_COST || p_cost == 0 || p_cost > MAX_P_COST {
+            return Err(PlinkyError::VaultError(format!(
+                "This vault asks for key derivation settings out of range (memory {m_cost} KiB, \
+                 {t_cost} passes, {p_cost} lanes); it wasn't made by Plinky or is damaged."
+            )));
+        }
 
         Ok(Self {
             version,
@@ -176,7 +190,7 @@ pub fn encrypt_vault_payload(
 pub fn decrypt_vault_payload(
     password: &str,
     container_data: &[u8],
-) -> Result<(VaultHeader, Zeroizing<[u8; 32]>, Vec<u8>)> {
+) -> Result<(VaultHeader, Zeroizing<[u8; 32]>, Zeroizing<Vec<u8>>)> {
     let min_len = HEADER_SIZE + NONCE_SIZE + TAG_SIZE;
     if container_data.len() < min_len {
         return Err(PlinkyError::VaultError(format!(
@@ -215,7 +229,7 @@ pub fn decrypt_vault_payload(
         )
     })?;
 
-    Ok((header, key, plaintext))
+    Ok((header, key, Zeroizing::new(plaintext)))
 }
 
 /// Atomically write data to disk by writing to a temporary file in the same directory
@@ -232,10 +246,16 @@ pub fn save_atomic(path: impl AsRef<Path>, data: &[u8]) -> Result<()> {
     ));
 
     {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&tmp_path)?;
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        // Created owner-only, not chmod-ed after: for that moment the file
+        // had the umask's permissions (often readable by everyone).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&tmp_path)?;
 
         #[cfg(unix)]
         {

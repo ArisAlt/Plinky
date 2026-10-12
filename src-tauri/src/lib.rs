@@ -1702,6 +1702,16 @@ pub fn run() {
         .manage(ConnectedSessions::default())
         .manage(scripts::Scripts::default())
         .setup(move |app| {
+            // Password files a crash left in the temp folder (see
+            // sweep_password_files). Off the main thread: a big temp folder
+            // must not hold up the window. A minute's age spares the files
+            // of sessions starting right now in another launch.
+            std::thread::spawn(|| {
+                plinky_core::transport::plink::sweep_password_files(
+                    &std::env::temp_dir(),
+                    std::time::Duration::from_secs(60),
+                );
+            });
             // The first launch's own consoles connect while the page loads.
             open_console_requests(app.handle(), startup_requests);
             // No safe socket path (see handoff::socket_path): no handoff,

@@ -67,3 +67,37 @@ export function trackTypedInput(state: TypedInput, data: string, now: number): T
 export function isPrivilegeCommand(line: string): boolean {
   return /^\s*(?:en|ena|enab|enabl|enable|super)(?:\s+\d+)?\s*$/i.test(line);
 }
+
+/**
+ * Whether a line the user just submitted was a command, as opposed to part
+ * of logging in: a username typed at a Username: prompt, a password typed
+ * at a Password: prompt, or an Enter to wake a quiet console.
+ */
+export function isCommandSubmission(line: string, recent: string): boolean {
+  if (line.trim() === '') return false;
+  return !isUsernamePrompt(recent) && classifyPasswordPrompt(recent) === null;
+}
+
+/**
+ * What a console's automatic login (Telnet or serial, the session's "log in
+ * automatically" on) should send for the output so far, or null.
+ *
+ * Only while the console is logging in: once the user has run a command, a
+ * Password: prompt belongs to something they started -- `ssh` to another
+ * host, `su`, a device's own login to a neighbour -- and the console's
+ * password must not go to it. It did: on a console that needed no login,
+ * the first Password: of the session got it, whatever asked.
+ */
+export function consoleLoginAction(s: {
+  enabled: boolean;
+  commandRun: boolean;
+  recent: string;
+  promptKind: 'login' | 'enable' | null;
+  hasUsername: boolean;
+  sent: { user: boolean; password: boolean };
+}): 'username' | 'password' | null {
+  if (!s.enabled || s.commandRun) return null;
+  if (isUsernamePrompt(s.recent) && s.hasUsername && !s.sent.user) return 'username';
+  if (s.promptKind === 'login' && !s.sent.password) return 'password';
+  return null;
+}

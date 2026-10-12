@@ -208,6 +208,8 @@ impl Vault {
         let entries = BTreeMap::new();
         let json_bytes = serde_json::to_vec(&entries)
             .map_err(|e| PlinkyError::VaultError(format!("JSON serialization error: {}", e)))?;
+        // The plaintext of every password: wiped when dropped.
+        let json_bytes = Zeroizing::new(json_bytes);
 
         let container_data = storage::encrypt_vault_payload(&*key, &header, &json_bytes)?;
         storage::save_atomic(&path, &container_data)?;
@@ -255,6 +257,8 @@ impl Vault {
 
         let json_bytes = serde_json::to_vec(&self.entries)
             .map_err(|e| PlinkyError::VaultError(format!("JSON serialization error: {}", e)))?;
+        // The plaintext of every password: wiped when dropped.
+        let json_bytes = Zeroizing::new(json_bytes);
 
         let container_data = storage::encrypt_vault_payload(&**key, &self.header, &json_bytes)?;
         storage::save_atomic(path, &container_data)?;
@@ -354,6 +358,38 @@ impl Vault {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn a_vault_file_asking_for_absurd_key_derivation_is_refused_before_any_work() {
+        // The settings are read from the file before anything is checked: a
+        // file with m_cost near 4 TiB made unlocking try to allocate it.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("vault.bin");
+        Vault::create_fast(&path, "correct horse").unwrap();
+        let mut data = std::fs::read(&path).unwrap();
+        data[8..12].copy_from_slice(&u32::MAX.to_be_bytes()); // m_cost
+        std::fs::write(&path, &data).unwrap();
+        let started = std::time::Instant::now();
+        let err = Vault::load(&path, "correct horse").unwrap_err().to_string();
+        assert!(err.contains("out of range"), "{err}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+
+        // Plinky's own settings are well inside the limits.
+        let h = VaultHeader::new_default();
+        assert!(VaultHeader::from_bytes(&h.to_bytes()).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_vault_file_is_readable_by_its_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("vault.bin");
+        let mut v = Vault::create_fast(&path, "correct horse").unwrap();
+        v.set("session:core-sw1", "pw");
+        v.save().unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    }
 
     #[test]
     fn test_secret_string_redaction() {

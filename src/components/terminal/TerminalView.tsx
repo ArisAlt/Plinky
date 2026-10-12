@@ -50,7 +50,7 @@ import {
   VAULT_CHANGED_EVENT,
 } from '../../services/tauriBridge';
 import {
-  classifyPasswordPrompt, appendRecentOutput, isUsernamePrompt, trackTypedInput, isPrivilegeCommand, TypedInput,
+  classifyPasswordPrompt, appendRecentOutput, trackTypedInput, isPrivilegeCommand, isCommandSubmission, consoleLoginAction, TypedInput,
 } from '../../services/promptDetect';
 import { KeywordHighlighter } from '../../services/keywordHighlight';
 import { shouldTakeHoverFocus } from '../../services/hoverFocus';
@@ -399,6 +399,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   //    each per connection.
   const typedRef = useRef<TypedInput>({ line: '', submitted: null });
   const autoLoginSentRef = useRef({ user: false, password: false });
+  // The user has run a command in this connection: automatic console login
+  // is over (promptDetect.ts, consoleLoginAction).
+  const commandRunRef = useRef(false);
   // Returns true when it answered, so the manual Send chip stays hidden.
   const autoRespondRef = useRef<(kind: 'login' | 'enable' | null, recent: string) => boolean>(() => false);
   autoRespondRef.current = (kind, recent) => {
@@ -420,15 +423,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
       return false; // never answer an enable prompt with the login password
     }
-    const consoleLogin = v.autoLogin && (tab.protocol === 'Telnet' || tab.protocol === 'Serial');
-    if (!consoleLogin) return false;
-    if (isUsernamePrompt(recent) && v.username && !autoLoginSentRef.current.user) {
+    const action = consoleLoginAction({
+      enabled: !!v.autoLogin && (tab.protocol === 'Telnet' || tab.protocol === 'Serial'),
+      commandRun: commandRunRef.current,
+      recent,
+      promptKind: kind,
+      hasUsername: !!v.username,
+      sent: autoLoginSentRef.current,
+    });
+    if (action === 'username' && v.username) {
       autoLoginSentRef.current.user = true;
       writeTerminalInput(tab.id, new TextEncoder().encode(v.username + '\r'));
       addEventLog(`Sent the username automatically (vault entry "${key}")`, 'info');
       return true;
     }
-    if (kind === 'login' && !autoLoginSentRef.current.password) {
+    if (action === 'password') {
       autoLoginSentRef.current.password = true;
       void autoSend('login');
       return true;
@@ -1065,6 +1074,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       reachedLiveRef.current = false; // a new login, shown as one
       typedRef.current = { line: '', submitted: null };
       autoLoginSentRef.current = { user: false, password: false };
+      commandRunRef.current = false; // a new connection logs in again
       setDetectedPasswordPrompt(null);
       term.writeln('\r\n\x1b[33m[Plinky: Reconnecting...]\x1b[0m');
       onUpdateTab(tab.id, { status: 'connecting' });
@@ -1160,7 +1170,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         showLockNotice();
         return;
       }
+      const before = typedRef.current.submitted;
       typedRef.current = trackTypedInput(typedRef.current, data, Date.now());
+      const sub = typedRef.current.submitted;
+      if (sub && sub !== before && isCommandSubmission(sub.line, recentOutputRef.current)) commandRunRef.current = true;
       if (isLivePtyRef.current) {
         writeTerminalInput(tab.id, new TextEncoder().encode(data));
       } else if (!isTauriEnvironment()) {
