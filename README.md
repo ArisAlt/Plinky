@@ -26,6 +26,7 @@ PuTTY sees them too.
 - **Keep passwords in an encrypted vault.** Log in automatically, including
   through a jump host, and send network devices their enable password when
   they ask for it. Passwords stay in the vault, not in PuTTY's session files.
+  [How your passwords are protected](docs/PASSWORDS.md).
 - **Reach hosts behind a gateway.** Connect through a jump host / bastion with
   one setting.
 - **Work with network gear.** Serial console sessions with USB adapter
@@ -59,6 +60,13 @@ Plinky uses the PuTTY you already have installed, so install
 
 Get the latest version from the
 [Releases page](https://github.com/ArisAlt/Plinky/releases).
+
+---
+
+## Reporting problems
+
+Bugs and ideas: [open an issue](https://github.com/ArisAlt/Plinky/issues/new/choose).
+Security problems: privately, as described in [SECURITY.md](SECURITY.md).
 
 ---
 
