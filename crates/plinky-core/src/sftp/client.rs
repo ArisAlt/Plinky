@@ -2,7 +2,6 @@ use std::io::Write as _;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
-use tokio::time::timeout;
 use crate::errors::{PlinkyError, Result};
 use super::parser::{parse_psftp_ls_output, SftpFileEntry};
 
@@ -17,14 +16,14 @@ pub const ERR_PASSWORD: &str = "[password] ";
 pub const ERR_HOSTKEY: &str = "[hostkey] ";
 
 /// Tries at one SFTP action whose connection never reached the server.
-const CONNECT_ATTEMPTS: u32 = 3;
+pub(super) const CONNECT_ATTEMPTS: u32 = 3;
 
 /// True when psftp failed on the network before the session started: no
 /// "Remote working directory" line (psftp prints it once logged in) and a
 /// network failure. A refused connection is not one of them: a wrong port
 /// or a stopped server won't change in a few seconds. Host key and password
 /// failures also come before that line, and are never retried.
-fn never_connected(stdout: &str, stderr: &str) -> bool {
+pub(super) fn never_connected(stdout: &str, stderr: &str) -> bool {
     if stdout.contains("Remote working directory") {
         return false;
     }
@@ -37,7 +36,7 @@ fn never_connected(stdout: &str, stderr: &str) -> bool {
 
 /// Turns psftp's failure output into one message. The FATAL ERROR texts
 /// below are psftp 0.85's, measured against a real sshd.
-fn describe_failure(stdout: &str, stderr: &str) -> String {
+pub(super) fn describe_failure(stdout: &str, stderr: &str) -> String {
     let all = format!("{stdout}\n{stderr}");
     // A changed key fails the same way as a new one in batch mode, after
     // PuTTY's breach warning. It used to get the new-key text, "accept its
@@ -209,12 +208,15 @@ impl PsftpClient {
     /// directory" and the rest, so failed uploads and downloads showed as
     /// completed. With `-b <file>` psftp stops at the first failed command
     /// and exits non-zero, with the reason on stdout.
+    ///
+    /// Only transfers run this way now. The quick actions share one psftp
+    /// per target (`super::persistent`), which checks each command's output
+    /// for its own success text instead of relying on the exit status.
     async fn run_batch(
         session_name: &str,
         explicit_target: Option<&crate::transport::plink::ExplicitTarget>,
         password: Option<&str>,
         script: &str,
-        limit: Option<Duration>,
     ) -> Result<String> {
         Self::validate_session_name(session_name)?;
         let pw_guard = PsftpPasswordGuard::create(password)?;
@@ -253,13 +255,10 @@ impl PsftpClient {
                 .spawn()
                 .map_err(|e| PlinkyError::ProcessError(format!("Failed to start psftp: {e}")))?;
 
-            let output = match limit {
-                Some(d) => timeout(d, child.wait_with_output()).await.map_err(|_| {
-                    PlinkyError::ProcessError(format!("SFTP operation timed out after {} seconds", d.as_secs()))
-                })?,
-                None => child.wait_with_output().await,
-            }
-            .map_err(|e| PlinkyError::ProcessError(format!("psftp failed: {e}")))?;
+            let output = child
+                .wait_with_output()
+                .await
+                .map_err(|e| PlinkyError::ProcessError(format!("psftp failed: {e}")))?;
 
             let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
             if output.status.success() {
@@ -274,17 +273,16 @@ impl PsftpClient {
         }
     }
 
-    fn quick() -> Option<Duration> {
-        Some(Duration::from_secs(SFTP_TIMEOUT_SECS))
-    }
-
     /// The remote working directory psftp starts in: the user's home.
     pub async fn home_dir(
         session_name: &str,
         explicit_target: Option<&crate::transport::plink::ExplicitTarget>,
         password: Option<&str>,
     ) -> Result<String> {
-        let out = Self::run_batch(session_name, explicit_target, password, "pwd\n", Self::quick()).await?;
+        let out = super::persistent::run(session_name, explicit_target, password, "pwd", true, |o| {
+            o.contains("Remote directory is ")
+        })
+        .await?;
         out.lines()
             .find_map(|l| l.trim().strip_prefix("Remote directory is "))
             .map(|p| p.trim().to_string())
@@ -299,8 +297,11 @@ impl PsftpClient {
         password: Option<&str>,
     ) -> Result<Vec<SftpFileEntry>> {
         Self::validate_path(remote_path)?;
-        let script = format!("ls {}\n", Self::escape_psftp_path(remote_path));
-        let out = Self::run_batch(session_name, explicit_target, password, &script, Self::quick()).await?;
+        let command = format!("ls {}", Self::escape_psftp_path(remote_path));
+        let out = super::persistent::run(session_name, explicit_target, password, &command, true, |o| {
+            o.trim_start().starts_with("Listing directory") && !o.lines().any(|l| l.starts_with("Unable to open "))
+        })
+        .await?;
         Ok(parse_psftp_ls_output(&out))
     }
 
@@ -312,8 +313,10 @@ impl PsftpClient {
         password: Option<&str>,
     ) -> Result<()> {
         Self::validate_path(remote_path)?;
-        let script = format!("mkdir {}\n", Self::escape_psftp_path(remote_path));
-        Self::run_batch(session_name, explicit_target, password, &script, Self::quick()).await.map(|_| ())
+        let command = format!("mkdir {}", Self::escape_psftp_path(remote_path));
+        super::persistent::run(session_name, explicit_target, password, &command, false, |o| o.trim_end().ends_with(": OK"))
+            .await
+            .map(|_| ())
     }
 
     /// Removes a file on the remote server.
@@ -324,8 +327,10 @@ impl PsftpClient {
         password: Option<&str>,
     ) -> Result<()> {
         Self::validate_path(remote_path)?;
-        let script = format!("rm {}\n", Self::escape_psftp_path(remote_path));
-        Self::run_batch(session_name, explicit_target, password, &script, Self::quick()).await.map(|_| ())
+        let command = format!("rm {}", Self::escape_psftp_path(remote_path));
+        super::persistent::run(session_name, explicit_target, password, &command, false, |o| o.trim_end().ends_with(": OK"))
+            .await
+            .map(|_| ())
     }
 
     /// Removes an (empty) directory on the remote server.
@@ -336,8 +341,10 @@ impl PsftpClient {
         password: Option<&str>,
     ) -> Result<()> {
         Self::validate_path(remote_path)?;
-        let script = format!("rmdir {}\n", Self::escape_psftp_path(remote_path));
-        Self::run_batch(session_name, explicit_target, password, &script, Self::quick()).await.map(|_| ())
+        let command = format!("rmdir {}", Self::escape_psftp_path(remote_path));
+        super::persistent::run(session_name, explicit_target, password, &command, false, |o| o.trim_end().ends_with(": OK"))
+            .await
+            .map(|_| ())
     }
 
     /// Uploads a local file to `remote_path` (the full destination path).
@@ -358,7 +365,7 @@ impl PsftpClient {
             Self::escape_psftp_path(local_path),
             Self::escape_psftp_path(remote_path)
         );
-        Self::run_batch(session_name, explicit_target, password, &script, None).await.map(|_| ())
+        Self::run_batch(session_name, explicit_target, password, &script).await.map(|_| ())
     }
 
     /// Downloads `remote_path` to `local_path` (the full destination path).
@@ -388,7 +395,7 @@ impl PsftpClient {
             Self::escape_psftp_path(remote_path),
             Self::escape_psftp_path(&part)
         );
-        let result = Self::run_batch(session_name, explicit_target, password, &script, None).await;
+        let result = Self::run_batch(session_name, explicit_target, password, &script).await;
         match result {
             Ok(_) => std::fs::rename(&part, dest).map_err(|e| {
                 let _ = std::fs::remove_file(&part);
