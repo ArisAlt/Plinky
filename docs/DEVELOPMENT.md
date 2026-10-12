@@ -99,7 +99,9 @@ remote inspector, so it needs no WebDriver: Node 22+, `plink`, and either
 scenario runs in a throwaway home directory with its own runtime directory
 and no session bus, so it never touches your sessions, host keys or vault,
 and never hands its tabs to a Thyrion you have open. Tests named "like PuTTY"
-expect PuTTY's default behaviour.
+expect PuTTY's default behaviour. CI runs the whole suite on every push and
+pull request (the `e2e-linux` job, Xvfb); a failed run keeps the app and
+sshd logs as the `e2e-profiles` artifact for a week.
 
 The README's pictures (`docs/images/`) are the real app too, made by
 `node e2e/shots.mjs <outDir> [stills|gif]` on the same hidden screen: a

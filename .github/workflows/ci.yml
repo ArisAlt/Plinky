@@ -109,3 +109,69 @@ jobs:
 
       - name: Run Cargo Workspace Tests
         run: cargo test --workspace --verbose --no-fail-fast
+
+  # The real app, its backend and PuTTY's plink, driven through WebKit's
+  # inspector against stand-in router consoles, a private sshd and a socat
+  # serial line (e2e/run.mjs). Unit tests stub those joins; this suite is
+  # what caught the bugs in them, and it ran only by hand until a timing
+  # regression sat unnoticed through two releases.
+  e2e-linux:
+    name: Linux - End-to-end (real app, Xvfb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies, PuTTY, sshd, socat, Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            putty-tools \
+            openssh-server \
+            socat \
+            xvfb
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
+
+      # The suite needs Node 22+: it talks to the inspector with the
+      # built-in WebSocket.
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # --build makes the debug app with the page embedded (`tauri build
+      # --debug`); a plain cargo build shows a blank window without Vite.
+      - name: Run the end-to-end suite
+        env:
+          TMPDIR: ${{ runner.temp }}/e2e
+        run: |
+          mkdir -p "$TMPDIR"
+          npm run e2e -- --build --keep
+
+      - name: Keep the app logs and profiles of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-profiles
+          path: |
+            ${{ runner.temp }}/e2e/thyrion-e2e-*/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
