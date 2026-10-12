@@ -71,7 +71,10 @@ export const tests = [
   }],
 
   ['TERM is xterm, like PuTTY', async ({ app }) => {
-    const screen = await shell(app, 'echo "term=$TERM"', /term=\S+/);
+    // The answer's own line: /term=\S+/ also matched the command as typed
+    // (`echo "term=$TERM"`), and on a fast CI runner the screen was read
+    // before the shell had replied.
+    const screen = await shell(app, 'echo "term=$TERM"', /^term=\S+/m);
     assert.match(screen, /term=xterm\b/);
   }],
 
