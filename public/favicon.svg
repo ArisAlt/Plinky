@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <rect width="1024" height="1024" fill="#0f172a"/>
   <!-- Alis: a Dogo Argentino, on the left, facing the prompt -->
-  <g transform="translate(1000 30) scale(-0.96 0.96)">
+  <g transform="translate(1000 118) scale(-0.96 0.96)">
     <!-- domed skull, cropped ears, short deep muzzle, heavy flews, thick neck -->
     <path fill="#f8fafc" d="
       M462 446
@@ -12,9 +12,9 @@
       L792 172 C797 162 811 162 818 172
       L866 302
       C896 324 914 354 926 394
-      C962 470 990 620 1004 1060
-      L560 1060
-      C574 900 600 760 640 700
+      C960 470 985 600 996 860
+      L590 860
+      C600 780 612 720 640 680
       C664 674 694 660 716 632
       C692 636 662 636 632 628
       C600 622 572 618 548 610
