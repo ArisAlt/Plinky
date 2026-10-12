@@ -89,3 +89,33 @@ export function fillSnippet(command: string, values: Record<string, string>): st
     return values[name] ?? dflt ?? '';
   });
 }
+
+// The ribbon: the snippets shown as buttons in the bar itself, in order.
+// It was always the first five in the list; now the user picks them (pin,
+// or drag one onto the bar) and their order. Until they do, the first
+// five, as before.
+const RIBBON_KEY = 'plinky_snippet_ribbon';
+const DEFAULT_RIBBON_SIZE = 5;
+
+/** The ribbon's snippet ids, in order, for the snippets that still exist. */
+export function loadRibbon(snippets: SnippetItem[]): string[] {
+  try {
+    const raw = localStorage.getItem(RIBBON_KEY);
+    const ids = raw === null ? null : JSON.parse(raw);
+    if (Array.isArray(ids)) {
+      const exists = new Set(snippets.map(s => s.id));
+      return ids.filter((id): id is string => typeof id === 'string' && exists.has(id));
+    }
+  } catch {
+    // Unreadable: the default below.
+  }
+  return snippets.slice(0, DEFAULT_RIBBON_SIZE).map(s => s.id);
+}
+
+export function saveRibbon(ids: string[]): void {
+  try {
+    localStorage.setItem(RIBBON_KEY, JSON.stringify(ids));
+  } catch {
+    // Storage unavailable: the change lasts until the app closes.
+  }
+}

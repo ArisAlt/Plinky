@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { SnippetItem } from '../../types/session';
-import { loadSnippets, saveSnippets, snippetParams, SnippetParam } from '../../services/snippets';
+import { loadSnippets, saveSnippets, snippetParams, SnippetParam, loadRibbon, saveRibbon } from '../../services/snippets';
+import { placeName } from '../../services/sessionOrder';
 import { SnippetParamsDialog } from './SnippetParamsDialog';
 import { 
   Play, 
@@ -9,6 +10,7 @@ import {
   ChevronDown, 
   Sparkles, 
   Pencil,
+  Pin,
   X
 } from 'lucide-react';
 
@@ -24,6 +26,13 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
   // Kept across restarts (T-013); they used to reset every launch.
   const [snippets, setSnippets] = useState<SnippetItem[]>(loadSnippets);
   const [pending, setPending] = useState<{ snippet: SnippetItem; params: SnippetParam[] } | null>(null);
+  // The snippets on the bar itself, in order (owner: "place them in the
+  // ribbon"). It was always the first five.
+  const [ribbon, setRibbon] = useState<string[]>(() => loadRibbon(loadSnippets()));
+  // What is being dragged: a ref, since dragover comes before React renders.
+  const dragSnippetRef = useRef<string | null>(null);
+  // Where a drop on the ribbon would land: before/after a chip, or the end.
+  const [ribbonMark, setRibbonMark] = useState<{ id: string | null; after: boolean } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -71,6 +80,38 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
     });
   };
 
+  const updateRibbon = (update: (prev: string[]) => string[]) => {
+    setRibbon(prev => {
+      const next = update(prev);
+      saveRibbon(next);
+      return next;
+    });
+  };
+  const onRibbon = (id: string) => ribbon.includes(id);
+  const togglePin = (id: string, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    updateRibbon(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  };
+  /** The dragged snippet goes onto the ribbon before or after `target`
+   *  (the end when null): pinned if it wasn't, moved if it was. */
+  const dropOnRibbon = (target: string | null, after: boolean) => {
+    const id = dragSnippetRef.current;
+    dragSnippetRef.current = null;
+    setRibbonMark(null);
+    if (!id || id === target) return;
+    updateRibbon(prev => placeName(prev, id, target, after));
+  };
+  const ribbonSnippets = ribbon
+    .map(id => snippets.find(s => s.id === id))
+    .filter((s): s is SnippetItem => !!s);
+  const startSnippetDrag = (id: string) => (e: React.DragEvent) => {
+    dragSnippetRef.current = id;
+    e.dataTransfer.setData('application/x-plinky-snippet', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const endSnippetDrag = () => { dragSnippetRef.current = null; setRibbonMark(null); };
+
   // A snippet with ${PARAM}s asks for them first.
   const runSnippet = (snippet: SnippetItem) => {
     const params = snippetParams(snippet.command);
@@ -102,17 +143,14 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
   const handleDeleteSnippet = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     updateSnippets(prev => prev.filter(s => s.id !== id));
+    if (onRibbon(id)) updateRibbon(prev => prev.filter(x => x !== id));
   };
-
-  // One neutral chip: the category is a filter, not a state, and five
-  // hues for five categories left no colour meaning anything.
-  const getCategoryColor = (_cat: SnippetItem['category']) => 'text-slate-400 bg-plinky-800 border-plinky-700';
 
   return (
     <div className="bg-plinky-900 border-t border-plinky-800 text-xs select-none">
       {/* Bar Header / Mini Bar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1 bg-plinky-900/90 text-slate-300 whitespace-nowrap">
-        <div className="flex items-center space-x-2 min-w-0 overflow-hidden">
+        <div className="flex items-center space-x-2 min-w-0 flex-1 overflow-hidden">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center space-x-1 font-semibold text-slate-200 hover:text-white transition"
@@ -122,20 +160,67 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             {isExpanded ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronUp className="w-3 h-3 text-slate-400" />}
           </button>
 
-          {/* Inline Quick Chips */}
-          <div className="flex items-center space-x-1.5 overflow-x-auto max-w-[60vw] py-0.5">
-            {snippets.slice(0, 5).map(snippet => (
+          {/* The ribbon: pinned snippets, in their order. Fills the bar, so
+              the empty part of it takes drops too (at the end). */}
+          <div
+            data-snippet-ribbon
+            className="flex items-center gap-1.5 overflow-x-auto flex-1 min-w-0 min-h-[22px] py-0.5"
+            onDragOver={(e) => {
+              if (!dragSnippetRef.current) return;
+              e.preventDefault();
+              if (e.target === e.currentTarget) setRibbonMark({ id: null, after: true });
+            }}
+            onDrop={(e) => {
+              if (!dragSnippetRef.current || e.target !== e.currentTarget) return;
+              e.preventDefault();
+              dropOnRibbon(null, true);
+            }}
+            onDragLeave={(e) => { if (e.target === e.currentTarget) setRibbonMark(m => (m?.id === null ? null : m)); }}
+          >
+            {ribbonSnippets.map(snippet => (
               <button
                 key={snippet.id}
+                data-ribbon-snippet={snippet.id}
+                draggable
+                onDragStart={startSnippetDrag(snippet.id)}
+                onDragEnd={endSnippetDrag}
+                onDragOver={(e) => {
+                  if (!dragSnippetRef.current) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const after = e.clientX > r.left + r.width / 2;
+                  setRibbonMark(m => (m?.id === snippet.id && m.after === after ? m : { id: snippet.id, after }));
+                }}
+                onDrop={(e) => {
+                  if (!dragSnippetRef.current) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  dropOnRibbon(snippet.id, e.clientX > r.left + r.width / 2);
+                }}
                 onClick={() => runSnippet(snippet)}
                 onContextMenu={(e) => openEdit(snippet, e)}
-                title={`Run: ${snippet.command.trim()} on ${activeSessionName || 'active terminal'} (right-click to edit)`}
-                className="group flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-850 hover:bg-sky-600/30 border border-plinky-700 hover:border-sky-500/40 text-meta text-slate-300 hover:text-sky-200 transition whitespace-nowrap"
+                title={`Run: ${snippet.command.trim()} on ${activeSessionName || 'active terminal'} (right-click to edit, drag to move)`}
+                className="group relative flex items-center space-x-1 px-2 py-0.5 rounded bg-plinky-850 hover:bg-sky-600/30 border border-plinky-700 hover:border-sky-500/40 text-meta text-slate-300 hover:text-sky-200 transition whitespace-nowrap"
               >
+                {ribbonMark?.id === snippet.id && (
+                  <span
+                    data-ribbon-mark={ribbonMark.after ? 'after' : 'before'}
+                    aria-hidden
+                    className={`pointer-events-none absolute top-0 bottom-0 w-0.5 rounded bg-sky-400 ${ribbonMark.after ? '-right-1' : '-left-1'}`}
+                  />
+                )}
                 <Play className="w-2.5 h-2.5 text-sky-400 opacity-60 group-hover:opacity-100" />
                 <span>{snippet.name}</span>
               </button>
             ))}
+            {ribbonMark?.id === null && (
+              <span aria-hidden className="pointer-events-none h-4 w-0.5 rounded bg-sky-400 shrink-0" />
+            )}
+            {ribbonSnippets.length === 0 && (
+              <span className="pointer-events-none text-meta text-plinky-muted">Pin snippets, or drag them here</span>
+            )}
           </div>
         </div>
 
@@ -153,9 +238,9 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
 
       {/* Expanded Category & Snippet Grid Drawer */}
       {isExpanded && (
-        <div className="p-3 bg-plinky-950/80 border-t border-plinky-800/80 space-y-2 animate-in slide-in-from-bottom-2 duration-150">
+        <div className="px-3 py-2 bg-plinky-950/80 border-t border-plinky-800/80 space-y-1.5 animate-in slide-in-from-bottom-2 duration-150">
           {/* Category Filter Pills */}
-          <div className="flex items-center space-x-1.5 border-b border-plinky-800/60 pb-2">
+          <div className="flex items-center space-x-1.5 border-b border-plinky-800/60 pb-1.5">
             <span className="text-meta text-plinky-muted uppercase tracking-wider font-semibold mr-1">Categories:</span>
             {categories.map(cat => (
               <button
@@ -172,46 +257,57 @@ export const QuickSnippetBar: React.FC<QuickSnippetBarProps> = ({
             ))}
           </div>
 
-          {/* Snippet Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-36 overflow-y-auto pt-1">
-            {filteredSnippets.map(snippet => (
-              <div
-                key={snippet.id}
-                onClick={() => runSnippet(snippet)}
-                onContextMenu={(e) => openEdit(snippet, e)}
-                title={`Execute: ${snippet.command.trim()}`}
-                className="group relative flex flex-col p-2 rounded-lg bg-plinky-900 border border-plinky-800 hover:border-sky-500/50 hover:bg-plinky-850 cursor-pointer transition shadow-xs"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`px-1.5 py-px rounded border text-meta font-medium ${getCategoryColor(snippet.category)}`}>
-                    {snippet.category}
+          {/* Snippet list: one compact line each (owner: the cards were too
+              big). Drag one onto the bar above, or pin it, to put it there. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1 max-h-36 overflow-y-auto">
+            {filteredSnippets.map(snippet => {
+              const pinned = onRibbon(snippet.id);
+              return (
+                <div
+                  key={snippet.id}
+                  data-snippet-item={snippet.id}
+                  draggable
+                  onDragStart={startSnippetDrag(snippet.id)}
+                  onDragEnd={endSnippetDrag}
+                  onClick={() => runSnippet(snippet)}
+                  onContextMenu={(e) => openEdit(snippet, e)}
+                  title={`Run: ${snippet.command.trim()} (${snippet.category})`}
+                  className="group flex items-center gap-1.5 min-w-0 px-1.5 py-0.5 rounded border border-plinky-800 bg-plinky-900 hover:border-sky-500/50 hover:bg-plinky-850 cursor-pointer transition"
+                >
+                  <span className="font-medium text-slate-200 text-meta truncate shrink-0 max-w-[50%] group-hover:text-sky-300">
+                    {snippet.name}
                   </span>
-                  <div className="flex items-center">
+                  <span className="font-mono text-meta text-plinky-muted truncate flex-1 min-w-0">
+                    {snippet.command.trim()}
+                  </span>
+                  <button
+                    onClick={(e) => togglePin(snippet.id, e)}
+                    aria-label={pinned ? `Take ${snippet.name} off the bar` : `Put ${snippet.name} on the bar`}
+                    aria-pressed={pinned}
+                    title={pinned ? 'On the bar: click to take it off' : 'Put it on the bar'}
+                    className={`p-0.5 shrink-0 transition ${pinned ? 'text-sky-400 hover:text-sky-200' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-plinky-muted hover:text-sky-300'}`}
+                  >
+                    <Pin className={`w-3 h-3 ${pinned ? 'fill-current' : ''}`} />
+                  </button>
                   <button
                     onClick={(e) => openEdit(snippet, e)}
                     aria-label={`Edit ${snippet.name}`}
-                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 text-plinky-muted hover:text-sky-300 transition"
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 shrink-0 text-plinky-muted hover:text-sky-300 transition"
                     title="Edit Snippet"
                   >
                     <Pencil className="w-3 h-3" />
                   </button>
                   <button
                     onClick={(e) => handleDeleteSnippet(snippet.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-plinky-muted hover:text-rose-400 transition"
+                    aria-label={`Delete ${snippet.name}`}
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 shrink-0 text-plinky-muted hover:text-rose-400 transition"
                     title="Delete Snippet"
                   >
                     <X className="w-3 h-3" />
                   </button>
-                  </div>
                 </div>
-                <span className="font-semibold text-slate-200 text-xs truncate group-hover:text-sky-300 transition">
-                  {snippet.name}
-                </span>
-                <span className="font-mono text-meta text-plinky-muted truncate mt-0.5">
-                  {snippet.command.trim()}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
