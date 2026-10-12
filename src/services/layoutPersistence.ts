@@ -19,6 +19,8 @@ export interface LayoutState {
   layoutMode: SplitLayoutMode;
   activeTabId: string | null;
   tabs: SavedTab[];
+  /** The tab id each split/grid pane shows (paneLayout.ts). */
+  panes?: (string | null)[];
   timestamp: number;
 }
 
@@ -31,7 +33,8 @@ const CURRENT_SCHEMA_VERSION = 1;
 export function saveLayout(
   layoutMode: SplitLayoutMode,
   activeTabId: string | null,
-  tabs: SavedTab[]
+  tabs: SavedTab[],
+  panes?: (string | null)[]
 ): void {
   try {
     const state: LayoutState = {
@@ -49,6 +52,7 @@ export function saveLayout(
         protocol: t.protocol,
         color: t.color,
       })),
+      panes,
       timestamp: Date.now(),
     };
 

@@ -28,6 +28,7 @@ import { getRecentSessions, recordRecentSession } from './services/recentSession
 import { useBroadcastGlow, glowColor } from './services/broadcast';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { placeName } from './services/sessionOrder';
+import { assignPanes, paneCount, placeInPane, samePanes, PANE_SLOTS, PaneSlots } from './services/paneLayout';
 import { fontSizeForKey, TERMINAL_FONT_MIN, TERMINAL_FONT_MAX, TERMINAL_FONT_DEFAULT } from './services/terminalFontKeys';
 import { saveLayout, loadLayout, clearLayout } from './services/layoutPersistence';
 import { 
@@ -83,6 +84,10 @@ export const App: React.FC = () => {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'sessions' | 'sftp' | 'tunnels' | 'keys' | 'vault'>('sessions');
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single');
+  // The tab each split/grid pane shows, and the pane with the keyboard
+  // (paneLayout.ts). Kept for the grid's four panes; a split uses two.
+  const [paneSlots, setPaneSlots] = useState<PaneSlots>(() => Array(PANE_SLOTS).fill(null));
+  const [focusedPane, setFocusedPane] = useState(0);
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
   // Tab bar (T-011): the "+" launcher, renaming, and a tab's right-click menu.
   const [launcherAnchor, setLauncherAnchor] = useState<{ top: number; left: number } | null>(null);
@@ -203,11 +208,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!startupDone) return;
     if (tabs.length > 0) {
-      saveLayout(layoutMode, activeTabId, tabs);
+      saveLayout(layoutMode, activeTabId, tabs, paneSlots);
     } else {
       clearLayout();
     }
-  }, [startupDone, layoutMode, activeTabId, tabs]);
+  }, [startupDone, layoutMode, activeTabId, tabs, paneSlots]);
 
   // The list only. loadSessions also restores the saved tab layout, which
   // must happen once at startup, not after every delete or duplicate.
@@ -221,6 +226,7 @@ export const App: React.FC = () => {
     const savedLayout = loadLayout();
     if (savedLayout && savedLayout.tabs.length > 0) {
       setLayoutMode(savedLayout.layoutMode);
+      if (Array.isArray(savedLayout.panes)) setPaneSlots(savedLayout.panes);
       const restoredTabs: TerminalTab[] = savedLayout.tabs.map(t => ({
         id: t.id,
         title: t.title,
@@ -567,12 +573,9 @@ export const App: React.FC = () => {
       setLayoutMode('split-horizontal');
     }
 
-    if (tabs.length === 1 && activeTab) {
-      // Fill the second pane with a copy of the first. This used to open a
-      // made-up session "<name> (Split)" forced to SSH, so splitting a
-      // Telnet, serial or Local Shell tab opened a broken SSH connection.
-      handleDuplicateTab(activeTab);
-    }
+    // With one tab open, the second pane stays empty, offering a tab. It
+    // used to open a second connection to the same host on its own (one
+    // more login); "Duplicate" in the tab's menu still does that.
   };
 
   const handleExecuteSnippet = (command: string) => {
@@ -625,17 +628,113 @@ export const App: React.FC = () => {
     }
   };
 
-  // Tabs shown in split/grid panes, in stable tab order. Putting the active
-  // tab first (as this used to) meant clicking the other pane swapped which
-  // pane div each tab rendered in, remounting both terminals. The active
-  // tab is still guaranteed a slot: if it's past the first n, it takes the
-  // last one.
-  const paneTabs = (n: number): TerminalTab[] => {
-    const head = tabs.slice(0, n);
-    if (!activeTab || head.some(t => t.id === activeTab.id)) return head;
-    return [...head.slice(0, n - 1), activeTab];
+  // What each pane shows now: worked out in render, so a tab picked from
+  // the tab bar appears in its pane at once, and kept by the effect below.
+  const nPanes = paneCount(layoutMode);
+  const paneView = nPanes > 0
+    ? assignPanes(paneSlots, focusedPane, activeTab?.id ?? null, nPanes, tabs.map(t => t.id))
+    : null;
+  useEffect(() => {
+    if (paneView && !samePanes(paneView, { slots: paneSlots, focused: focusedPane })) {
+      setPaneSlots(paneView.slots);
+      setFocusedPane(paneView.focused);
+    }
+  });
+  const paneOf = (tabId: string) => (paneView ? paneView.slots.slice(0, nPanes).indexOf(tabId) : -1);
+  /** Shows tab `id` in pane `i` (swapping if another pane had it) and gives it the keyboard. */
+  const putTabInPane = (i: number, id: string) => {
+    if (!paneView) return;
+    setPaneSlots(placeInPane(paneView.slots, i, id, nPanes));
+    setFocusedPane(i);
+    setActiveTabId(id);
   };
-  const splitTabs = paneTabs(2);
+  const [paneDropTarget, setPaneDropTarget] = useState<number | null>(null);
+
+  const renderPane = (i: number) => {
+    const id = paneView?.slots[i] ?? null;
+    const tab = id ? tabs.find(t => t.id === id) : undefined;
+    const focused = paneView?.focused === i;
+    return (
+      <div
+        key={`pane-${i}`}
+        data-pane={i}
+        data-pane-tab={tab?.id ?? ''}
+        onDragOver={(e) => {
+          if (!draggingTabRef.current) return;
+          e.preventDefault();
+          setPaneDropTarget(i);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaneDropTarget(t => (t === i ? null : t));
+        }}
+        onDrop={(e) => {
+          const from = draggingTabRef.current;
+          if (!from) return;
+          e.preventDefault();
+          draggingTabRef.current = null;
+          setTabDropMark(null);
+          setPaneDropTarget(null);
+          putTabInPane(i, from);
+        }}
+        className={`relative flex flex-col min-w-0 min-h-0 overflow-hidden bg-plinky-950 ${focused ? 'ring-1 ring-inset ring-sky-500/50' : ''}`}
+      >
+        {/* The pane's own bar: its number, and which tab it shows. */}
+        <div className="flex items-center gap-1.5 h-5 px-1.5 shrink-0 bg-plinky-900/80 border-b border-plinky-800 text-meta">
+          <span className={`tabular-nums font-semibold ${focused ? 'text-sky-300' : 'text-plinky-muted'}`}>{i + 1}</span>
+          <select
+            aria-label={`Tab in pane ${i + 1}`}
+            value={tab?.id ?? ''}
+            onChange={(e) => { if (e.target.value) putTabInPane(i, e.target.value); }}
+            className="min-w-0 max-w-[60%] bg-transparent text-slate-300 hover:text-slate-100 focus:outline-none cursor-pointer truncate"
+          >
+            {!tab && <option value="">Choose a tab</option>}
+            {tabs.map(t => (
+              <option key={t.id} value={t.id} className="bg-plinky-900">{t.title}{paneOf(t.id) >= 0 && paneOf(t.id) !== i ? ` (pane ${paneOf(t.id) + 1})` : ''}</option>
+            ))}
+          </select>
+        </div>
+        {tab ? (
+          <div className="flex-1 relative min-h-0" onClick={() => { if (activeTabId !== tab.id) setActiveTabId(tab.id); }}>
+            <TerminalView
+              key={tab.id}
+              tab={tab}
+              onHoverFocus={() => setActiveTabId(tab.id)}
+              onUpdateTab={handleUpdateTab}
+              onSplitPane={handleSplitPane}
+              onCwdChange={cwd => handleCwdChange(tab.id, cwd)}
+              onDuplicateTab={handleDuplicateTab}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onEditSessionSettings={sessionSettingsFor(tab)}
+              fontFamily={terminalFontFamily}
+              fontSize={terminalFontSize}
+              cursorStyle={terminalCursorStyle}
+              copyOnSelect={copyOnSelect}
+              rightClickAction={rightClickAction}
+            />
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-plinky-muted text-xs space-y-2">
+            <LayoutGrid className="w-6 h-6 text-slate-600" />
+            <span>Empty pane</span>
+            <button
+              onClick={(e) => {
+                // The new tab opens here: an empty focused pane is first in line.
+                setFocusedPane(i);
+                const r = e.currentTarget.getBoundingClientRect();
+                setLauncherAnchor({ top: r.bottom + 4, left: r.left });
+              }}
+              className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
+            >
+              + Open a tab
+            </button>
+          </div>
+        )}
+        {paneDropTarget === i && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 border-2 border-sky-400/80 bg-sky-500/10" />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div 
@@ -776,6 +875,17 @@ export const App: React.FC = () => {
                           onCommit={(title) => { handleUpdateTab(tab.id, { title }); setRenamingTabId(null); }}
                           onCancel={() => setRenamingTabId(null)}
                         />
+
+                        {/* Which pane shows it, in a split or the grid. */}
+                        {paneOf(tab.id) >= 0 && (
+                          <span
+                            data-tab-pane={paneOf(tab.id) + 1}
+                            title={`In pane ${paneOf(tab.id) + 1}`}
+                            className="px-1 rounded bg-plinky-800 text-meta tabular-nums text-slate-400"
+                          >
+                            {paneOf(tab.id) + 1}
+                          </span>
+                        )}
 
                         {/* Channel Badge Indicator */}
                         {tab.syncChannel !== 'none' && (
@@ -1000,166 +1110,13 @@ export const App: React.FC = () => {
                       />
                     </div>
                   </div>
-                ) : layoutMode === 'split-vertical' ? (
-                  <div className="flex-1 flex w-full h-full overflow-hidden divide-x divide-plinky-800">
-                    <div 
-                      onClick={() => setActiveTabId(splitTabs[0].id)}
-                      className={`flex-1 h-full relative ${activeTabId === splitTabs[0].id ? 'ring-1 ring-sky-500/50' : ''}`}
-                    >
-                      <TerminalView
-                        key={splitTabs[0].id}
-                        tab={splitTabs[0]}
-                        onHoverFocus={() => setActiveTabId(splitTabs[0].id)}
-                        onUpdateTab={handleUpdateTab}
-                        onSplitPane={handleSplitPane}
-                        onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
-                        onDuplicateTab={handleDuplicateTab}
-                        onOpenSettings={() => setIsSettingsOpen(true)}
-                      onEditSessionSettings={sessionSettingsFor(splitTabs[0])}
-                        fontFamily={terminalFontFamily}
-                        fontSize={terminalFontSize}
-                        cursorStyle={terminalCursorStyle}
-                        copyOnSelect={copyOnSelect}
-                        rightClickAction={rightClickAction}
-                      />
-                    </div>
-                    {splitTabs[1] ? (
-                      <div 
-                        onClick={() => setActiveTabId(splitTabs[1].id)}
-                        className={`flex-1 h-full relative ${activeTabId === splitTabs[1].id ? 'ring-1 ring-sky-500/50' : ''}`}
-                      >
-                        <TerminalView
-                          key={splitTabs[1].id}
-                          tab={splitTabs[1]}
-                          onHoverFocus={() => setActiveTabId(splitTabs[1].id)}
-                          onUpdateTab={handleUpdateTab}
-                          onSplitPane={handleSplitPane}
-                          onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
-                          onDuplicateTab={handleDuplicateTab}
-                          onOpenSettings={() => setIsSettingsOpen(true)}
-                      onEditSessionSettings={sessionSettingsFor(splitTabs[1])}
-                          fontFamily={terminalFontFamily}
-                          fontSize={terminalFontSize}
-                          cursorStyle={terminalCursorStyle}
-                          copyOnSelect={copyOnSelect}
-                          rightClickAction={rightClickAction}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex-1 h-full flex flex-col items-center justify-center bg-plinky-950 text-plinky-muted text-xs space-y-2">
-                        <Columns className="w-6 h-6 text-slate-600" />
-                        <span>Empty Split View Pane</span>
-                        <button
-                          onClick={() => handleSplitPane('vertical')}
-                          className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
-                        >
-                          + Open Split Tab
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : layoutMode === 'split-horizontal' ? (
-                  <div className="flex-1 flex flex-col w-full h-full overflow-hidden divide-y divide-plinky-800">
-                    <div 
-                       onClick={() => setActiveTabId(splitTabs[0].id)}
-                      className={`flex-1 w-full relative ${activeTabId === splitTabs[0].id ? 'ring-1 ring-sky-500/50' : ''}`}
-                    >
-                      <TerminalView
-                        key={splitTabs[0].id}
-                        tab={splitTabs[0]}
-                        onHoverFocus={() => setActiveTabId(splitTabs[0].id)}
-                        onUpdateTab={handleUpdateTab}
-                        onSplitPane={handleSplitPane}
-                        onCwdChange={cwd => handleCwdChange(splitTabs[0].id, cwd)}
-                        onDuplicateTab={handleDuplicateTab}
-                        onOpenSettings={() => setIsSettingsOpen(true)}
-                      onEditSessionSettings={sessionSettingsFor(splitTabs[0])}
-                        fontFamily={terminalFontFamily}
-                        fontSize={terminalFontSize}
-                        cursorStyle={terminalCursorStyle}
-                        copyOnSelect={copyOnSelect}
-                        rightClickAction={rightClickAction}
-                      />
-                    </div>
-                    {splitTabs[1] ? (
-                      <div 
-                        onClick={() => setActiveTabId(splitTabs[1].id)}
-                        className={`flex-1 w-full relative ${activeTabId === splitTabs[1].id ? 'ring-1 ring-sky-500/50' : ''}`}
-                      >
-                        <TerminalView
-                          key={splitTabs[1].id}
-                          tab={splitTabs[1]}
-                          onHoverFocus={() => setActiveTabId(splitTabs[1].id)}
-                          onUpdateTab={handleUpdateTab}
-                          onSplitPane={handleSplitPane}
-                          onCwdChange={cwd => handleCwdChange(splitTabs[1].id, cwd)}
-                          onDuplicateTab={handleDuplicateTab}
-                          onOpenSettings={() => setIsSettingsOpen(true)}
-                      onEditSessionSettings={sessionSettingsFor(splitTabs[1])}
-                          fontFamily={terminalFontFamily}
-                          fontSize={terminalFontSize}
-                          cursorStyle={terminalCursorStyle}
-                          copyOnSelect={copyOnSelect}
-                          rightClickAction={rightClickAction}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex-1 w-full flex flex-col items-center justify-center bg-plinky-950 text-plinky-muted text-xs space-y-2">
-                        <Rows className="w-6 h-6 text-slate-600" />
-                        <span>Empty Split View Pane</span>
-                        <button
-                          onClick={() => handleSplitPane('horizontal')}
-                          className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
-                        >
-                          + Open Split Tab
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 ) : (
-                  /* 4-Pane Cluster Grid Layout */
-                  <div className="flex-1 grid grid-cols-2 grid-rows-2 w-full h-full overflow-hidden divide-x divide-y divide-plinky-800">
-                    {paneTabs(4).map((tab) => (
-                      <div
-                        key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={`relative w-full h-full overflow-hidden ${activeTabId === tab.id ? 'ring-1 ring-sky-500/50' : ''}`}
-                      >
-                        <TerminalView
-                          tab={tab}
-                          onHoverFocus={() => setActiveTabId(tab.id)}
-                          onUpdateTab={handleUpdateTab}
-                          onSplitPane={handleSplitPane}
-                          onCwdChange={cwd => handleCwdChange(tab.id, cwd)}
-                          onDuplicateTab={handleDuplicateTab}
-                          onOpenSettings={() => setIsSettingsOpen(true)}
-                      onEditSessionSettings={sessionSettingsFor(tab)}
-                          fontFamily={terminalFontFamily}
-                          fontSize={terminalFontSize}
-                          cursorStyle={terminalCursorStyle}
-                          copyOnSelect={copyOnSelect}
-                          rightClickAction={rightClickAction}
-                        />
-                      </div>
-                    ))}
-                    {Array.from({ length: Math.max(0, 4 - paneTabs(4).length) }, (_, i) => (
-                      <div
-                        key={`empty-${i}`}
-                        className="w-full h-full flex flex-col items-center justify-center bg-plinky-950 text-plinky-muted text-xs space-y-2"
-                      >
-                        <LayoutGrid className="w-6 h-6 text-slate-600" />
-                        <span>Empty pane</span>
-                        <button
-                          onClick={(e) => {
-                            const r = e.currentTarget.getBoundingClientRect();
-                            setLauncherAnchor({ top: r.bottom + 4, left: r.left });
-                          }}
-                          className="px-2.5 py-1 rounded bg-plinky-850 hover:bg-plinky-800 text-slate-300 border border-plinky-700"
-                        >
-                          + Open a tab
-                        </button>
-                      </div>
-                    ))}
+                  <div
+                    className={`flex-1 grid w-full h-full overflow-hidden gap-px bg-plinky-800 ${
+                      layoutMode === 'split-vertical' ? 'grid-cols-2' : layoutMode === 'split-horizontal' ? 'grid-rows-2' : 'grid-cols-2 grid-rows-2'
+                    }`}
+                  >
+                    {Array.from({ length: nPanes }, (_, i) => renderPane(i))}
                   </div>
                 )}
               </div>
