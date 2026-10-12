@@ -34,7 +34,7 @@ export async function waitUntil(check, { timeoutMs = 5000, what = 'condition' } 
  * Nothing is printed on connect: a router sitting at its prompt prints
  * nothing until it is sent Enter.
  */
-export async function startConsole({ name = 'R1', negotiate = true, host = '127.0.0.1', onlyFrom = null, greet = false } = {}) {
+export async function startConsole({ name = 'R1', negotiate = true, host = '127.0.0.1', onlyFrom = null, greet = false, mark = '>', replies = null, port = 0 } = {}) {
   const con = {
     name,
     received: Buffer.alloc(0), // data bytes, telnet commands removed
@@ -45,7 +45,7 @@ export async function startConsole({ name = 'R1', negotiate = true, host = '127.
     open: 0,
     sockets: new Set(),
   };
-  const prompt = `${name}>`;
+  const prompt = `${name}${mark}`;
 
   const handle = (sock) => {
     // Listening beyond this machine (a Windows VM on the LAN): one peer only.
@@ -58,7 +58,7 @@ export async function startConsole({ name = 'R1', negotiate = true, host = '127.
     if (negotiate) sock.write(Buffer.from([IAC, WILL, ECHO, IAC, WILL, SGA, IAC, DO, NAWS]));
     // A device that shows its prompt on connect (an SSH login's shell, a
     // console server's banner), unlike a silent GNS3 console.
-    if (greet) sock.write(Buffer.from(`\r\n${name}>`, 'utf8'));
+    if (greet) sock.write(Buffer.from(`\r\n${prompt}`, 'utf8'));
 
     let line = '';
     let lastWasCr = false;
@@ -84,7 +84,8 @@ export async function startConsole({ name = 'R1', negotiate = true, host = '127.
         const s = con.naws.at(-1);
         out = s ? `size ${s.cols}x${s.rows}\r\n` : 'size unknown\r\n';
       } else if (cmd) {
-        out = `you typed: ${cmd}\r\n`;
+        // `replies` lets the screenshot lab answer like a real device.
+        out = replies?.(cmd) ?? `you typed: ${cmd}\r\n`;
       }
       say(`\r\n${out}${prompt}`);
     };
@@ -154,7 +155,7 @@ export async function startConsole({ name = 'R1', negotiate = true, host = '127.
   };
 
   const server = net.createServer(handle);
-  await new Promise((r) => server.listen(0, host, r));
+  await new Promise((r, j) => { server.once('error', j); server.listen(port, host, r); });
   con.port = server.address().port;
 
   con.text = () => con.received.toString('latin1');
@@ -175,7 +176,7 @@ export async function startConsole({ name = 'R1', negotiate = true, host = '127.
  * The shell it gives is a plain bash with a fixed prompt: the user's own
  * shell and dotfiles are not run.
  */
-export async function startSshd(dir) {
+export async function startSshd(dir, { sftp = false, prompt = 'e2e$ ', sftpDir = null, port: wantPort = 0 } = {}) {
   const sshd = ['/usr/bin/sshd', '/usr/sbin/sshd', '/sbin/sshd'].find((p) => fs.existsSync(p));
   if (!sshd) return null;
   for (const tool of ['ssh-keygen', 'puttygen']) {
@@ -190,7 +191,22 @@ export async function startSshd(dir) {
   const fingerprint = execFileSync('ssh-keygen', ['-l', '-E', 'sha256', '-f', f('host_key.pub')])
     .toString().split(' ')[1];
 
-  const port = await freePort();
+  // ForceCommand replaces the sftp subsystem too; with `sftp` the
+  // subsystem's own command, which sshd passes in SSH_ORIGINAL_COMMAND, is
+  // run instead of the shell, started in `sftpDir` when given.
+  const sftpServer = ['/usr/lib/openssh/sftp-server', '/usr/lib/ssh/sftp-server', '/usr/libexec/sftp-server']
+    .find((p) => fs.existsSync(p));
+  fs.writeFileSync(f('login.sh'), [
+    '#!/bin/sh',
+    sftp && sftpServer
+      ? `case "$SSH_ORIGINAL_COMMAND" in *sftp-server*) exec ${sftpServer}${sftpDir ? ` -d '${sftpDir}'` : ''} ;; esac`
+      : '',
+    sftpDir ? `cd '${sftpDir}'` : '',
+    `exec env PS1='${prompt}' HISTFILE=/dev/null /bin/bash --noprofile --norc -i`,
+    '',
+  ].join('\n'), { mode: 0o755 });
+
+  const port = wantPort || await freePort();
   fs.writeFileSync(f('sshd_config'), [
     `Port ${port}`,
     'ListenAddress 127.0.0.1',
@@ -204,8 +220,9 @@ export async function startSshd(dir) {
     'PubkeyAuthentication yes',
     'PrintMotd no',
     'PrintLastLog no',
+    ...(sftp && sftpServer ? [`Subsystem sftp ${sftpServer}`] : []),
     // A known shell and prompt, whatever the user's login shell is.
-    `ForceCommand env PS1='e2e$ ' HISTFILE=/dev/null /bin/bash --noprofile --norc -i`,
+    `ForceCommand ${f('login.sh')}`,
     '',
   ].join('\n'));
   const child = spawn(sshd, ['-D', '-e', '-f', f('sshd_config')], { stdio: ['ignore', 'ignore', fs.openSync(f('sshd.log'), 'a')] });

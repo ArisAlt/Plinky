@@ -101,6 +101,17 @@ and no session bus, so it never touches your sessions, host keys or vault,
 and never hands its tabs to a Thyrion you have open. Tests named "like PuTTY"
 expect PuTTY's default behaviour.
 
+The README's pictures (`docs/images/`) are the real app too, made by
+`node e2e/shots.mjs <outDir> [stills|gif]` on the same hidden screen: a
+made-up lab of four telnet consoles on 127.0.0.1:5001-5004 (what a local
+GNS3 serves) and an sshd on port 2222 for the SFTP browser, with invented
+names and documentation addresses only. `stills` writes `workflow.png` and
+`sftp.png`; `gif` writes the numbered, labelled frames of the GNS3
+hand-over to `<outDir>/gns3/`, assembled with ImageMagick (captioned,
+1100 px wide, 128 colours, reduced *before* `-layers Optimize`: the other
+way round leaves the previous caption ghosting behind the next). It needs
+the test build, `import` and `xdotool`, and ports 5001-5004 and 2222 free.
+
 ### Command Line (GNS3 consoles)
 Thyrion opens console tabs from its launch arguments. A second launch hands
 them to the window that is already running (single instance) and exits.

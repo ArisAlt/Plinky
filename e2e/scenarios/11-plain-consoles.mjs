@@ -42,6 +42,11 @@ const lineTests = (label, stateKey, title) => [
     await showTab(app, title);
     con.clear();
     await app.type('show vlan');
+    // Wait for the echo, then a moment more for a second copy. A fixed
+    // 200 ms raced it: the first keys' echo on a telnet console that
+    // negotiates nothing took 0.3-0.9 s here (raw: ~50 ms), though the
+    // device had the keys in ~20 ms. That lag is its own open issue.
+    await app.waitForScreen('show vlan', { timeoutMs: 3000 });
     await sleep(200);
     const screen = (await app.screen()).join('\n');
     assert.equal((screen.match(/show vlan/g) ?? []).length, 1, `typed text shows once:\n${screen}`);

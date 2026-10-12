@@ -15,10 +15,10 @@ import { Inspector } from './inspector.mjs';
 import { installHelpers } from './page.mjs';
 import { freePort, waitUntil } from './fixtures.mjs';
 
-export async function launchApp({ binary, display, home, args = [], env = {} }) {
+export async function launchApp({ binary, display, home, args = [], env = {}, log: logFile }) {
   const runtime = fs.mkdtempSync('/tmp/pe2e-'); // short: socket paths are limited to 108 bytes
   const port = await freePort();
-  const log = path.join(home, 'app.log');
+  const log = logFile ?? path.join(home, 'app.log');
   const appEnv = {
     PATH: process.env.PATH,
     LANG: process.env.LANG || 'C.UTF-8',

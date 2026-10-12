@@ -11,6 +11,21 @@ It uses the sessions you have already saved in PuTTY, so there is nothing to
 import. Sessions you add or change in Thyrion are saved in the same place, so
 PuTTY sees them too.
 
+![Thyrion with a lab open: the session tree on the left, and four device consoles (two routers, two switches) in a 2x2 grid, each showing interface, OSPF and VLAN output](docs/images/thyrion-workflow.png)
+
+*Saved sessions in folders on the left, four device consoles side by side.*
+
+![A backup server's shell beside the SFTP browser, local files on one side and the server's config backups on the other](docs/images/thyrion-sftp.png)
+
+*A server's shell next to its files: drag, double-click or use the arrows to
+move them.*
+
+![GNS3 runs Thyrion once per node; each console opens as a tab in the same window, commands run in each, then the four are shown in a 2x2 grid](docs/images/thyrion-gns3.gif)
+
+*GNS3's "Console to all nodes": each device arrives as a tab in the window
+that is already open. Set GNS3's console command to
+`thyrion --telnet {host} {port} --title "{name}"`.*
+
 *Thyrion was called Plinky until version 0.2.0. See
 [Coming from Plinky](#coming-from-plinky).*
 
