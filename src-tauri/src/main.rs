@@ -12,7 +12,16 @@
 // unwind, so it hard-crashes the whole app rather than surfacing as an
 // error). Tauri detects and uses this ambient runtime automatically instead
 // of spinning up its own separate one.
-#[tokio::main]
-async fn main() {
-    plinky_desktop_lib::run();
+//
+// The runtime is built by hand rather than with #[tokio::main] so the
+// environment can be settled first, while this is the only thread: WebKit
+// reads it when the window is made, and setting a variable while other
+// threads may read the environment is not safe.
+fn main() {
+    plinky_desktop_lib::prepare_webkit_environment();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("the Tokio runtime")
+        .block_on(async { plinky_desktop_lib::run() });
 }

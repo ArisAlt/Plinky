@@ -112,6 +112,13 @@ hand-over to `<outDir>/gns3/`, assembled with ImageMagick (captioned,
 way round leaves the previous caption ghosting behind the next). It needs
 the test build, `import` and `xdotool`, and ports 5001-5004 and 2222 free.
 
+On Linux with no GPU render node (`/dev/dri/renderD*`: a VM, a remote
+desktop, a CI runner) Thyrion sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` at
+start unless it is already set (`prepare_webkit_environment` in
+`src-tauri/src/lib.rs`). WebKitGTK's DMA-BUF renderer otherwise stalled
+drawing for 650-800 ms about a second after the window opened, and the
+first keys typed showed late. Set the variable to `0` to keep the renderer.
+
 ### Command Line (GNS3 consoles)
 Thyrion opens console tabs from its launch arguments. A second launch hands
 them to the window that is already running (single instance) and exits.

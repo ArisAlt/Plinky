@@ -1652,6 +1652,39 @@ fn take_open_requests(state: State<OpenRequests>) -> Vec<cli::OpenRequest> {
     std::mem::take(&mut *state.0.lock().unwrap())
 }
 
+/// WebKitGTK's DMA-BUF renderer, on a machine with no GPU render node.
+///
+/// On a Linux machine with no `/dev/dri/renderD*` (a VM without GPU
+/// passthrough, a remote desktop, a CI runner) WebKitGTK still starts its
+/// DMA-BUF renderer, fails to get a GPU ("DRI3 error") and falls back to
+/// drawing in software. While it does, about a second after the window
+/// opens, the page drew nothing for 650-800 ms, though its scripts and the
+/// app's main thread were idle: the first keys typed into a console showed
+/// up to 0.8 s late, measured with the device getting them in ~20 ms and
+/// the page parsing them in ~1 ms. With the renderer off the stall was
+/// gone and the page drew ~57 frames a second instead of ~32. With no GPU
+/// there is nothing for that renderer to accelerate, so it is turned off
+/// there; a machine with a render node keeps it, and a value already in
+/// the environment is the user's and is left alone.
+pub fn prepare_webkit_environment() {
+    #[cfg(target_os = "linux")]
+    {
+        const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+        if std::env::var_os(VAR).is_none() && !has_gpu_render_node(std::path::Path::new("/dev/dri")) {
+            // Called first thing in main, before any other thread exists.
+            std::env::set_var(VAR, "1");
+        }
+    }
+}
+
+/// Whether `dri` holds a GPU render node (`renderD128` and on).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn has_gpu_render_node(dri: &std::path::Path) -> bool {
+    std::fs::read_dir(dri)
+        .map(|entries| entries.flatten().any(|e| e.file_name().to_string_lossy().starts_with("renderD")))
+        .unwrap_or(false)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry = Arc::new(SessionRegistry::new());
@@ -2063,6 +2096,19 @@ mod tests {
         let kept = std::fs::read(base.join("new.id/localstorage/tauri_localhost_0.localstorage")).unwrap();
         assert_eq!(kept, b"newer");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_machine_without_a_gpu_render_node_is_told_apart_from_one_with() {
+        let dri = scratch("dri").join("dri");
+        // No /dev/dri at all: a VM or container with no GPU.
+        assert!(!crate::has_gpu_render_node(&dri));
+        // Only a display node: still nothing to render with.
+        std::fs::create_dir(&dri).unwrap();
+        std::fs::write(dri.join("card0"), b"").unwrap();
+        assert!(!crate::has_gpu_render_node(&dri));
+        std::fs::write(dri.join("renderD128"), b"").unwrap();
+        assert!(crate::has_gpu_render_node(&dri));
     }
 
     #[test]
