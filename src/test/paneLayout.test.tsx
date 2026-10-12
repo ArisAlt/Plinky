@@ -40,7 +40,7 @@ describe('which tab each pane shows', () => {
 
 const tab = (id: string) => ({ id, title: id, sessionName: `telnet://192.0.2.13:${id}`, syncChannel: 'none', hostname: '192.0.2.13', port: 5000, protocol: 'Telnet' });
 const paneTab = (i: number) => document.querySelector(`[data-pane="${i}"]`)?.getAttribute('data-pane-tab');
-const paneBody = (i: number) => document.querySelector(`[data-pane="${i}"]`)!.children[1] as HTMLElement;
+const paneBody = (i: number) => document.querySelector(`[data-pane="${i}"] [data-pane-body]`) as HTMLElement;
 const clickTab = (id: string) => fireEvent.click(document.querySelector(`[data-tab-id="${id}"]`)!);
 const settle = () => act(async () => { await new Promise(r => setTimeout(r, 30)); });
 
@@ -73,6 +73,15 @@ describe('split panes in the app', () => {
     // The tab bar says where each one is.
     expect(document.querySelector('[data-tab-id="SW1"] [data-tab-pane]')?.textContent).toBe('2');
     expect(document.querySelector('[data-tab-id="R2"] [data-tab-pane]')).toBeNull();
+  });
+
+  it('a pane names its tab once, in the terminal header, with the picker', async () => {
+    // The pane bar's picker and the terminal header both showed the name.
+    await startWith(['R1', 'R2'], 'split-vertical');
+    const pane = document.querySelector('[data-pane="0"]')!;
+    expect(pane.querySelectorAll('select')).toHaveLength(1);
+    expect(pane.textContent).not.toContain('telnet://192.0.2.13:R1'); // the session name the header showed
+    expect((screen.getByLabelText('Tab in pane 1') as HTMLSelectElement).value).toBe('R1');
   });
 
   it('a pane can be given any open tab from its own list', async () => {

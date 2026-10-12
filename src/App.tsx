@@ -654,6 +654,25 @@ export const App: React.FC = () => {
     const id = paneView?.slots[i] ?? null;
     const tab = id ? tabs.find(t => t.id === id) : undefined;
     const focused = paneView?.focused === i;
+    // The pane's number and which tab it shows. In the terminal's header,
+    // in place of the session name, which a separate bar above repeated.
+    const picker = (
+      <span className="flex items-center gap-1.5 min-w-0">
+        <span className={`tabular-nums font-semibold ${focused ? 'text-sky-300' : 'text-plinky-muted'}`}>{i + 1}</span>
+        <select
+          aria-label={`Tab in pane ${i + 1}`}
+          value={tab?.id ?? ''}
+          onChange={(e) => { if (e.target.value) putTabInPane(i, e.target.value); }}
+          onClick={(e) => e.stopPropagation()}
+          className="min-w-[7rem] max-w-[16rem] bg-transparent font-semibold text-slate-200 hover:text-white focus:outline-none cursor-pointer truncate"
+        >
+          {!tab && <option value="">Choose a tab</option>}
+          {tabs.map(t => (
+            <option key={t.id} value={t.id} className="bg-plinky-900 font-normal">{t.title}{paneOf(t.id) >= 0 && paneOf(t.id) !== i ? ` (pane ${paneOf(t.id) + 1})` : ''}</option>
+          ))}
+        </select>
+      </span>
+    );
     return (
       <div
         key={`pane-${i}`}
@@ -678,23 +697,8 @@ export const App: React.FC = () => {
         }}
         className={`relative flex flex-col min-w-0 min-h-0 overflow-hidden bg-plinky-950 ${focused ? 'ring-1 ring-inset ring-sky-500/50' : ''}`}
       >
-        {/* The pane's own bar: its number, and which tab it shows. */}
-        <div className="flex items-center gap-1.5 h-5 px-1.5 shrink-0 bg-plinky-900/80 border-b border-plinky-800 text-meta">
-          <span className={`tabular-nums font-semibold ${focused ? 'text-sky-300' : 'text-plinky-muted'}`}>{i + 1}</span>
-          <select
-            aria-label={`Tab in pane ${i + 1}`}
-            value={tab?.id ?? ''}
-            onChange={(e) => { if (e.target.value) putTabInPane(i, e.target.value); }}
-            className="min-w-0 max-w-[60%] bg-transparent text-slate-300 hover:text-slate-100 focus:outline-none cursor-pointer truncate"
-          >
-            {!tab && <option value="">Choose a tab</option>}
-            {tabs.map(t => (
-              <option key={t.id} value={t.id} className="bg-plinky-900">{t.title}{paneOf(t.id) >= 0 && paneOf(t.id) !== i ? ` (pane ${paneOf(t.id) + 1})` : ''}</option>
-            ))}
-          </select>
-        </div>
         {tab ? (
-          <div className="flex-1 relative min-h-0" onClick={() => { if (activeTabId !== tab.id) setActiveTabId(tab.id); }}>
+          <div data-pane-body className="flex-1 relative min-h-0" onClick={() => { if (activeTabId !== tab.id) setActiveTabId(tab.id); }}>
             <TerminalView
               key={tab.id}
               tab={tab}
@@ -710,12 +714,14 @@ export const App: React.FC = () => {
               cursorStyle={terminalCursorStyle}
               copyOnSelect={copyOnSelect}
               rightClickAction={rightClickAction}
+              titleSlot={picker}
             />
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-plinky-muted text-xs space-y-2">
+          <div data-pane-body className="flex-1 flex flex-col items-center justify-center text-plinky-muted text-xs space-y-2">
             <LayoutGrid className="w-6 h-6 text-slate-600" />
             <span>Empty pane</span>
+            {tabs.length > 0 && picker}
             <button
               onClick={(e) => {
                 // The new tab opens here: an empty focused pane is first in line.

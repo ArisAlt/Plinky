@@ -120,6 +120,9 @@ interface TerminalViewProps {
   rightClickAction?: 'paste' | 'contextMenu';
   /** The mouse moved into this terminal and it took the keyboard focus. */
   onHoverFocus?: () => void;
+  /** Shown in the header in place of the session name: a split pane puts
+   *  its number and its tab picker here, so the name isn't shown twice. */
+  titleSlot?: React.ReactNode;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ 
@@ -136,6 +139,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   copyOnSelect = true,
   rightClickAction = 'contextMenu',
   onHoverFocus,
+  titleSlot,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -1633,14 +1637,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       />
       {/* Tab Control Overlay Header */}
       <div className="relative flex items-center justify-between gap-3 px-3 py-1.5 bg-plinky-900/90 border-b border-plinky-800 text-xs select-none whitespace-nowrap">
-        <div className="flex items-center space-x-2 min-w-0">
+        <div className="flex items-center space-x-2 min-w-0 overflow-hidden">
           <span
             role="img"
             aria-label={STATUS_TEXT[tab.status]}
             title={STATUS_TEXT[tab.status]}
             className={`h-2 w-2 rounded-full ${STATUS_DOT[tab.status]}`}
           />
-          <span className="font-semibold text-slate-200 truncate">{tab.sessionName}</span>
+          {titleSlot ?? <span className="font-semibold text-slate-200 truncate">{tab.sessionName}</span>}
           {/* Quick-connect tabs are named after their target already; the
               header read "Quick (127.0.0.1:1) (127.0.0.1:1)". */}
           {(isLocalSession || !tab.sessionName.includes(`${tab.hostname}:${tab.port}`)) && (
