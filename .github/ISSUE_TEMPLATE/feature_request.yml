@@ -1,0 +1,39 @@
+name: Feature request
+description: An idea that would make Plinky more useful.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or situation, in your own words. "When I log in to 20 switches at once, I have to..."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you imagine it working. A sketch or screenshot is welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you manage today?
+      description: Any workaround you use now.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Sessions and folders
+        - Tabs and split screen
+        - Terminal
+        - Broadcast
+        - Serial / consoles
+        - Jump hosts
+        - Vault and logins
+        - Snippets
+        - SFTP
+        - Settings and themes
+        - Other

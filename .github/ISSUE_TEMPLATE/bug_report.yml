@@ -1,0 +1,86 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Never paste passwords, private keys or vault contents.**
+        Replace real host names and addresses with placeholders such as `router1` or `192.0.2.10`.
+        Security problems go to a private report, not here: see "Report a security problem" on the previous page.
+  - type: input
+    id: version
+    attributes:
+      label: Plinky version
+      description: Settings → About, or the file name you installed (e.g. 0.1.41).
+      placeholder: 0.1.41
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux (AppImage)
+        - Linux (.deb)
+        - Linux (.rpm)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os-detail
+    attributes:
+      label: Distribution / desktop (Linux only)
+      placeholder: e.g. Ubuntu 24.04, GNOME on Wayland
+  - type: input
+    id: putty
+    attributes:
+      label: PuTTY version
+      description: Shown in the title bar badge, or run `plink -V`.
+      placeholder: "0.83"
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection type
+      multiple: true
+      options:
+        - SSH
+        - SSH through a jump host
+        - Telnet
+        - Raw
+        - Serial
+        - Local shell
+        - GNS3 console
+        - SFTP
+        - Not about a connection
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a saved SSH session to 192.0.2.10
+        2. Split the window vertically
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error text or screenshot
+      description: 'The red or yellow "[Plinky ...]" lines in the terminal and the Events panel help most. Check for passwords and host names first.'
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed passwords, keys and real host names from everything above.
+          required: true

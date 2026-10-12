@@ -1,0 +1,6 @@
+# Blank issues stay on for questions that are neither a bug nor a feature.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/ArisAlt/Plinky/security/advisories/new
+    about: Privately, please. Anything that could expose passwords or keys, or let someone run commands. See SECURITY.md.
