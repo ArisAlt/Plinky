@@ -198,7 +198,7 @@ impl PsftpClient {
         Self::validate_session_name(session_name)?;
         let pw_guard = PsftpPasswordGuard::create(password)?;
         let mut batch = tempfile::Builder::new()
-            .prefix(".plinky_psftp_batch_")
+            .prefix(".thyrion_psftp_batch_")
             .tempfile()
             .map_err(|e| PlinkyError::ProcessError(format!("Failed to create psftp batch file: {e}")))?;
         batch
@@ -327,7 +327,7 @@ impl PsftpClient {
     /// psftp writes into the destination as it goes, so a transfer that
     /// fails halfway -- or overwrites an existing file -- would leave a
     /// truncated file under the real name. It downloads to a sibling
-    /// ".plinky-part" file and renames it into place only on success.
+    /// ".thyrion-part" file and renames it into place only on success.
     pub async fn download_file(
         session_name: &str,
         remote_path: &str,
@@ -343,7 +343,7 @@ impl PsftpClient {
         if dest.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
             return Err(PlinkyError::ProcessError(format!("Refusing download path with '..': {local_path}")));
         }
-        let part = format!("{local_path}.plinky-part");
+        let part = format!("{local_path}.thyrion-part");
         let script = format!(
             "get {} {}\n",
             Self::escape_psftp_path(remote_path),
@@ -531,7 +531,7 @@ impl PsftpPasswordGuard {
         match password {
             Some(pwd) if !pwd.is_empty() => {
                 let mut temp = tempfile::Builder::new()
-                    .prefix(".plinky_psftp_pw_")
+                    .prefix(".thyrion_psftp_pw_")
                     .tempfile()
                     .map_err(|e| PlinkyError::ProcessError(format!("Failed to create temporary password file: {e}")))?;
 

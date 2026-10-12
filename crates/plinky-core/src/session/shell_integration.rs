@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const BASH_BOOTSTRAP: &str = r#"# Plinky Shell Integration for Bash (OSC 133 + OSC 7)
+pub const BASH_BOOTSTRAP: &str = r#"# Thyrion Shell Integration for Bash (OSC 133 + OSC 7)
 if [ -z "$PLINKY_SHELL_INTEGRATION" ]; then
     export PLINKY_SHELL_INTEGRATION=1
     __plinky_prompt_start() {
@@ -21,7 +21,7 @@ if [ -z "$PLINKY_SHELL_INTEGRATION" ]; then
 fi
 "#;
 
-pub const ZSH_BOOTSTRAP: &str = r#"# Plinky Shell Integration for Zsh (OSC 133 + OSC 7)
+pub const ZSH_BOOTSTRAP: &str = r#"# Thyrion Shell Integration for Zsh (OSC 133 + OSC 7)
 if [[ -z "$PLINKY_SHELL_INTEGRATION" ]]; then
     export PLINKY_SHELL_INTEGRATION=1
     autoload -Uz add-zsh-hook
@@ -39,7 +39,7 @@ if [[ -z "$PLINKY_SHELL_INTEGRATION" ]]; then
 fi
 "#;
 
-pub const FISH_BOOTSTRAP: &str = r#"# Plinky Shell Integration for Fish (OSC 133 + OSC 7)
+pub const FISH_BOOTSTRAP: &str = r#"# Thyrion Shell Integration for Fish (OSC 133 + OSC 7)
 if not set -q PLINKY_SHELL_INTEGRATION
     set -g PLINKY_SHELL_INTEGRATION 1
     function __plinky_precmd --on-event fish_prompt

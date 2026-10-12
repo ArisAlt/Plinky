@@ -3,7 +3,7 @@ import { TerminalTab } from '../types/session';
 
 /**
  * Tabs for console requests from the command line (T-020, GNS3's
- * "Custom" console: `plinky --telnet {host} {port} --title "{name}"`).
+ * "Custom" console: `thyrion --telnet {host} {port} --title "{name}"`).
  */
 
 const hostLabel = (host: string) => (host.includes(':') ? `[${host}]` : host);

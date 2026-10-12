@@ -1,6 +1,6 @@
-//! Launch arguments that ask Plinky to open a console tab (T-020).
+//! Launch arguments that ask Thyrion to open a console tab (T-020).
 //!
-//! GNS3's "Custom" console command runs Plinky once per device:
+//! GNS3's "Custom" console command runs Thyrion once per device:
 //!
 //! ```text
 //! plinky --telnet {host} {port} --title "{name}"
@@ -10,7 +10,7 @@
 //! plugin forwards every later launch to the running window, which turns
 //! each request into a tab.
 //!
-//! Anything on the machine can start Plinky with arguments, so they are
+//! Anything on the machine can start Thyrion with arguments, so they are
 //! treated as untrusted: a host or user starting with `-` is refused (plink
 //! would read it as one of its own options), control characters are
 //! stripped from titles, and anything unrecognised is ignored -- the
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn reads_gns3s_console_command() {
         // GNS3 on Linux: plinky --telnet {host} {port} --title "{name}"
-        let r = parse_args(&argv(&["/opt/Plinky.AppImage", "--telnet", "127.0.0.1", "5000", "--title", "R1 core"]));
+        let r = parse_args(&argv(&["/opt/Thyrion.AppImage", "--telnet", "127.0.0.1", "5000", "--title", "R1 core"]));
         assert_eq!(r, vec![telnet("127.0.0.1", 5000, Some("R1 core"))]);
     }
 
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn nothing_that_looks_like_a_plink_option_gets_through() {
-        // Any program can launch Plinky with arguments; a host of "-proxycmd"
+        // Any program can launch Thyrion with arguments; a host of "-proxycmd"
         // would reach plink as an option of its own.
         assert!(parse_args(&argv(&["plinky", "--telnet", "-proxycmd", "5000"])).is_empty());
         assert!(parse_args(&argv(&["plinky", "--ssh", "-oProxyCommand=x"])).is_empty());

@@ -1,10 +1,10 @@
-//! A second launch hands its console request to the running Plinky over a
+//! A second launch hands its console request to the running Thyrion over a
 //! Unix socket, then exits.
 //!
 //! tauri-plugin-single-instance does this over the D-Bus session bus. When a
 //! launch can't reach that bus (GNS3 started from a service, sudo, a remote
 //! shell, or a desktop without a session bus), each GNS3 console opened a
-//! new Plinky window. Measured here: with `dbus-run-session` a second launch
+//! new Thyrion window. Measured here: with `dbus-run-session` a second launch
 //! handed over and exited 0; without a bus it ran as its own instance. The
 //! socket needs nothing but the filesystem, so both paths now lead to one
 //! window. Windows keeps the plugin, which doesn't use D-Bus there.
@@ -79,7 +79,7 @@ fn existing(path: &Path, uid: u32) -> Existing {
     }
 }
 
-/// Sends the arguments to a running Plinky. True if one took them.
+/// Sends the arguments to a running Thyrion. True if one took them.
 pub fn try_hand_over(path: &Path, args: &[String]) -> bool {
     hand_over_as(path, args, my_uid())
 }
@@ -103,7 +103,7 @@ fn hand_over_as(path: &Path, args: &[String], uid: u32) -> bool {
 }
 
 /// Listens for later launches; each message is one launch's argv. Returns
-/// None when another live Plinky already owns the socket, or the path holds
+/// None when another live Thyrion already owns the socket, or the path holds
 /// something that isn't ours to replace.
 pub fn listen<F>(path: PathBuf, on_args: F) -> Option<()>
 where
@@ -119,7 +119,7 @@ where
     match existing(&path, uid) {
         Existing::Nothing => {}
         // A socket nobody answers on is left over from a crash; a live one
-        // belongs to another Plinky (then that one gets the launches).
+        // belongs to another Thyrion (then that one gets the launches).
         Existing::Ours => {
             if UnixStream::connect(&path).is_ok() {
                 return None;

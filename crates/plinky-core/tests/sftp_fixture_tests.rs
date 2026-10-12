@@ -166,7 +166,7 @@ async fn test_sftp_operations_report_real_success_and_real_failure() {
     let missing = PsftpClient::download_file(s, "/nonexistent/nofile", &p(&dl), None, None).await;
     assert!(missing.as_ref().unwrap_err().to_string().contains("no such file"), "{missing:?}");
     assert!(!dl.exists(), "a failed download must not leave a file");
-    assert!(!Path::new(&format!("{}.plinky-part", p(&dl))).exists(), "nor its partial");
+    assert!(!Path::new(&format!("{}.thyrion-part", p(&dl))).exists(), "nor its partial");
 
     let listing = PsftpClient::list_dir(s, "/root", None, None).await;
     assert!(listing.is_err(), "an unreadable dir must not list as empty: {listing:?}");

@@ -1,4 +1,4 @@
-// A router console the way GNS3 opens one: `plinky --telnet host port
+// A router console the way GNS3 opens one: `thyrion --telnet host port
 // --title R1`, to a console that prints nothing until it is sent Enter.
 //
 // Where a test says "like PuTTY", the expected bytes are PuTTY's defaults
@@ -14,7 +14,7 @@ export const title = 'Telnet console, opened the way GNS3 opens it';
 
 export async function setup({ home }) {
   const r1 = await startConsole({ name: 'R1' });
-  // The environment the unpacked AppImage gives Plinky: its AppRun points
+  // The environment the unpacked AppImage gives Thyrion: its AppRun points
   // Python into its own folder. A script's python3 must not inherit it
   // (it died with "No module named 'encodings'").
   const appDir = path.join(home, 'AppDir');
@@ -68,7 +68,7 @@ async function confirmPaste(app) {
 
 export const tests = [
   ['a console that prints nothing is ready as soon as it connects', async ({ app, r1 }) => {
-    // PuTTY shows a silent console at once. Plinky once waited for output
+    // PuTTY shows a silent console at once. Thyrion once waited for output
     // that never came: the tab spun and the banner stayed for 10 s.
     const started = Date.now();
     await app.waitForTab('R1', 'live', { timeoutMs: 3000 });
@@ -252,7 +252,7 @@ export const tests = [
   }],
 
   ['right-click opens the menu, and pastes once Settings says so', async ({ app, r1 }) => {
-    // Plinky's default is the menu; "Paste Clipboard (PuTTY)" in Settings
+    // Thyrion's default is the menu; "Paste Clipboard (PuTTY)" in Settings
     // makes a right click paste, as PuTTY on Windows does.
     const surface = () => app.run((e) => e.rightClick([...document.querySelectorAll('.xterm')].find(e.visible).querySelector('.xterm-screen')));
     const clickText = (text) => app.waitFor((e, t) => {
@@ -411,7 +411,7 @@ export const tests = [
     // device's output to its stdin, its stderr to the terminal.
     const script = path.join(ctx.home, 'clock.py');
     fs.writeFileSync(script, [
-      'from plinky import session',
+      'from thyrion import session',
       'reply = session.command("show clock")',
       'session.log("got", reply.strip())',
       '',
@@ -433,7 +433,7 @@ export const tests = [
     // A ping that never ends on Linux kept running after Stop, and the
     // terminal took no keys until clicked (owner).
     const script = path.join(ctx.home, 'forever.py');
-    fs.writeFileSync(script, 'from plinky import session\nimport time\nsession.send("ping 192.0.2.1")\ntime.sleep(120)\n');
+    fs.writeFileSync(script, 'from thyrion import session\nimport time\nsession.send("ping 192.0.2.1")\ntime.sleep(120)\n');
     r1.clear();
     await app.run(async (e, file) => {
       const id = document.querySelector('[data-tab-active="true"]').dataset.tabId;

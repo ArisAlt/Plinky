@@ -52,12 +52,12 @@ pub fn export_kdbx(
         };
     }
     let mut db = Database::with_config(config);
-    db.meta.database_name = Some("Plinky vault".into());
+    db.meta.database_name = Some("Thyrion vault".into());
 
     let mut count = 0;
     {
         let mut root = db.root_mut();
-        root.name = "Plinky vault".into();
+        root.name = "Thyrion vault".into();
         for e in vault.entries() {
             let mut entry = root.add_entry();
             entry.set_unprotected("Title", e.id.clone());
@@ -81,7 +81,7 @@ pub fn export_kdbx(
     let dir = dest.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     // tempfile creates the file 0600 on Unix: only this user can read it.
     let mut tmp = tempfile::Builder::new()
-        .prefix(".plinky-export-")
+        .prefix(".thyrion-export-")
         .tempfile_in(dir)
         .map_err(|e| export_err("creating the file", e))?;
     db.save(&mut tmp, DatabaseKey::new().with_password(password))

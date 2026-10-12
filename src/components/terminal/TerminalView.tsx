@@ -374,7 +374,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       // The clear below can't be verified in every webview (reading the
       // clipboard back may be refused), and clipboard managers keep their own
       // history -- so the message doesn't promise it.
-      addEventLog(`Copied the ${field === 'enable' ? 'enable ' : ''}password to the clipboard; Plinky will try to clear it in 25 s. A clipboard manager may keep a copy.`, 'info');
+      addEventLog(`Copied the ${field === 'enable' ? 'enable ' : ''}password to the clipboard; Thyrion will try to clear it in 25 s. A clipboard manager may keep a copy.`, 'info');
       setTimeout(async () => {
         try {
           if ((await readClipboard()) === secret) await writeClipboard('');
@@ -534,7 +534,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       await runScript(tab.id, tab.sessionName, path);
       addEventLog(`Running script ${name}`, 'info');
     } catch (e) {
-      terminalRef.current?.write(`\r\n\x1b[31m[Plinky: ${String(e)}]\x1b[0m\r\n`);
+      terminalRef.current?.write(`\r\n\x1b[31m[Thyrion: ${String(e)}]\x1b[0m\r\n`);
       addEventLog(String(e), 'error');
     }
     terminalRef.current?.focus();
@@ -910,13 +910,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const answeredAutomatically = autoRespondRef.current(promptKind, recentOutputRef.current);
 
       const hint = live ? fatalHint(text, tab.hostname, tab.port) : null;
-      if (hint) term.writeln(`\x1b[33m[Plinky: ${hint}]\x1b[0m`);
+      if (hint) term.writeln(`\x1b[33m[Thyrion: ${hint}]\x1b[0m`);
       const mismatch = sshBannerToldRef.current ? null : sshBannerHint(recentOutputRef.current, tab.protocol);
       if (mismatch) {
         sshBannerToldRef.current = true;
-        term.writeln(`\r\n\x1b[33m[Plinky: ${mismatch}]\x1b[0m`);
+        term.writeln(`\r\n\x1b[33m[Thyrion: ${mismatch}]\x1b[0m`);
       }
-      if (text.includes('[Plinky: Session closed') || text.includes('FATAL ERROR:')) {
+      if (text.includes('[Thyrion: Session closed') || text.includes('FATAL ERROR:')) {
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);
         // A FATAL ERROR after the session was live is a dropped connection
@@ -1020,11 +1020,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           onUpdateTab(tab.id, { status: 'disconnected' });
           if (isTauriEnvironment()) {
             const reason = error || 'Verify that PuTTY (plink) is installed and target host is reachable.';
-            term.writeln(`\r\n\x1b[31m[Plinky Error: Failed to start session "${tab.sessionName}": ${reason}]\x1b[0m\r\n`);
+            term.writeln(`\r\n\x1b[31m[Thyrion Error: Failed to start session "${tab.sessionName}": ${reason}]\x1b[0m\r\n`);
             addEventLog(`Failed to start session "${tab.sessionName}": ${reason}`, 'error');
           } else {
             // Browser development preview fallback banner (non-Tauri mode)
-            term.writeln(`\x1b[33m[Plinky: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
+            term.writeln(`\x1b[33m[Thyrion: Running in Web Browser Dev Mode - Desktop Tauri Backend Inactive]\x1b[0m\r\n`);
             addEventLog("Running in browser development preview mode", 'info');
             onUpdateTab(tab.id, { status: 'live' });
           }
@@ -1058,7 +1058,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       setWaitingSince(null);
       void closeTerminalSession(tab.id);
       onUpdateTab(tab.id, { status: 'disconnected' });
-      term.writeln('\r\n\x1b[33m[Plinky: Connection cancelled]\x1b[0m');
+      term.writeln('\r\n\x1b[33m[Thyrion: Connection cancelled]\x1b[0m');
       addEventLog('Connection cancelled', 'warn');
     };
 
@@ -1076,7 +1076,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       autoLoginSentRef.current = { user: false, password: false };
       commandRunRef.current = false; // a new connection logs in again
       setDetectedPasswordPrompt(null);
-      term.writeln('\r\n\x1b[33m[Plinky: Reconnecting...]\x1b[0m');
+      term.writeln('\r\n\x1b[33m[Thyrion: Reconnecting...]\x1b[0m');
       onUpdateTab(tab.id, { status: 'connecting' });
       startFresh();
     };
@@ -1544,7 +1544,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const stored = await storedFingerprint(prompt);
       const where = `${prompt.host}:${prompt.port}`;
       terminalRef.current?.writeln(
-        `\r\n\x1b[1;31m[Plinky: the host key for ${where} does not match the one PuTTY saved. Connection abandoned.]\x1b[0m` +
+        `\r\n\x1b[1;31m[Thyrion: the host key for ${where} does not match the one PuTTY saved. Connection abandoned.]\x1b[0m` +
         `\r\n\x1b[31m  Offered: ${prompt.fingerprint || 'unknown'}\x1b[0m` +
         (stored ? `\r\n\x1b[31m  Saved:   ${stored}\x1b[0m` : '') +
         `\r\n\x1b[31m  Check the offered fingerprint with the server's administrator before trusting it.\x1b[0m\r\n`
@@ -2119,7 +2119,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         {unlockOpen && (
           <VaultUnlockDialog
-            reason="This prompt's password is in the vault. Unlock it and Plinky can send it."
+            reason="This prompt's password is in the vault. Unlock it and Thyrion can send it."
             onUnlocked={() => { setUnlockOpen(false); terminalRef.current?.focus(); }}
             onCancel={() => { setUnlockOpen(false); terminalRef.current?.focus(); }}
           />
@@ -2607,7 +2607,7 @@ export const HostKeyDialog: React.FC<{
   }, []);
 
   if (prompt.question) {
-    // A question plink asked that Plinky has no dialog of its own for.
+    // A question plink asked that Thyrion has no dialog of its own for.
     return (
       <div className="absolute inset-0 z-50 flex items-center justify-center bg-plinky-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
         <div role="alertdialog" aria-modal="true" aria-labelledby="question-title"

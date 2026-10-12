@@ -9,7 +9,7 @@ const col = (id: string, name: string) => hexOf(findUiTheme(id).vars[`--c-${name
 describe('interface themes', () => {
   beforeEach(() => localStorage.clear());
 
-  it('the Plinky theme is the look the app always had', () => {
+  it('the Thyrion theme is the look the app always had', () => {
     // Tailwind's own values, which every class used before themes existed.
     expect(col('plinky', 'slate-400')).toBe('#94a3b8');
     expect(col('plinky', 'sky-700')).toBe('#0369a1');
@@ -20,7 +20,7 @@ describe('interface themes', () => {
 
   it('includes the ABtools palettes by name, then Classic Light', () => {
     expect(UI_THEMES.map(t => t.name)).toEqual([
-      'Plinky', 'Neutral Slate', 'Tokyo Night', 'Catppuccin Mocha', 'Nord',
+      'Thyrion', 'Neutral Slate', 'Tokyo Night', 'Catppuccin Mocha', 'Nord',
       'Gruvbox Dark', 'Bchips Violet', 'Dracula', 'GitHub Light', 'Classic Light',
     ]);
   });
@@ -61,7 +61,7 @@ describe('interface themes', () => {
     expect(document.documentElement.dataset.uiTheme).toBe('github-light');
   });
 
-  it('an unknown saved theme falls back to Plinky', () => {
+  it('an unknown saved theme falls back to Thyrion', () => {
     localStorage.setItem('plinky_ui_theme', 'no-such-theme');
     initUiTheme();
     expect(document.documentElement.dataset.uiTheme).toBe('plinky');
@@ -108,7 +108,7 @@ describe('terminal themes', () => {
     }
   });
 
-  it('Plinky keeps the colours terminals always had, and a choice is remembered', () => {
+  it('Thyrion keeps the colours terminals always had, and a choice is remembered', () => {
     expect(TERMINAL_THEMES[0].theme.background).toBe('#090d16');
     setTerminalTheme('dracula');
     expect(localStorage.getItem('plinky_terminal_theme')).toBe('dracula');
@@ -125,7 +125,7 @@ describe('terminal fonts', () => {
 });
 
 describe('match interface', () => {
-  it('is the default, and under the Plinky interface it is the Plinky scheme exactly', () => {
+  it('is the default, and under the Thyrion interface it is the Thyrion scheme exactly', () => {
     expect(DEFAULT_TERMINAL_THEME).toBe(MATCH_INTERFACE);
     applyUiTheme('plinky', false);
     const { background, foreground, red, brightBlue } = findTerminalTheme(MATCH_INTERFACE).theme;

@@ -577,7 +577,7 @@ export interface OpenRequest {
   sessionId?: string | null;
 }
 
-/** Console tabs queued by launches of Plinky (the first one's and forwarded ones); drains the queue. */
+/** Console tabs queued by launches of Thyrion (the first one's and forwarded ones); drains the queue. */
 export async function takeOpenRequests(): Promise<OpenRequest[]> {
   if (!isTauriEnvironment()) return [];
   try {

@@ -138,7 +138,7 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
   const [confirmConnect, setConfirmConnect] = useState<{ path: string; sessions: PuttySession[] } | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
 
-  // There was no way to remove or copy a saved session from Plinky: stale
+  // There was no way to remove or copy a saved session from Thyrion: stale
   // ones piled up, and a near-copy meant retyping every setting.
   const duplicateSession = async (session: PuttySession) => {
     try {
@@ -936,10 +936,10 @@ export const SessionExplorer: React.FC<SessionExplorerProps> = ({
             <Terminal className="w-8 h-8 text-slate-600" />
             <div className="text-xs text-slate-400">No sessions yet</div>
             {/* A PuTTY user's first question: where did my sessions go?
-                Plinky reads PuTTY's own store, so they appear here as soon
+                Thyrion reads PuTTY's own store, so they appear here as soon
                 as PuTTY has any. */}
             <p className="text-meta text-plinky-muted max-w-[16rem]">
-              Plinky shows the sessions saved in PuTTY {/Windows/i.test(navigator.userAgent) ? '(in the Windows registry)' : '(in ~/.putty/sessions)'}. Save one in PuTTY or here and it appears in both.
+              Thyrion shows the sessions saved in PuTTY {/Windows/i.test(navigator.userAgent) ? '(in the Windows registry)' : '(in ~/.putty/sessions)'}. Save one in PuTTY or here and it appears in both.
             </p>
             <button
               onClick={() => onCreateSession()}

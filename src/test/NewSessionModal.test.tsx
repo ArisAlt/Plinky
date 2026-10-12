@@ -579,7 +579,7 @@ describe('NewSessionModal Component', () => {
     expect(onSave.mock.calls[0][0].extra.PlinkyPasteLineDelayMs).toBeUndefined();
   });
 
-  it('saves keepalive and auto-reconnect the way PuTTY and Plinky read them', async () => {
+  it('saves keepalive and auto-reconnect the way PuTTY and Thyrion read them', async () => {
     const onSave = vi.fn();
     const heard: unknown[] = [];
     const listener = (e: Event) => heard.push((e as CustomEvent).detail);

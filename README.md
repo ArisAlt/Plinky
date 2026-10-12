@@ -1,15 +1,18 @@
-# Plinky
+# Thyrion
 
 **A desktop terminal and session manager built on PuTTY.**
 
-Plinky is for system administrators, network engineers and anyone who works
+Thyrion is for system administrators, network engineers and anyone who works
 over SSH, telnet or serial consoles. PuTTY's own tools make the connections
-and transfer the files; Plinky adds tabs, split screens, a file browser, a
+and transfer the files; Thyrion adds tabs, split screens, a file browser, a
 password vault and a few everyday time-savers.
 
 It uses the sessions you have already saved in PuTTY, so there is nothing to
-import. Sessions you add or change in Plinky are saved in the same place, so
+import. Sessions you add or change in Thyrion are saved in the same place, so
 PuTTY sees them too.
+
+*Thyrion was called Plinky until version 0.2.0. See
+[Coming from Plinky](#coming-from-plinky).*
 
 ---
 
@@ -33,8 +36,8 @@ PuTTY sees them too.
   detection and Send Break, and slow line-by-line paste for devices that drop
   characters.
 - **Use it as GNS3's console.** Set GNS3's custom console command to
-  `plinky --telnet {host} {port} --title "{name}"` and every device opens as
-  a tab in one Plinky window.
+  `thyrion --telnet {host} {port} --title "{name}"` and every device opens as
+  a tab in one Thyrion window.
 - **Save time.** Reusable command snippets with fill-in values, highlighted IPs
   and keywords, clickable links, and point-and-click cursor editing.
 - **Keep a record.** Log any session straight to a file of your choice as it
@@ -53,37 +56,64 @@ PuTTY sees them too.
 
 macOS is planned for later.
 
-Plinky uses the PuTTY you already have installed, so install
+Thyrion uses the PuTTY you already have installed, so install
 [PuTTY](https://www.chiark.greenend.org.uk/~sgtatham/putty/) first.
 
 ## Download
 
 Get the latest version from the
-[Releases page](https://github.com/ArisAlt/Plinky/releases).
+[Releases page](https://github.com/ArisAlt/Thyrion/releases).
 
 ---
 
 ## Reporting problems
 
-Bugs and ideas: [open an issue](https://github.com/ArisAlt/Plinky/issues/new/choose).
+Bugs and ideas: [open an issue](https://github.com/ArisAlt/Thyrion/issues/new/choose).
 Security problems: privately, as described in [SECURITY.md](SECURITY.md).
 
 ---
 
 ## License
 
-Plinky is free software under the [GNU General Public License v3.0](LICENSE)
-(GPL-3.0-only). You may use, share and change it. If you distribute Plinky or
+Thyrion is free software under the [GNU General Public License v3.0](LICENSE)
+(GPL-3.0-only). You may use, share and change it. If you distribute Thyrion or
 a modified version, you must do so under the same license, with its source
 code.
 
-For a commercial license, for example to use Plinky's code in a closed-source
+For a commercial license, for example to use Thyrion's code in a closed-source
 product, contact the maintainer through GitHub.
 
 Versions up to and including 0.1.4 were published under MIT or Apache-2.0;
 copies of those versions keep those terms.
 
-*The name comes from `plink`, PuTTY's command-line connection tool, which does
-the connecting behind every Plinky tab.*
+---
+
+## Coming from Plinky
+
+Thyrion is Plinky, renamed in 0.2.0. Nothing is lost:
+
+- **Your passwords and settings come along.** On its first start Thyrion
+  copies Plinky's vault, snippets, folders, layout and settings into its own
+  folder. Plinky's folder is left as it was.
+- **Your sessions are where they were**, in PuTTY's own store.
+- **Linux:** installing the Thyrion package replaces Plinky's. The commands
+  `plinky` and `plinky-desktop` still work and start Thyrion, so a GNS3
+  console command written for Plinky keeps working; new ones can use
+  `thyrion --telnet {host} {port} --title "{name}"`.
+- **Windows:** Thyrion installs as its own app. Point GNS3's console command
+  at Thyrion, then uninstall Plinky when you're ready.
+- **Scripts** that start with `from plinky import session` keep working;
+  new ones can use `from thyrion import session`.
+
+---
+
+## The name, and Alis
+
+Thyrion (Θύριον) was a town in ancient Acarnania, in western Greece. Its name
+comes from θύρα, a door, and in networking a *port*: fitting for a tool that
+opens doors to consoles and remote machines.
+
+Thyrion's mascot is **Alis**, the maintainer's dog. In memory of a very good
+dog.
 
 <sub>Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).</sub>

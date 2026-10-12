@@ -36,7 +36,7 @@ where
 
 /// PuTTY found once is not looked for again: finding it starts two
 /// processes, and the title bar and Settings both ask. Not found is asked
-/// again, so installing PuTTY while Plinky runs is noticed.
+/// again, so installing PuTTY while Thyrion runs is noticed.
 static PUTTY_FOUND: std::sync::OnceLock<PuttyInfo> = std::sync::OnceLock::new();
 
 #[tauri::command]
@@ -87,7 +87,7 @@ async fn write_putty_session(session: PuttySession) -> Result<(), String> {
 
 /// Removes a saved session the way PuTTY's own Delete does (registry key on
 /// Windows, session file elsewhere). There was no way to delete a session
-/// from Plinky, so stale ones piled up forever.
+/// from Thyrion, so stale ones piled up forever.
 #[tauri::command]
 async fn delete_putty_session(name: String) -> Result<(), String> {
     off_main(move || {
@@ -365,7 +365,7 @@ async fn start_terminal_session(
         // milliseconds can reach the page before the log. A log that can't
         // be opened doesn't stop the session.
         if let Err(e) = registry.start_log(&session_id, &path, mode) {
-            eprintln!("plinky: {}", shown(e));
+            eprintln!("thyrion: {}", shown(e));
         }
     }
     Ok(())
@@ -533,7 +533,7 @@ async fn start_session_log(
         .document_dir()
         .or_else(|_| app.path().home_dir())
         .map_err(|e| e.to_string())?
-        .join("Plinky Logs");
+        .join("Thyrion Logs");
     // The dialog opens in this folder; it has to exist to be offered.
     let _ = std::fs::create_dir_all(&dir);
     let suggested = plinky_core::session::log::default_log_path(&dir, &session_name, unix_now());
@@ -570,7 +570,7 @@ fn session_log_status(registry: State<'_, Arc<SessionRegistry>>, session_id: Str
 }
 
 /// PuTTY's own per-session logging: `LogType` 1 (printable) or 2 (all
-/// output) with a `LogFileName`. Plinky parsed the name but never used it:
+/// output) with a `LogFileName`. Thyrion parsed the name but never used it:
 /// the page passes none, so a session set up to log in PuTTY logged nothing
 /// here. Other types (SSH packets, raw) aren't session output; they're off.
 fn putty_session_log(saved: &putty_compat::sessions::PuttySession, now: u64) -> Option<(std::path::PathBuf, plinky_core::session::log::LogMode)> {
@@ -1484,9 +1484,12 @@ async fn list_serial_ports() -> Result<Vec<plinky_core::transport::serial::Detec
     }).await?
 }
 
-/// The bundle identifier before 17afa6d (Tauri warns that an identifier
-/// ending in ".app" clashes with macOS app bundles).
-const OLD_IDENTIFIER: &str = "com.plinky.app";
+/// Identifiers this app had before, newest first: Plinky's (renamed to
+/// Thyrion in 0.2.0), and before 17afa6d com.plinky.app (Tauri warns that an
+/// identifier ending in ".app" clashes with macOS app bundles). The first
+/// launch under the current identifier copies the newest one found, so the
+/// vault, snippets, folders, layout and settings come along.
+const OLD_IDENTIFIERS: [&str; 2] = ["com.plinky.desktop", "com.plinky.app"];
 
 /// Where Tauri and the webview keep per-identifier folders: the vault
 /// (app_data_dir) and the webview's localStorage -- snippets, user folders,
@@ -1526,6 +1529,20 @@ fn migrate_identifier_dir(base: &std::path::Path, old: &str, new: &str) -> std::
     Ok(true)
 }
 
+/// `migrate_identifier_dir` from the newest of `olds` that has data; the
+/// identifier it copied from, if any.
+fn migrate_from_any<'a>(base: &std::path::Path, olds: &[&'a str], new: &str) -> std::io::Result<Option<&'a str>> {
+    for old in olds {
+        if migrate_identifier_dir(base, old, new)? {
+            return Ok(Some(old));
+        }
+        if base.join(new).exists() {
+            break; // already there: nothing older may overwrite it
+        }
+    }
+    Ok(None)
+}
+
 fn copy_dir_all(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
     for entry in std::fs::read_dir(from)? {
@@ -1551,7 +1568,7 @@ struct OpenRequests(std::sync::Mutex<Vec<cli::OpenRequest>>);
 /// The clipboard's text, read here rather than by the page: the webview
 /// blocks the page from reading the clipboard (wry's clipboard access is
 /// off), so pasting from a browser or any other program gave nothing, on
-/// Linux and on Windows. Off the main thread: on Linux, when Plinky itself
+/// Linux and on Windows. Off the main thread: on Linux, when Thyrion itself
 /// owns the clipboard, the read waits for the GTK main loop to hand the
 /// text over. Nothing (or no text) on the clipboard reads as "".
 #[tauri::command]
@@ -1576,7 +1593,7 @@ async fn write_clipboard_text(app: tauri::AppHandle, text: String) -> Result<(),
 /// before the page has drawn a tab for it; the tab attaches and replays what
 /// it printed meanwhile. The connect used to wait on the page: measured
 /// against GNS3 consoles, plink connects in 7 ms and PuTTY in ~52, while a
-/// Plinky console took ~260-300 ms, ~100-135 of them after the request had
+/// Thyrion console took ~260-300 ms, ~100-135 of them after the request had
 /// already arrived (a 60 ms batching wait, the tab and terminal being
 /// built, an attach attempt, then the start).
 async fn start_console_session(app: &tauri::AppHandle, mut req: cli::OpenRequest) -> cli::OpenRequest {
@@ -1605,7 +1622,7 @@ async fn start_console_session(app: &tauri::AppHandle, mut req: cli::OpenRequest
             req.session_id = Some(id);
         }
         // The tab starts it itself then, and shows why it failed.
-        Err(e) => eprintln!("plinky: couldn't start {name}: {e}"),
+        Err(e) => eprintln!("thyrion: couldn't start {name}: {e}"),
     }
     req
 }
@@ -1644,12 +1661,14 @@ pub fn run() {
     // window is created, which happens ahead of the setup hook.
     let context = tauri::generate_context!();
     for base in identifier_data_bases() {
-        if let Err(e) = migrate_identifier_dir(&base, OLD_IDENTIFIER, &context.config().identifier) {
-            eprintln!("plinky: couldn't carry data over from {OLD_IDENTIFIER} in {}: {e}", base.display());
+        match migrate_from_any(&base, &OLD_IDENTIFIERS, &context.config().identifier) {
+            Ok(Some(old)) => eprintln!("thyrion: carried data over from {old} in {}", base.display()),
+            Ok(None) => {}
+            Err(e) => eprintln!("thyrion: couldn't carry data over in {}: {e}", base.display()),
         }
     }
 
-    // Plinky 0.1.0 for Windows saved sessions as files, which plink.exe never
+    // Thyrion 0.1.0 for Windows saved sessions as files, which plink.exe never
     // reads: every one failed with "plink: no valid host name provided".
     // Copy them into PuTTY's registry key once, before the session list is
     // first loaded. Nothing already in the registry is overwritten.
@@ -1661,10 +1680,10 @@ pub fn run() {
         for (dir, report) in putty_compat::legacy_import::import_into_registry(&marker) {
             match report {
                 Ok(r) => eprintln!(
-                    "plinky: sessions from {}: {} imported, {} already in the registry, {} failed {:?}",
+                    "thyrion: sessions from {}: {} imported, {} already in the registry, {} failed {:?}",
                     dir.display(), r.imported.len(), r.skipped_existing.len(), r.failed.len(), r.failed
                 ),
-                Err(e) => eprintln!("plinky: couldn't read old sessions in {}: {e}", dir.display()),
+                Err(e) => eprintln!("thyrion: couldn't read old sessions in {}: {e}", dir.display()),
             }
         }
     }
@@ -1672,7 +1691,7 @@ pub fn run() {
     let argv: Vec<String> = std::env::args().collect();
     let startup_requests = cli::parse_args(&argv);
 
-    // A console request from GNS3 goes to the Plinky already running, if
+    // A console request from GNS3 goes to the Thyrion already running, if
     // there is one, before anything else starts (see handoff.rs).
     #[cfg(unix)]
     let handoff_path = handoff::socket_path(&context.config().identifier);
@@ -1684,7 +1703,7 @@ pub fn run() {
     tauri::Builder::default()
         // First: a second launch (GNS3 runs the console command once per
         // device) hands its arguments to this window as new tabs and exits,
-        // instead of opening another Plinky.
+        // instead of opening another Thyrion.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             open_console_requests(app, cli::parse_args(&argv));
             if let Some(w) = app.get_webview_window("main") {
@@ -1810,7 +1829,7 @@ pub fn run() {
             list_serial_ports
         ])
         .build(context)
-        .expect("error while building plinky desktop application")
+        .expect("error while building the Thyrion desktop application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 // No plink outlives the window.
@@ -1829,7 +1848,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::migrate_identifier_dir;
+    use super::{migrate_identifier_dir, migrate_from_any, OLD_IDENTIFIERS};
 
     /// The page hears the host-key prompt and paste progress through
     /// plugin:event|listen, which Tauri refuses unless a capability grants
@@ -1857,7 +1876,7 @@ mod tests {
     /// window turns that off, and then the page's own drag and drop never
     /// starts on Windows. Owner, v0.1.30 on Windows: dragging sessions in
     /// the list and tabs in the tab bar did nothing (the SFTP pane's drag
-    /// between panes was dead there too). Plinky takes no file drops from
+    /// between panes was dead there too). Thyrion takes no file drops from
     /// the desktop, so nothing is lost.
     #[test]
     fn the_page_handles_its_own_drag_and_drop() {
@@ -2043,6 +2062,44 @@ mod tests {
         assert!(!migrate_identifier_dir(&base, "old.id", "new.id").unwrap());
         let kept = std::fs::read(base.join("new.id/localstorage/tauri_localhost_0.localstorage")).unwrap();
         assert_eq!(kept, b"newer");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_rename_carries_plinkys_data_over_the_newest_first() {
+        // Plinky became Thyrion in 0.2.0 (identifier com.thyrion.desktop): the
+        // vault and the page's storage had to come along, from
+        // com.plinky.desktop, or for a very old install com.plinky.app.
+        let base = scratch("rename");
+        for (id, body) in [("com.plinky.desktop", "desktop"), ("com.plinky.app", "app")] {
+            std::fs::create_dir_all(base.join(id)).unwrap();
+            std::fs::write(base.join(id).join("vault.bin"), body).unwrap();
+        }
+        assert_eq!(migrate_from_any(&base, &OLD_IDENTIFIERS, "com.thyrion.desktop").unwrap(), Some("com.plinky.desktop"));
+        assert_eq!(std::fs::read(base.join("com.thyrion.desktop/vault.bin")).unwrap(), b"desktop");
+        // Once there, nothing older is copied over it.
+        assert_eq!(migrate_from_any(&base, &OLD_IDENTIFIERS, "com.thyrion.desktop").unwrap(), None);
+
+        let only_oldest = scratch("rename-oldest");
+        std::fs::create_dir_all(only_oldest.join("com.plinky.app")).unwrap();
+        std::fs::write(only_oldest.join("com.plinky.app/vault.bin"), "app").unwrap();
+        assert_eq!(migrate_from_any(&only_oldest, &OLD_IDENTIFIERS, "com.thyrion.desktop").unwrap(), Some("com.plinky.app"));
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&only_oldest);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copied_vault_stays_readable_by_its_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = scratch("perm");
+        std::fs::create_dir_all(base.join("com.plinky.desktop")).unwrap();
+        let vault = base.join("com.plinky.desktop/vault.bin");
+        std::fs::write(&vault, "x").unwrap();
+        std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o600)).unwrap();
+        migrate_from_any(&base, &OLD_IDENTIFIERS, "com.thyrion.desktop").unwrap();
+        let mode = std::fs::metadata(base.join("com.thyrion.desktop/vault.bin")).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
         let _ = std::fs::remove_dir_all(&base);
     }
 

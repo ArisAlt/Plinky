@@ -3,7 +3,7 @@
  *
  * A folder is a path of segments joined by '/', stored as the session's
  * PlinkyFolder value: "Corp 1/Site 1/Site 1 Production". PuTTY's own store
- * stays flat -- it never reads PlinkyFolder -- so nesting is Plinky-only.
+ * stays flat -- it never reads PlinkyFolder -- so nesting is Thyrion-only.
  *
  * '/' is refused inside a folder name rather than escaped. An escape would
  * have to survive every tool that reads or hand-edits a PuTTY session file,

@@ -71,7 +71,7 @@ pub fn escape_session_name(name: &str) -> String {
     out
 }
 
-/// The file name Plinky used before it matched PuTTY: `+` and `@` were
+/// The file name Thyrion used before it matched PuTTY: `+` and `@` were
 /// escaped as well. Only looked for, so those sessions aren't lost.
 fn legacy_session_filename(name: &str) -> String {
     escape_session_name(name)
@@ -82,7 +82,7 @@ fn legacy_session_filename(name: &str) -> String {
 /// The file session `name` is saved in, or None if it isn't saved.
 ///
 /// A session only found under its legacy file name is moved to PuTTY's
-/// here: Plinky would otherwise list it and hand `plink -load` a name plink
+/// here: Thyrion would otherwise list it and hand `plink -load` a name plink
 /// can't open, a terminal connected to nothing. The move is a hard link
 /// then an unlink, so it never replaces a file PuTTY saved meanwhile; where
 /// it can't be made, the legacy file is read as it is.
@@ -135,7 +135,7 @@ pub(crate) fn percent_decode(escaped: &str) -> Vec<u8> {
 /// functions.
 pub fn session_dir() -> PathBuf {
     // Real PuTTY always reads $PUTTYDIR/sessions/. Falling back to $PUTTYDIR
-    // itself when that subdirectory didn't exist yet meant Plinky saved
+    // itself when that subdirectory didn't exist yet meant Thyrion saved
     // sessions where PuTTY (and plink -load) can't see them.
     if let Ok(val) = std::env::var("PUTTYDIR") {
         return PathBuf::from(val).join("sessions");
@@ -258,7 +258,7 @@ pub fn parse_session_file(path: &Path, session_name: &str) -> Result<PuttySessio
 }
 
 /// Puts one saved `key=value` where it belongs: a first-class field, or
-/// `extra` for everything Plinky doesn't model (kept for the round trip).
+/// `extra` for everything Thyrion doesn't model (kept for the round trip).
 pub(crate) fn apply_setting(session: &mut PuttySession, key: String, val: String) {
     match key.as_str() {
         "HostName" => session.host_name = val,
@@ -319,7 +319,7 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
     }
 
     let temp_file = tempfile::Builder::new()
-        .prefix(".plinky-session-")
+        .prefix(".thyrion-session-")
         .tempfile_in(dir)
         .map_err(|e| PuttyCompatError::Io {
             path: dir.to_path_buf(),
@@ -352,7 +352,7 @@ pub fn write_session_in(dir: &Path, session: &PuttySession) -> Result<()> {
     Ok(())
 }
 
-/// Plinky's folder path for a session, kept beside PuTTY's own settings.
+/// Thyrion's folder path for a session, kept beside PuTTY's own settings.
 /// PuTTY ignores keys it doesn't know, so its store stays flat.
 pub const FOLDER_KEY: &str = "PlinkyFolder";
 

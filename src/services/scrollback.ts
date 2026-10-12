@@ -1,6 +1,6 @@
 // How many lines a terminal keeps above the screen (Settings > Terminal).
 //
-// Plinky set none, so xterm's 1,000 always applied: "Copy All to
+// Thyrion set none, so xterm's 1,000 always applied: "Copy All to
 // Clipboard" of a long show tech-support came out cut off at the top, with
 // no way to keep more. 1,000 stays the default (owner's choice); each line
 // kept costs memory in every open tab. PuTTY keeps 2,000.

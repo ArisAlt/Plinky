@@ -1,6 +1,6 @@
 # Security
 
-Plinky stores passwords and types them into remote devices, so security
+Thyrion stores passwords and types them into remote devices, so security
 reports are welcome and taken seriously.
 
 ## Reporting a vulnerability
@@ -8,7 +8,7 @@ reports are welcome and taken seriously.
 Please report it **privately**, not in a public issue:
 
 1. Go to the repository's **Security** tab and choose **Report a
-   vulnerability** (https://github.com/ArisAlt/Plinky/security/advisories/new).
+   vulnerability** (https://github.com/ArisAlt/Thyrion/security/advisories/new).
 2. Describe what an attacker could do, and how to reproduce it. Use
    placeholder hosts (`192.0.2.10`) and never include real passwords.
 
@@ -21,7 +21,7 @@ the report is credited in its notes unless you'd rather not.
 
 ## Supported versions
 
-Only the **latest release** gets security fixes. Plinky updates often; please
+Only the **latest release** gets security fixes. Thyrion updates often; please
 update before reporting.
 
 ## In scope
@@ -29,7 +29,7 @@ update before reporting.
 - The password vault and anything that could reveal its contents
 - Automatic logins: SSH, jump hosts, enable passwords, console login
 - Anything that lets a remote device, a session's output or a file make
-  Plinky run commands or send input it shouldn't
+  Thyrion run commands or send input it shouldn't
 - Saved sessions, logs, exports and temporary files
 
 How passwords are kept and used is described in

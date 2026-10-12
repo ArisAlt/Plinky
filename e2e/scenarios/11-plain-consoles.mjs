@@ -69,7 +69,7 @@ const lineTests = (label, stateKey, title) => [
 
   [`${label}: the echo looks like PuTTY's: Backspace erases, no ^? ^M ^J or ^[[A`, async ({ app, ...s }) => {
     // The pty echoed control keys as ^X: "shw^?ow clock^M^J", and Up as
-    // ^[[A. Plinky echoes these consoles itself now, as PuTTY does.
+    // ^[[A. Thyrion echoes these consoles itself now, as PuTTY does.
     const con = s[stateKey];
     await showTab(app, title);
     con.clear();

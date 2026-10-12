@@ -36,7 +36,7 @@ describe('TitleBar Component - Quick Connect History & Auto-Complete', () => {
       />
     );
 
-    expect(screen.getByText('PLINKY')).toBeDefined();
+    expect(screen.getByText('THYRION')).toBeDefined();
     expect(screen.getByText('Sessions')).toBeDefined();
     expect(screen.getByText('SFTP Pane')).toBeDefined();
     expect(screen.getByText('SSH Tunnels')).toBeDefined();

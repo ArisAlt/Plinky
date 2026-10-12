@@ -93,7 +93,7 @@ describe('the weak-crypto question', () => {
   });
 });
 
-describe('a question Plinky has no dialog for', () => {
+describe('a question Thyrion has no dialog for', () => {
   it('shows plink\'s text and answers yes or no', () => {
     const onAnswer = vi.fn();
     const q = { ...base, host: '', port: 0, key_type: '', fingerprint: '', question: 'Something new.\nAllow it? (y/n)' };

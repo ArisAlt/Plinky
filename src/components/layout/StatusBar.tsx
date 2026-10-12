@@ -84,12 +84,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({ tabs, activeTabId, broadca
 
         <span className="text-plinky-600">|</span>
 
-        {/* Design doc R3: plink verifies host keys; Plinky never reads them
+        {/* Design doc R3: plink verifies host keys; Thyrion never reads them
             out of terminal text. "R3 Safe (Zero Hostkey Scrape)" was that
             shorthand, meaningless to a user. */}
         <div
           className="hidden lg:flex items-center space-x-1 text-slate-400 whitespace-nowrap"
-          title="PuTTY verifies every server's host key. Plinky only shows you the fingerprint and passes on your answer."
+          title="PuTTY verifies every server's host key. Thyrion only shows you the fingerprint and passes on your answer."
         >
           <ShieldCheck className="w-3 h-3 text-sky-400" />
           <span>Host keys verified by PuTTY</span>

@@ -25,7 +25,7 @@ pub const DEFAULT_P_COST: u32 = 1;     // 1 thread
 // The most a vault file may ask unlocking to spend. The parameters are read
 // from the file before anything is checked: a file with m_cost near 4 TiB
 // made unlocking try to allocate it. Far above the defaults, so no vault
-// Plinky made is refused.
+// Thyrion made is refused.
 pub const MAX_M_COST: u32 = 1 << 20; // 1 GiB, in KiB
 pub const MAX_T_COST: u32 = 64;
 pub const MAX_P_COST: u32 = 16;
@@ -93,7 +93,7 @@ impl VaultHeader {
 
         if &bytes[0..4] != MAGIC {
             return Err(PlinkyError::VaultError(
-                "Invalid vault magic header. File is not a Plinky vault container.".to_string(),
+                "Invalid vault magic header. File is not a Thyrion vault container.".to_string(),
             ));
         }
 
@@ -112,7 +112,7 @@ impl VaultHeader {
         if m_cost > MAX_M_COST || t_cost == 0 || t_cost > MAX_T_COST || p_cost == 0 || p_cost > MAX_P_COST {
             return Err(PlinkyError::VaultError(format!(
                 "This vault asks for key derivation settings out of range (memory {m_cost} KiB, \
-                 {t_cost} passes, {p_cost} lanes); it wasn't made by Plinky or is damaged."
+                 {t_cost} passes, {p_cost} lanes); it wasn't made by Thyrion or is damaged."
             )));
         }
 

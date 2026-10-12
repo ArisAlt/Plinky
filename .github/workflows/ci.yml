@@ -1,4 +1,4 @@
-name: Plinky CI Matrix
+name: Thyrion CI Matrix
 
 on:
   push:
@@ -65,11 +65,11 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
 
       - name: Build Desktop Application Binary
-        run: cargo build -p plinky-desktop
+        run: cargo build -p thyrion
 
       - name: Headless Desktop Launch Smoke Test (Xvfb)
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" timeout 8s ./target/debug/plinky-desktop || exit_code=$?
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" timeout 8s ./target/debug/thyrion || exit_code=$?
           # Exit code 124 indicates timeout killed the running process cleanly, proving zero panics on launch
           if [ "${exit_code:-0}" -eq 124 ] || [ "${exit_code:-0}" -eq 0 ]; then
             echo "Smoke test passed: application stayed alive under Xvfb with zero launch panics."

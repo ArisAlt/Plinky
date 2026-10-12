@@ -7,7 +7,7 @@
 //! ```
 //!
 //! plink -load only ever looks there, so on Windows a session saved anywhere
-//! else can't connect. PuTTY for Windows has no PUTTYDIR either, and Plinky
+//! else can't connect. PuTTY for Windows has no PUTTYDIR either, and Thyrion
 //! ignores it there too: a PUTTYDIR store on Windows would only hold sessions
 //! plink can't load.
 //!
@@ -175,7 +175,7 @@ mod code_page {
         /// PuTTY's view of `s`: its ANSI-code-page bytes (the same bytes plink
         /// gets for a `-load` argument). A name with characters the code page
         /// can't hold, which PuTTY couldn't have saved, keeps its UTF-8 bytes
-        /// so Plinky at least finds its own session again.
+        /// so Thyrion at least finds its own session again.
         pub fn encode(s: &str) -> Vec<u8> {
             if s.is_ascii() || ansi_code_page() == CP_UTF8 {
                 return s.as_bytes().to_vec();
@@ -306,7 +306,7 @@ mod io {
 
     /// The text of a value PuTTY would read: REG_SZ as is, REG_DWORD as the
     /// decimal int PuTTY's file store would have written. PuTTY ignores
-    /// every other type in a session key, and so does Plinky.
+    /// every other type in a session key, and so does Thyrion.
     fn setting_text(value: &RegValue) -> std::io::Result<Option<String>> {
         match value.vtype {
             RegType::REG_SZ => String::from_reg_value(value).map(Some),
@@ -637,7 +637,7 @@ mod windows_tests {
         let scratch = ScratchKey::new();
         write_session_in(&scratch.sessions(), &switch()).unwrap();
 
-        // What PuTTY itself might have left there: a DWORD Plinky has no
+        // What PuTTY itself might have left there: a DWORD Thyrion has no
         // table entry for, and a value type PuTTY never reads.
         let key = scratch.open(r"Sessions\core/sw1%20lab");
         key.set_value("SettingFromNewerPutty", &7u32).unwrap();

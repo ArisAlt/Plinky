@@ -1,6 +1,6 @@
 """Save a device's running configuration to a file.
 
-Run it from Plinky: right-click the terminal of a router or switch that is
+Run it from Thyrion: right-click the terminal of a router or switch that is
 already logged in (at its > or # prompt), choose Run Script..., and pick
 this file. It turns paging off, reads the running configuration and saves
 it next to this script as <session>-<date>-<time>.cfg.
@@ -14,7 +14,7 @@ import datetime
 import os
 import re
 
-from plinky import session
+from thyrion import session
 
 
 def learn_prompt():

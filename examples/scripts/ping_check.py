@@ -1,7 +1,7 @@
 """Ping a few addresses from the device and report which ones answer.
 
 A small example of expect(): send a command, then wait for a line you know
-the device prints, and read a value out of it. Run it from Plinky: right-click
+the device prints, and read a value out of it. Run it from Thyrion: right-click
 the terminal of a logged-in router or Linux server, choose Run Script...,
 pick this file.
 
@@ -11,7 +11,7 @@ ping stops by itself after 5 packets; Linux's needs -c or it never stops.
 
 import re
 
-from plinky import session
+from thyrion import session
 
 TARGETS = ["192.0.2.1", "192.0.2.2", "198.51.100.1"]
 PING = "ping -c 5 {address}"   # Cisco IOS: "ping {address}"

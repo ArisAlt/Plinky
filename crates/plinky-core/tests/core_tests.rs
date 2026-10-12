@@ -526,7 +526,7 @@ async fn test_process_exit_is_reported_to_subscriber() {
     registry.write_input("exit-sess", b"exit\r").unwrap();
     let buf = collect_until_closed(&mut rx, 3000).await;
     assert!(
-        String::from_utf8_lossy(&buf).contains("[Plinky: Session closed"),
+        String::from_utf8_lossy(&buf).contains("[Thyrion: Session closed"),
         "process exit must be surfaced; got: {:?}",
         String::from_utf8_lossy(&buf)
     );
@@ -550,7 +550,7 @@ async fn test_exit_is_reported_even_when_the_terminal_never_hits_eof() {
     let started = std::time::Instant::now();
     let buf = collect_until_closed(&mut rx, 5000).await;
     assert!(
-        String::from_utf8_lossy(&buf).contains("[Plinky: Session closed"),
+        String::from_utf8_lossy(&buf).contains("[Thyrion: Session closed"),
         "exit hidden while a background job held the terminal; got: {:?}",
         String::from_utf8_lossy(&buf)
     );
@@ -566,7 +566,7 @@ async fn collect_until_closed(rx: &mut mpsc::UnboundedReceiver<Vec<u8>>, ms: u64
             chunk = rx.recv() => match chunk {
                 Some(c) => {
                     buf.extend_from_slice(&c);
-                    if String::from_utf8_lossy(&buf).contains("[Plinky: Session closed") { break; }
+                    if String::from_utf8_lossy(&buf).contains("[Thyrion: Session closed") { break; }
                 }
                 None => break,
             },
@@ -813,7 +813,7 @@ async fn a_flood_waits_for_the_page_and_a_detached_tab_runs_free() {
 async fn a_session_log_is_on_disk_while_the_session_is_still_running() {
     use plinky_core::session::log::LogMode;
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("Plinky Logs").join("local.log");
+    let path = dir.path().join("Thyrion Logs").join("local.log");
     let registry = SessionRegistry::new();
     let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
     registry.create_local_session("log-live", "Local", None, 80, 24, tx).unwrap();

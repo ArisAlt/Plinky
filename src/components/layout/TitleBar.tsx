@@ -34,7 +34,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   sessions = [],
 }) => {
   const [quickHost, setQuickHost] = useState('');
-  // The PuTTY Plinky actually found. The badge said "PuTTY v0.85" whatever
+  // The PuTTY Thyrion actually found. The badge said "PuTTY v0.85" whatever
   // was installed (0.81 on the test machine); a wrong version is a bad first
   // impression for a tool whose pitch is "uses the PuTTY you trust".
   const [puttyVersion, setPuttyVersion] = useState<string | null>(null);
@@ -200,10 +200,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       {/* Brand & Left Navigation */}
       <div className="flex items-center space-x-4 shrink-0">
         <div className="flex items-center space-x-2">
-          <div className="h-6 w-6 rounded bg-sky-500/20 border border-sky-500/40 flex items-center justify-center">
-            <Terminal className="w-3.5 h-3.5 text-sky-400" />
-          </div>
-          <span className="font-bold text-sm tracking-wide text-white">PLINKY</span>
+          {/* The app icon: Alis, the mascot, and the prompt. */}
+          <img src="/favicon.svg" alt="" aria-hidden className="h-6 w-6 rounded" draggable={false} />
+          <span className="font-bold text-sm tracking-wide text-white">THYRION</span>
           {(puttyVersion || puttyMissing) && (
             <span
               className={`text-meta px-1.5 py-0.5 rounded tabular-nums border ${

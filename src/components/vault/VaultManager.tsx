@@ -411,7 +411,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
             <Shield className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold text-white tracking-wide">Plinky Credential Vault</h1>
+            <h1 className="text-sm font-semibold text-white tracking-wide">Thyrion Credential Vault</h1>
             <p className="text-meta text-slate-400">
               AES-256-GCM encryption, key derived with Argon2id
             </p>
@@ -485,7 +485,7 @@ export const VaultManager: React.FC<VaultManagerProps> = ({ onClose }) => {
               <div className="mx-auto w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-400 mb-2">
                 <Shield className="w-5 h-5" />
               </div>
-              <h2 className="text-base font-semibold text-white">Initialize Plinky Vault</h2>
+              <h2 className="text-base font-semibold text-white">Initialize Thyrion Vault</h2>
               <p className="text-xs text-slate-400">
                 Choose a strong master password to encrypt your session passwords and private keys.
               </p>

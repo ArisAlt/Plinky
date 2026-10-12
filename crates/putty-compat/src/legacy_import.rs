@@ -1,4 +1,4 @@
-//! Carries sessions saved by Plinky 0.1.0 for Windows into the registry.
+//! Carries sessions saved by Thyrion 0.1.0 for Windows into the registry.
 //!
 //! 0.1.0 kept sessions as files on every platform, the way PuTTY for Unix
 //! does. plink.exe only reads HKCU\Software\SimonTatham\PuTTY\Sessions, so
@@ -24,7 +24,7 @@ use crate::sessions::{list_sessions_in, read_session_in, PuttySession};
 /// user's own PuTTY defaults.
 pub const DEFAULT_SETTINGS: &str = "Default Settings";
 
-/// The marker file's name, in Plinky's app data folder.
+/// The marker file's name, in Thyrion's app data folder.
 pub const MARKER_FILE: &str = "legacy-sessions-imported";
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -60,7 +60,7 @@ pub fn import_file_sessions(
     Ok(report)
 }
 
-/// Every folder Plinky 0.1.0 on Windows could have saved sessions in. Its
+/// Every folder Thyrion 0.1.0 on Windows could have saved sessions in. Its
 /// session_dir() tried $PUTTYDIR/sessions, $XDG_CONFIG_HOME/putty/sessions
 /// and $HOME/.putty/sessions -- Windows sets none of these by default --
 /// and otherwise used a *relative* .putty/sessions: relative to wherever
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn looks_where_0_1_0_could_have_saved_including_the_relative_fallback() {
         let none = |_: &str| None;
-        let cwd = Path::new("/apps/Plinky");
+        let cwd = Path::new("/apps/Thyrion");
         let exe = Path::new("/portable");
         assert_eq!(
             legacy_session_dirs(none, Some(cwd), Some(exe)),

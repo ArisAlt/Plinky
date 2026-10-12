@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#0f172a"/>
+  <!-- Alis: a Dogo Argentino, on the left, facing the prompt -->
+  <g transform="translate(1000 30) scale(-0.96 0.96)">
+    <!-- domed skull, cropped ears, short deep muzzle, heavy flews, thick neck -->
+    <path fill="#f8fafc" d="
+      M462 446
+      C466 430 478 426 494 424
+      L618 410
+      C634 404 642 372 656 348
+      C686 300 738 280 776 280
+      L792 172 C797 162 811 162 818 172
+      L866 302
+      C896 324 914 354 926 394
+      C962 470 990 620 1004 1060
+      L560 1060
+      C574 900 600 760 640 700
+      C664 674 694 660 716 632
+      C692 636 662 636 632 628
+      C600 622 572 618 548 610
+      C512 600 482 586 466 562
+      C454 544 452 516 454 494
+      C455 474 458 456 462 446 Z"/>
+    <path fill="#cbd5e1" d="M806 204 L816 296 L846 302 Z"/>
+    <path d="M466 530 C500 556 540 572 578 576 C606 578 628 570 642 556" stroke="#94a3b8" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <path d="M704 470 C734 520 732 572 710 614" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <path fill="#111827" d="M454 452 C454 430 478 422 498 428 C510 434 512 460 504 476 C494 494 466 496 456 482 C452 474 452 462 454 452 Z"/>
+    <ellipse cx="664" cy="392" rx="18" ry="12" fill="#111827" transform="rotate(-14 664 392)"/>
+  </g>
+  <!-- the prompt: > and _ -->
+  <path d="M640 660 L780 780 L640 900" stroke="#06b6d4" stroke-width="58" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="768" y="886" width="176" height="58" rx="14" fill="#10b981"/>
+</svg>

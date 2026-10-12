@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SettingsModal } from '../components/modals/SettingsModal';
 import { vaultDestroy, vaultIsInitialized } from '../services/tauriBridge';
+import { version } from '../../package.json';
 
 // Mock tauriBridge detectPutty
 vi.mock('../services/tauriBridge', () => ({
@@ -124,5 +125,27 @@ describe('SettingsModal Component', () => {
       await waitFor(() => expect(vi.mocked(vaultIsInitialized)).toHaveBeenCalled());
       expect((btn as HTMLButtonElement).disabled).toBe(true);
     });
+  });
+
+  it('About names the app, its real version, and Alis', () => {
+    // The app showed its version nowhere. Alis, the mascot, was the
+    // owner's dog.
+    render(
+      <SettingsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        fontFamily="monospace"
+        onChangeFontFamily={vi.fn()}
+        fontSize={13}
+        onChangeFontSize={vi.fn()}
+        cursorStyle="block"
+        onChangeCursorStyle={vi.fn()}
+        onResetLayout={vi.fn()}
+      />
+    );
+    const about = document.querySelector('[data-about]') as HTMLElement;
+    expect(about.textContent).toContain('Thyrion');
+    expect(about.textContent).toContain(`v${version}`);
+    expect(about.textContent).toContain('Alis');
   });
 });

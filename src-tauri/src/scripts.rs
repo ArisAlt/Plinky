@@ -3,8 +3,9 @@
 //! What the script prints is typed into the session; what the device prints
 //! is copied to the script's input (the session's output tap); what the
 //! script writes to stderr shows in the terminal as a note and never reaches
-//! the device. Python scripts get `plinky.py` (scripting/plinky.py) on their
-//! path for send/expect. The script sees the session's output, never the
+//! the device. Python scripts get `thyrion.py` (scripting/thyrion.py) on their
+//! path for send/expect, and `plinky.py`, its old name, so scripts written
+//! before the rename keep working. The script sees the session's output, never the
 //! vault: a password it needs goes through "Send password" as for a person.
 
 use std::collections::HashMap;
@@ -18,7 +19,9 @@ use std::time::Duration;
 use plinky_core::SessionRegistry;
 use tauri::{AppHandle, Emitter, Manager};
 
-const HELPER: &str = include_str!("../scripting/plinky.py");
+const HELPER: &str = include_str!("../scripting/thyrion.py");
+/// `from plinky import session`, from before the rename, still works.
+const HELPER_OLD_NAME: &str = include_str!("../scripting/plinky.py");
 
 /// Output chunks a script may fall behind by before new ones are dropped.
 const TAP_DEPTH: usize = 1024;
@@ -53,8 +56,8 @@ struct ScriptEnded {
     stopped: bool,
 }
 
-/// The folder Plinky runs from when it is an AppImage (APPDIR, or the one
-/// holding usr/bin/plinky-desktop), None otherwise.
+/// The folder Thyrion runs from when it is an AppImage (APPDIR, or the one
+/// holding usr/bin/thyrion), None otherwise.
 fn app_dir() -> Option<std::path::PathBuf> {
     if let Some(dir) = std::env::var_os("APPDIR").filter(|d| !d.is_empty()) {
         return Some(dir.into());
@@ -77,7 +80,7 @@ fn without_dir(list: &std::ffi::OsStr, dir: &Path) -> Vec<std::path::PathBuf> {
 
 /// A script runs with the user's environment, not the AppImage's. The
 /// AppImage's AppRun points Python at its own folder (PYTHONHOME and
-/// PYTHONPATH into ~/apps/Plinky/usr) and puts its libraries first: the
+/// PYTHONPATH into ~/apps/Thyrion/usr) and puts its libraries first: the
 /// system python3 then found no standard library and died at start, "No
 /// module named 'encodings'" (owner, the unpacked AppImage).
 fn user_environment(cmd: &mut Command) {
@@ -154,7 +157,8 @@ pub fn start(
         .map_err(|e| e.to_string())?
         .join("scripting");
     std::fs::create_dir_all(&helper_dir).map_err(|e| format!("Couldn't prepare the script helper: {e}"))?;
-    std::fs::write(helper_dir.join("plinky.py"), HELPER).map_err(|e| format!("Couldn't write the script helper: {e}"))?;
+    std::fs::write(helper_dir.join("thyrion.py"), HELPER).map_err(|e| format!("Couldn't write the script helper: {e}"))?;
+    std::fs::write(helper_dir.join("plinky.py"), HELPER_OLD_NAME).map_err(|e| format!("Couldn't write the script helper: {e}"))?;
     let mut python_path = vec![helper_dir.clone()];
     if let Some(existing) = std::env::var_os("PYTHONPATH") {
         match app_dir() {
@@ -295,10 +299,10 @@ mod tests {
     fn the_appimage_s_own_folders_are_left_out_of_a_script_s_paths() {
         // What the unpacked AppImage handed its children: PYTHONPATH into its
         // own usr/share/pyshared, and a trailing empty entry.
-        let dir = Path::new("/home/u/apps/Plinky");
-        let list = std::ffi::OsString::from("/home/u/apps/Plinky/usr/share/pyshared/:/home/u/lib/py:");
+        let dir = Path::new("/home/u/apps/Thyrion");
+        let list = std::ffi::OsString::from("/home/u/apps/Thyrion/usr/share/pyshared/:/home/u/lib/py:");
         assert_eq!(without_dir(&list, dir), vec![std::path::PathBuf::from("/home/u/lib/py")]);
-        let path = std::ffi::OsString::from("/home/u/apps/Plinky/usr/bin:/usr/local/bin:/usr/bin");
+        let path = std::ffi::OsString::from("/home/u/apps/Thyrion/usr/bin:/usr/local/bin:/usr/bin");
         assert_eq!(without_dir(&path, dir), vec![std::path::PathBuf::from("/usr/local/bin"), std::path::PathBuf::from("/usr/bin")]);
     }
 }

@@ -11,7 +11,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Plinky version
+      label: Thyrion version
       description: Settings → About, or the file name you installed (e.g. 0.1.41).
       placeholder: 0.1.41
     validations:
@@ -76,7 +76,7 @@ body:
     id: output
     attributes:
       label: Error text or screenshot
-      description: 'The red or yellow "[Plinky ...]" lines in the terminal and the Events panel help most. Check for passwords and host names first.'
+      description: 'The red or yellow "[Thyrion ...]" lines in the terminal and the Events panel help most. Check for passwords and host names first.'
   - type: checkboxes
     id: checks
     attributes:

@@ -3,7 +3,7 @@
 //!
 //! plink prints nothing when a telnet or raw connection comes up, and a
 //! router console sends nothing until something happens on the device:
-//! measured on a GNS3 IOS console, 0 bytes in the first 5 s. Plinky waited
+//! measured on a GNS3 IOS console, 0 bytes in the first 5 s. Thyrion waited
 //! for output before it stopped showing "Connecting to host:port", so a
 //! saved console session looked like it took ~10 s to connect when plink had
 //! connected in milliseconds. Watching plink's own socket needs no second
@@ -298,7 +298,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn a_connection_made_by_a_child_process_counts() {
-        // The shim case: the process Plinky started is not the one that
+        // The shim case: the process Thyrion started is not the one that
         // connects -- its child is.
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();

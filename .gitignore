@@ -30,3 +30,6 @@ src-tauri/gen/
 /scaffold.md
 /specs/
 /docs/THREAT_MODEL.md
+
+# Python bytecode (the scripting helper and examples, when run locally)
+__pycache__/

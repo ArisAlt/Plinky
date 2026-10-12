@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 // emerald-*, amber-*, rose-*, cyan-*, white) reads a CSS variable, set here,
 // so a theme swaps the variables and every existing class follows it.
 //
-// "Plinky" is the look the app always had: Tailwind's own slate/sky/emerald/
+// "Thyrion" is the look the app always had: Tailwind's own slate/sky/emerald/
 // amber/rose/cyan values, byte for byte. The others are the palettes from
 // ABtools' AbtoolsGui.py (same names, same keys), expanded into full shade
 // scales by mixing each colour toward the theme's text or background.
@@ -99,7 +99,7 @@ function varsOf(
 
 const PLINKY: UiTheme = {
   id: 'plinky',
-  name: 'Plinky',
+  name: 'Thyrion',
   light: false,
   swatch: ['#090d16', '#0f172a', '#0ea5e9', '#e2e8f0'],
   vars: varsOf(PLINKY_NEUTRALS, TW, {

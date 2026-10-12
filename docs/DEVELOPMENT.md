@@ -1,4 +1,4 @@
-# Plinky — Developer Documentation
+# Thyrion — Developer Documentation
 
 Architecture, build and test instructions. The project's front
 page is [README.md](../README.md).
@@ -7,12 +7,12 @@ page is [README.md](../README.md).
 
 ## 1. Overview
 
-Plinky is a desktop terminal and session manager built on PuTTY's
+Thyrion is a desktop terminal and session manager built on PuTTY's
 command-line tools. SSH, telnet and raw connections are made by `plink`, file
-transfers by `psftp`; Plinky does not implement SSH itself. Serial consoles
+transfers by `psftp`; Thyrion does not implement SSH itself. Serial consoles
 use a native serial transport so they can send Break.
 
-Plinky reads and writes PuTTY's own saved sessions (`~/.putty/sessions` or
+Thyrion reads and writes PuTTY's own saved sessions (`~/.putty/sessions` or
 `PUTTYDIR` on Linux, the registry on Windows) and adds tabs, split layouts, a
 dual-pane file browser, an encrypted credential vault, broadcast input
 channels, command snippets and GNS3 console support.
@@ -27,7 +27,7 @@ Zmodem. `plink` handles keys and agents itself.
 
 ## 2. Architecture
 
-Plinky is organised as a Cargo workspace with a Tauri v2 shell and a web interface:
+Thyrion is organised as a Cargo workspace with a Tauri v2 shell and a web interface:
 
 ```mermaid
 flowchart TD
@@ -98,17 +98,17 @@ remote inspector, so it needs no WebDriver: Node 22+, `plink`, and either
 `sshd`, `ssh-keygen` and `puttygen`; the serial tests need `socat`. Each
 scenario runs in a throwaway home directory with its own runtime directory
 and no session bus, so it never touches your sessions, host keys or vault,
-and never hands its tabs to a Plinky you have open. Tests named "like PuTTY"
+and never hands its tabs to a Thyrion you have open. Tests named "like PuTTY"
 expect PuTTY's default behaviour.
 
 ### Command Line (GNS3 consoles)
-Plinky opens console tabs from its launch arguments. A second launch hands
+Thyrion opens console tabs from its launch arguments. A second launch hands
 them to the window that is already running (single instance) and exits.
 
 ```bash
-plinky --telnet HOST PORT [--title NAME]   # a telnet console, e.g. a GNS3 device
-plinky --raw HOST PORT [--title NAME]      # a raw TCP console
-plinky --ssh [USER@]HOST[:PORT] [--title NAME]
+thyrion --telnet HOST PORT [--title NAME]   # a telnet console, e.g. a GNS3 device
+thyrion --raw HOST PORT [--title NAME]      # a raw TCP console
+thyrion --ssh [USER@]HOST[:PORT] [--title NAME]
 ```
 
 - Several targets may be given at once; `--title` applies to the target
@@ -122,8 +122,8 @@ plinky --ssh [USER@]HOST[:PORT] [--title NAME]
   directory). Only a socket owned by the same user is ever used; otherwise
   the launch opens its own window.
 - GNS3 (Preferences → General → Console applications → Custom):
-  Linux `plinky --telnet {host} {port} --title "{name}"`,
-  Windows `"C:\Program Files\Plinky\Plinky.exe" --telnet %h %p --title "%d"`.
+  Linux `thyrion --telnet {host} {port} --title "{name}"`,
+  Windows `"C:\Program Files\Thyrion\Thyrion.exe" --telnet %h %p --title "%d"`.
 
 ### Local Packaging & AppImage Notice
 ```bash

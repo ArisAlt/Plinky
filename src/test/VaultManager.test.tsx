@@ -21,7 +21,7 @@ describe('VaultManager Component', () => {
     const handleClose = vi.fn();
     render(<VaultManager onClose={handleClose} />);
 
-    expect(screen.getByText('Plinky Credential Vault')).toBeDefined();
+    expect(screen.getByText('Thyrion Credential Vault')).toBeDefined();
 
     const closeButton = screen.getByTitle('Close Vault and return to Terminal (Esc)');
     expect(closeButton).toBeDefined();

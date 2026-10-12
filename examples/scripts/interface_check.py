@@ -1,6 +1,6 @@
 """Report interfaces that are down or counting input errors.
 
-Run it from Plinky: right-click the terminal of a router or switch that is
+Run it from Thyrion: right-click the terminal of a router or switch that is
 already logged in, choose Run Script..., and pick this file. It changes
 nothing on the device; it only runs show commands and writes a short
 report in the terminal (the [script] lines).
@@ -10,7 +10,7 @@ Written for Cisco IOS and IOS-XE.
 
 import re
 
-from plinky import session
+from thyrion import session
 
 
 def learn_prompt():

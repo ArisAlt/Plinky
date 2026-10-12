@@ -9,7 +9,7 @@
 # using the host's own libwayland, which every desktop that can show a window
 # already has.
 #
-# usage: scripts/appimage-drop-wayland.sh <path/to/Plinky.AppImage>
+# usage: scripts/appimage-drop-wayland.sh <path/to/Thyrion.AppImage>
 set -euo pipefail
 
 appimage="$(realpath "$1")"

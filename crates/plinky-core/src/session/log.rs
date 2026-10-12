@@ -178,7 +178,7 @@ pub fn default_log_path(logs_dir: &Path, session_name: &str, unix_secs: u64) -> 
 
 /// PuTTY's log file name placeholders: `&Y &M &D &T &H &P &&`. A relative
 /// name is placed under `base`: PuTTY resolves it against its working
-/// directory, and Plinky's is inside the read-only AppImage.
+/// directory, and Thyrion's is inside the read-only AppImage.
 pub fn expand_putty_log_name(template: &str, host: &str, port: u16, unix_secs: u64, base: &Path) -> PathBuf {
     let (y, mo, d, h, mi, s) = utc_parts(unix_secs);
     let mut out = String::new();

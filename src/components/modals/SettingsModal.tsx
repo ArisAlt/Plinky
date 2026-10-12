@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle, Keyboard, FileCode } from 'lucide-react';
+import { Settings, X, Type, Shield, Monitor, RotateCcw, Check, MousePointer, Trash2, AlertTriangle, Keyboard, FileCode, Info } from 'lucide-react';
+import { version as APP_VERSION } from '../../../package.json';
 import { UI_THEMES, applyUiTheme, useUiTheme } from '../../themes/uiThemes';
 import { TERMINAL_THEMES, MATCH_INTERFACE, setTerminalTheme, useTerminalTheme } from '../../themes/terminalThemes';
 import { TERMINAL_FONTS } from '../../themes/fonts';
@@ -400,7 +401,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Python (<code>.py</code>) runs with <code>python3</code> (<code>python</code> on Windows); <code>.sh</code> with bash,
                 {' '}<code>.ps1</code> with PowerShell, <code>.bat</code>/<code>.cmd</code> with cmd; anything else as a program.
               </p>
-              <pre className="p-2 rounded bg-plinky-900 border border-plinky-800 font-mono text-slate-200 overflow-x-auto">{`from plinky import session
+              <pre className="p-2 rounded bg-plinky-900 border border-plinky-800 font-mono text-slate-200 overflow-x-auto">{`from thyrion import session
 
 session.send("terminal length 0")
 session.wait_for_prompt()
@@ -538,6 +539,30 @@ session.log("saved", len(config), "characters")`}</pre>
               )}
 
               {deleteResult && <p role="status" className="text-meta text-slate-300">{deleteResult}</p>}
+            </div>
+          </div>
+
+          {/* Section: About. Alis, the mascot, was the owner's dog. */}
+          <div className="space-y-3" data-about>
+            <div className="flex items-center space-x-2 text-slate-300 font-semibold border-b border-plinky-800 pb-1">
+              <Info className="w-3.5 h-3.5 text-slate-400" />
+              <span>About</span>
+            </div>
+            <div className="p-3 bg-plinky-950 rounded border border-plinky-800 flex items-start gap-3">
+              <img src="/favicon.svg" alt="Alis, Thyrion's mascot" className="w-14 h-14 shrink-0 rounded-md" draggable={false} />
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-semibold text-slate-100">Thyrion</span>
+                  <span className="font-mono text-meta text-plinky-muted">v{APP_VERSION}</span>
+                </div>
+                <p className="text-slate-400">A terminal and session manager built on PuTTY. Free software under the GPL-3.0.</p>
+                <p className="text-slate-300">
+                  Thyrion's mascot is <span className="font-semibold text-slate-100">Alis</span>. In memory of a very good dog.
+                </p>
+                <p className="text-meta text-plinky-muted">
+                  The name: Thyrion (Θύριον), a town of ancient Acarnania, from θύρα, a door, or a port.
+                </p>
+              </div>
             </div>
           </div>
         </div>

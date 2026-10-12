@@ -24,7 +24,7 @@ pub struct HostKeyPromptInfo {
     #[serde(default)]
     pub weak: Option<String>,
     /// Any other (y/n) question plink stops at, verbatim (its last lines).
-    /// Plinky knows plink's host-key and weak-crypto questions; a new or
+    /// Thyrion knows plink's host-key and weak-crypto questions; a new or
     /// unexpected one used to sit in the held-back pre-auth output, and the
     /// session looked hung. Shown as a plain yes/no dialog instead.
     #[serde(default)]

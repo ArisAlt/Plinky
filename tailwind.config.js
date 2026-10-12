@@ -3,7 +3,7 @@
 // Every colour reads a CSS variable ("r g b"), set by src/themes/uiThemes.ts,
 // so an interface theme is a change of variables and every existing class
 // (text-slate-400, bg-sky-700/20, ...) follows it. The default theme,
-// "Plinky", sets them to Tailwind's own values: the look is unchanged.
+// "Thyrion", sets them to Tailwind's own values: the look is unchanged.
 const v = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
 const SHADES = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const scale = (name) => Object.fromEntries(SHADES.map((s) => [s, v(`${name}-${s}`)]));

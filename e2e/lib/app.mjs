@@ -3,7 +3,7 @@
 // The profile is a fresh home directory: saved sessions, host keys, the
 // vault and the webview's storage all live under it, so a run never reads or
 // changes the user's own. The app also gets its own runtime directory and no
-// session bus. Both are needed to keep it apart from a Plinky the user has
+// session bus. Both are needed to keep it apart from a Thyrion the user has
 // open: the single-instance plugin looks for a running copy over D-Bus, and
 // the GNS3 hand-over socket lives in the runtime directory; either one would
 // otherwise pass the test's tabs to the user's window.

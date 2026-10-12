@@ -3,7 +3,7 @@ import type { ITheme } from '@xterm/xterm';
 import { findUiTheme, getUiTheme, mix, type Palette } from './uiThemes';
 
 // Terminal colour schemes, separate from the interface theme. The list is the
-// defaults of the terminals Plinky's users come from (PuTTY, Windows
+// defaults of the terminals Thyrion's users come from (PuTTY, Windows
 // Terminal's Campbell, Ubuntu's GNOME Terminal) plus the community schemes
 // with the most terminal ports (Dracula, Catppuccin, Tokyo Night, Nord,
 // Gruvbox, Solarized, One Dark, Monokai, GitHub, Tomorrow). Colours are
@@ -42,8 +42,8 @@ const scheme = (
 });
 
 export const TERMINAL_THEMES: TerminalTheme[] = [
-  // The colours Plinky has always used.
-  scheme('plinky', 'Plinky',
+  // The colours Thyrion has always used.
+  scheme('plinky', 'Thyrion',
     { background: '#090d16', foreground: '#e2e8f0', cursor: '#38bdf8', selection: 'rgba(56, 189, 248, 0.35)' },
     ['#0f172a', '#f43f5e', '#10b981', '#f59e0b', '#38bdf8', '#c084fc', '#06b6d4', '#f8fafc',
       '#475569', '#fb7185', '#34d399', '#fbbf24', '#60a5fa', '#e879f9', '#22d3ee', '#ffffff']),
@@ -116,7 +116,7 @@ export const TERMINAL_THEMES: TerminalTheme[] = [
 
 // "Match interface": the terminal follows the interface theme. It is the
 // default, so choosing GitHub Light no longer leaves a black terminal slab
-// in a white window. Under the Plinky interface it is exactly the Plinky
+// in a white window. Under the Thyrion interface it is exactly the Thyrion
 // scheme, so nothing changes for anyone who never touched a theme.
 export const MATCH_INTERFACE = 'match';
 

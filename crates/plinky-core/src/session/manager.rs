@@ -293,17 +293,17 @@ impl SessionRegistry {
                                     if let Some(pos) = err.find("FATAL ERROR:") {
                                         format!("\r\n\x1b[31m{}\x1b[0m\r\n", &err[pos..].trim())
                                     } else {
-                                        format!("\r\n\x1b[31m[Plinky: Session closed ({})]\x1b[0m\r\n", err)
+                                        format!("\r\n\x1b[31m[Thyrion: Session closed ({})]\x1b[0m\r\n", err)
                                     }
                                 }
                                 CloseReason::HostKeyRejected => {
-                                    "\r\n\x1b[31m[Plinky: Host key was rejected]\x1b[0m\r\n".to_string()
+                                    "\r\n\x1b[31m[Thyrion: Host key was rejected]\x1b[0m\r\n".to_string()
                                 }
                                 CloseReason::Error(err) => {
-                                    format!("\r\n\x1b[31m[Plinky: Error: {}]\x1b[0m\r\n", err)
+                                    format!("\r\n\x1b[31m[Thyrion: Error: {}]\x1b[0m\r\n", err)
                                 }
                                 CloseReason::Ok => {
-                                    "\r\n[Plinky: Session closed]\r\n".to_string()
+                                    "\r\n[Thyrion: Session closed]\r\n".to_string()
                                 }
                             };
                             let _ = tx.send(msg.into_bytes());
@@ -480,7 +480,7 @@ impl SessionRegistry {
                                     session.expect = None;
                                     if let Some(why) = why.filter(|w| !w.is_empty()) {
                                         script_note = Some(format!(
-                                            "\r\n\x1b[33m[Plinky: jump script stopped ({why}). Carry on by hand.]\x1b[0m\r\n"
+                                            "\r\n\x1b[33m[Thyrion: jump script stopped ({why}). Carry on by hand.]\x1b[0m\r\n"
                                         ));
                                     }
                                 }
@@ -597,17 +597,17 @@ impl SessionRegistry {
                                     if let Some(pos) = err.find("FATAL ERROR:") {
                                         format!("\r\n\x1b[31m{}\x1b[0m\r\n", &err[pos..].trim())
                                     } else {
-                                        format!("\r\n\x1b[31m[Plinky: Session closed ({})]\x1b[0m\r\n", err)
+                                        format!("\r\n\x1b[31m[Thyrion: Session closed ({})]\x1b[0m\r\n", err)
                                     }
                                 }
                                 CloseReason::HostKeyRejected => {
-                                    "\r\n\x1b[31m[Plinky: Host key was rejected]\x1b[0m\r\n".to_string()
+                                    "\r\n\x1b[31m[Thyrion: Host key was rejected]\x1b[0m\r\n".to_string()
                                 }
                                 CloseReason::Error(err) => {
-                                    format!("\r\n\x1b[31m[Plinky: Error: {}]\x1b[0m\r\n", err)
+                                    format!("\r\n\x1b[31m[Thyrion: Error: {}]\x1b[0m\r\n", err)
                                 }
                                 CloseReason::Ok => {
-                                    "\r\n[Plinky: Session closed]\r\n".to_string()
+                                    "\r\n[Thyrion: Session closed]\r\n".to_string()
                                 }
                             };
                             let _ = tx.send(msg.into_bytes());
@@ -683,7 +683,7 @@ impl SessionRegistry {
         instance: u64,
         subscriber: &Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
     ) {
-        let notice = b"\r\n[Plinky: Session closed]\r\n";
+        let notice = b"\r\n[Thyrion: Session closed]\r\n";
         {
             let mut lock = self.sessions.lock().unwrap();
             let Some(session) = lock.get_mut(id).filter(|s| s.instance == instance) else { return };
@@ -775,7 +775,7 @@ impl SessionRegistry {
     /// Only blocks HostKeyPending, not the whole PreAuth phase -- per R3, a
     /// password/passphrase prompt is deliberately display-only: it must
     /// reach the terminal, and the user must be able to type their own
-    /// credential into it directly (Plinky does not auto-fill one). Do NOT
+    /// credential into it directly (Thyrion does not auto-fill one). Do NOT
     /// use this for anything other than a session's own direct keystrokes --
     /// shell-integration injection, sync-broadcast fanout, or any other
     /// programmatic/automated write belongs on write_input_live_only below,

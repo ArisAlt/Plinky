@@ -134,8 +134,8 @@ async fn test_unplugged_device_closes_the_session() {
 
     // Closing the master hangs up the line, as unplugging an adapter does.
     drop(device);
-    let got = recv_until(&mut rx, "[Plinky: Session closed]").await;
-    assert!(got.contains("[Plinky: Session closed]"), "hangup not reported: {got:?}");
+    let got = recv_until(&mut rx, "[Thyrion: Session closed]").await;
+    assert!(got.contains("[Thyrion: Session closed]"), "hangup not reported: {got:?}");
 }
 
 #[tokio::test]

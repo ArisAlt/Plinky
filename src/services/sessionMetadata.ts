@@ -1,7 +1,7 @@
 /**
  * Session metadata and folder management persistence service.
- * In accordance with Plinky System Design D4:
- * PuTTY store stores base connection parameters, while Plinky-specific
+ * In accordance with Thyrion System Design D4:
+ * PuTTY store stores base connection parameters, while Thyrion-specific
  * metadata (folder hierarchy, tags, custom color markers) is persisted
  * both into session.extra (PlinkyFolder, PlinkyTags) and in sidecar storage.
  */

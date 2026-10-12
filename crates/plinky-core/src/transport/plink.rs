@@ -52,7 +52,7 @@ const PWFILE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(5);
 /// (tempfile creates it 0600) and returns the guard that deletes it.
 fn write_pwfile(password: &crate::vault::SecretString) -> Result<tempfile::NamedTempFile> {
     let mut file = tempfile::Builder::new()
-        .prefix(".plinky_login_")
+        .prefix(".thyrion_login_")
         .tempfile()
         .map_err(|e| PlinkyError::ProcessError(format!("Couldn't create the login file: {e}")))?;
     file.write_all(password.expose_secret().as_bytes())
@@ -64,11 +64,12 @@ fn write_pwfile(password: &crate::vault::SecretString) -> Result<tempfile::Named
 
 /// Name prefixes of the files that hold a password for plink or psftp
 /// while they start (`write_pwfile`, sftp's `PsftpPasswordGuard`).
-pub const PASSWORD_FILE_PREFIXES: [&str; 2] = [".plinky_login_", ".plinky_psftp_pw_"];
+/// Plinky's names (before the rename to Thyrion) are swept too.
+pub const PASSWORD_FILE_PREFIXES: [&str; 4] = [".thyrion_login_", ".thyrion_psftp_pw_", ".plinky_login_", ".plinky_psftp_pw_"];
 
 /// Deletes password files in `dir` older than `min_age`, and returns how
 /// many. Each is deleted a few seconds after plink or psftp starts, by a
-/// guard in this process: if Plinky was killed or crashed in those seconds,
+/// guard in this process: if Thyrion was killed or crashed in those seconds,
 /// the file stayed in the temp folder, password and all. Called at start.
 /// `min_age` keeps a file another starting session still needs.
 pub fn sweep_password_files(dir: &Path, min_age: std::time::Duration) -> usize {
@@ -141,7 +142,7 @@ pub fn wants_character_mode(saved_protocol: Option<&str>, explicit: Option<Targe
 /// SIGINT that killed plink, turned Enter into a bare LF (the console got
 /// "show vlan\n"), and echoed control keys as ^? ^M ^J ^[[A (e2e suite).
 /// So each write takes the pty over: every key goes to plink as typed, and
-/// Plinky echoes and ends lines the way PuTTY does when it edits locally.
+/// Thyrion echoes and ends lines the way PuTTY does when it edits locally.
 ///
 /// Windows has the same modes in plink's console (ENABLE_ECHO_INPUT and
 /// ENABLE_LINE_INPUT), taken over in `win_console::prepare_input`. There,
@@ -342,8 +343,8 @@ mod win_console {
     static ATTACH: Mutex<()> = Mutex::new(());
     static HANDLER: Once = Once::new();
 
-    /// While attached, plink's console events reach Plinky too; without a
-    /// handler that says "handled", one would end Plinky itself.
+    /// While attached, plink's console events reach Thyrion too; without a
+    /// handler that says "handled", one would end Thyrion itself.
     unsafe extern "system" fn swallow(_event: u32) -> i32 {
         1
     }
@@ -402,7 +403,7 @@ mod win_console {
                             d.edit = mode & ENABLE_LINE_INPUT != 0;
                         }
                         // Echo is only valid with line input on Windows;
-                        // Plinky echoes instead (LineDiscipline).
+                        // Thyrion echoes instead (LineDiscipline).
                         want &= !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
                     }
                     let set = want == mode || SetConsoleMode(h, want) != 0;
@@ -796,30 +797,30 @@ mod tests {
     #[test]
     fn password_files_left_by_a_crash_are_swept_and_nothing_else() {
         // A password file is deleted by a guard a few seconds after plink
-        // starts; killed in between, Plinky left it in the temp folder.
+        // starts; killed in between, Thyrion left it in the temp folder.
         let dir = tempfile::tempdir().unwrap();
         let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
-        for name in [".plinky_login_abc", ".plinky_psftp_pw_def", "notes.txt", ".plinky_loginfoo_not_ours"] {
+        for name in [".thyrion_login_abc", ".thyrion_psftp_pw_def", ".plinky_login_old", "notes.txt", ".thyrion_loginfoo_not_ours"] {
             let f = std::fs::File::create(dir.path().join(name)).unwrap();
             f.set_modified(old).unwrap();
         }
         // One a session is starting with right now.
-        std::fs::write(dir.path().join(".plinky_login_fresh"), b"pw\n").unwrap();
+        std::fs::write(dir.path().join(".thyrion_login_fresh"), b"pw\n").unwrap();
 
         let removed = sweep_password_files(dir.path(), std::time::Duration::from_secs(60));
-        assert_eq!(removed, 2);
+        assert_eq!(removed, 3);
         let left: std::collections::BTreeSet<String> = std::fs::read_dir(dir.path()).unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
-        assert!(left.contains("notes.txt") && left.contains(".plinky_login_fresh"), "{left:?}");
-        assert!(!left.contains(".plinky_login_abc") && !left.contains(".plinky_psftp_pw_def"), "{left:?}");
+        assert!(left.contains("notes.txt") && left.contains(".thyrion_login_fresh") && left.contains(".thyrion_loginfoo_not_ours"), "{left:?}");
+        assert!(!left.contains(".thyrion_login_abc") && !left.contains(".thyrion_psftp_pw_def") && !left.contains(".plinky_login_old"), "{left:?}");
     }
 
     #[test]
     fn login_args_carry_a_file_path_never_the_password() {
-        let args = PlinkTransport::login_args(Path::new("/tmp/.plinky_login_x"), Some("admin"));
-        assert_eq!(args, vec!["-pwfile", "/tmp/.plinky_login_x", "-l", "admin"]);
-        let args = PlinkTransport::login_args(Path::new("/tmp/.plinky_login_x"), Some(""));
-        assert_eq!(args, vec!["-pwfile", "/tmp/.plinky_login_x"], "an empty username adds no -l");
+        let args = PlinkTransport::login_args(Path::new("/tmp/.thyrion_login_x"), Some("admin"));
+        assert_eq!(args, vec!["-pwfile", "/tmp/.thyrion_login_x", "-l", "admin"]);
+        let args = PlinkTransport::login_args(Path::new("/tmp/.thyrion_login_x"), Some(""));
+        assert_eq!(args, vec!["-pwfile", "/tmp/.thyrion_login_x"], "an empty username adds no -l");
     }
 
     #[test]
@@ -888,7 +889,7 @@ mod tests {
 
     #[test]
     fn telnet_target_uses_minus_telnet_and_no_pty_flag() {
-        // GNS3: `plinky --telnet 127.0.0.1 5000`. -t is SSH-only, and a
+        // GNS3: `thyrion --telnet 127.0.0.1 5000`. -t is SSH-only, and a
         // user@ prefix means nothing to a console port.
         let target = ExplicitTarget {
             hostname: "127.0.0.1".to_string(),

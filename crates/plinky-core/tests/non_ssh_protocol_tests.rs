@@ -257,7 +257,7 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
 }
 
 /// A GNS3 router console sends nothing until something happens on the
-/// device: measured on a GNS3 IOS console, 0 bytes in the first 5 s. Plinky
+/// device: measured on a GNS3 IOS console, 0 bytes in the first 5 s. Thyrion
 /// waited for output before it stopped showing "Connecting to host:port",
 /// so a saved console session looked like it took ~10 s to connect. plink's
 /// own socket shows the connection is up while not one byte has arrived.

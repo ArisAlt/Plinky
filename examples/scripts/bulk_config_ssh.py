@@ -16,7 +16,7 @@ rest carry on.
 
 The password is asked for once, in a small window (Python's tkinter), or
 read from the PLINKY_DEVICE_PASSWORD environment variable. It is never
-written anywhere. Scripts can't read Plinky's vault.
+written anywhere. Scripts can't read Thyrion's vault.
 
 Starts in DRY_RUN: it logs in and shows what it would change, and changes
 nothing. Try it on one address first, then set DRY_RUN = False.
@@ -26,7 +26,7 @@ Written for Cisco IOS and IOS-XE devices.
 import os
 import re
 
-from plinky import session
+from thyrion import session
 
 USER = "admin"
 DRY_RUN = True

@@ -1,5 +1,5 @@
 //! plink's pause after login: "Access granted. Press Return to begin
-//! session." (PuTTY's anti-spoofing prompt). Plinky answers it for the
+//! session." (PuTTY's anti-spoofing prompt). Thyrion answers it for the
 //! user -- it is not a question, and the user already pressed Enter once,
 //! for the password.
 //!

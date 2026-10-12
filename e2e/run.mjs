@@ -32,7 +32,7 @@ const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
 const option = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
 const only = option('--only')?.toLowerCase();
-const binary = path.resolve(option('--binary') ?? path.join(root, 'target/debug/plinky-desktop'));
+const binary = path.resolve(option('--binary') ?? path.join(root, 'target/debug/thyrion'));
 
 const color = process.stdout.isTTY
   ? { red: (s) => `\x1b[31m${s}\x1b[0m`, green: (s) => `\x1b[32m${s}\x1b[0m`, dim: (s) => `\x1b[2m${s}\x1b[0m`, yellow: (s) => `\x1b[33m${s}\x1b[0m` }
@@ -60,7 +60,7 @@ function preflight() {
 
 async function main() {
   preflight();
-  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plinky-e2e-'));
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thyrion-e2e-'));
   const display = await startDisplay({ runDir, visible: flag('--visible') });
   console.log(color.dim(`app: ${path.relative(root, binary)}   screen: ${display.kind}   files: ${runDir}`));
 

@@ -315,7 +315,7 @@ async fn test_sshd_fixture_plink_preauth_to_live_and_reattach() {
 fn login_files() -> Vec<PathBuf> {
     std::fs::read_dir(std::env::temp_dir())
         .map(|d| d.flatten().map(|e| e.path()).filter(|p| {
-            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(".plinky_login_"))
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(".thyrion_login_"))
         }).collect())
         .unwrap_or_default()
 }

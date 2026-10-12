@@ -374,7 +374,7 @@ mod tests {
         assert!(err.contains("out of range"), "{err}");
         assert!(started.elapsed() < std::time::Duration::from_secs(1));
 
-        // Plinky's own settings are well inside the limits.
+        // Thyrion's own settings are well inside the limits.
         let h = VaultHeader::new_default();
         assert!(VaultHeader::from_bytes(&h.to_bytes()).is_ok());
     }

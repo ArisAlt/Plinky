@@ -48,7 +48,7 @@ fn test_session_saved_by_putty_with_at_sign() {
     let loaded = read_session_in(dir.path(), "admin@router").unwrap();
     assert_eq!(loaded.host_name, "10.0.0.1");
 
-    // Plinky's save goes to the same file, the one plink -load opens.
+    // Thyrion's save goes to the same file, the one plink -load opens.
     write_session_in(dir.path(), &PuttySession { port_number: 2222, ..loaded }).unwrap();
     assert!(dir.path().join("admin@router").is_file());
     assert!(!dir.path().join("admin%40router").exists());
@@ -57,7 +57,7 @@ fn test_session_saved_by_putty_with_at_sign() {
 #[test]
 fn test_legacy_session_filename_moves_to_putty_name_on_read() {
     let dir = tempdir().unwrap();
-    // As Plinky saved "admin@router" before it matched PuTTY.
+    // As Thyrion saved "admin@router" before it matched PuTTY.
     write_raw_session(dir.path(), "admin%40router", "10.0.0.1");
 
     let list = list_sessions_in(dir.path()).unwrap();
@@ -213,7 +213,7 @@ fn test_delete_session_in_directory() {
 #[test]
 fn test_delete_session_with_legacy_filename() {
     let dir = tempdir().unwrap();
-    // Only under the name older Plinky builds used.
+    // Only under the name older Thyrion builds used.
     write_raw_session(dir.path(), "admin%40router", "10.0.0.1");
     delete_session_in(dir.path(), "admin@router").unwrap();
     assert!(list_sessions_in(dir.path()).unwrap().is_empty());

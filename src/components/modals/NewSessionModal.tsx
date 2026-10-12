@@ -95,7 +95,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [autoLogin, setAutoLogin] = useState(false);
   // Paste line delay in ms ('' or 0 = paste normally).
   const [pasteDelay, setPasteDelay] = useState('');
-  // Connection (T-016): PuTTY's keepalive settings and Plinky's auto-reconnect.
+  // Connection (T-016): PuTTY's keepalive settings and Thyrion's auto-reconnect.
   const [keepalive, setKeepalive] = useState('');
   const [tcpKeepalives, setTcpKeepalives] = useState(false);
   const [autoReconnect, setAutoReconnect] = useState(false);
@@ -197,7 +197,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setSerialFlowControl(extra.SerialFlowControl || '1');
 
       // Load jump host settings
-      // Only Plinky's own jump host (or PuTTY's SSH proxy type) counts. Any
+      // Only Thyrion's own jump host (or PuTTY's SSH proxy type) counts. Any
       // ProxyHost used to, so an HTTP/SOCKS proxy set up in real PuTTY showed
       // up here and was rewritten as a jump host on save.
       const hasJumpHost = extra.PlinkyJumpHost === '1' || extra.ProxyMethod === '6';
@@ -397,7 +397,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       // bastion login was as the literal user "%proxyuser".
       const wasJumpHost = editingSession?.extra?.PlinkyJumpHost === '1' || editingSession?.extra?.ProxyMethod === '6';
       if (protocol === 'SSH' && enableJumpHost && (jumpPreset || jumpHost.trim())) {
-        // A router jump is Plinky's own (a script); PuTTY must not tunnel.
+        // A router jump is Thyrion's own (a script); PuTTY must not tunnel.
         extra.ProxyMethod = jumpMode === 'cli' ? '0' : '6';
         if (jumpMode === 'cli') {
           extra.PlinkyJumpMode = 'cli';
@@ -413,7 +413,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         delete extra.ProxyTelnetCommand;
         extra.PlinkyJumpHost = '1';
       } else if (wasJumpHost) {
-        // Only undo Plinky's own jump host; a PuTTY proxy stays as it was.
+        // Only undo Thyrion's own jump host; a PuTTY proxy stays as it was.
         delete extra.ProxyMethod;
         delete extra.ProxyHost;
         delete extra.ProxyPort;
@@ -1207,7 +1207,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                           <p className="text-meta text-plinky-muted leading-relaxed">
                             <code className="text-slate-400">{'{user}'}</code>, <code className="text-slate-400">{'{host}'}</code> and{' '}
                             <code className="text-slate-400">{'{port}'}</code> are this session's (General tab). With the vault unlocked,
-                            Plinky types the jump device's password, this command, then this session's password; the second
+                            Thyrion types the jump device's password, this command, then this session's password; the second
                             device's host key is checked by the jump device, not PuTTY.
                           </p>
                         </div>
