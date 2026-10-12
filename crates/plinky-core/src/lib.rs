@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod hidden;
 pub mod transport;
 pub mod session;
 pub mod sync;

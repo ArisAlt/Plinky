@@ -16,6 +16,25 @@ pub const ERR_PASSWORD: &str = "[password] ";
 /// Prefix on errors the UI acts on: the host key must be accepted first.
 pub const ERR_HOSTKEY: &str = "[hostkey] ";
 
+/// Tries at one SFTP action whose connection never reached the server.
+const CONNECT_ATTEMPTS: u32 = 3;
+
+/// True when psftp failed on the network before the session started: no
+/// "Remote working directory" line (psftp prints it once logged in) and a
+/// network failure. A refused connection is not one of them: a wrong port
+/// or a stopped server won't change in a few seconds. Host key and password
+/// failures also come before that line, and are never retried.
+fn never_connected(stdout: &str, stderr: &str) -> bool {
+    if stdout.contains("Remote working directory") {
+        return false;
+    }
+    let all = format!("{stdout}\n{stderr}");
+    ["Connection timed out", "Network error", "Server unexpectedly closed network connection", "Connection reset by peer"]
+        .iter()
+        .any(|m| all.contains(m))
+        && !all.contains("Connection refused")
+}
+
 /// Turns psftp's failure output into one message. The FATAL ERROR texts
 /// below are psftp 0.85's, measured against a real sshd.
 fn describe_failure(stdout: &str, stderr: &str) -> String {
@@ -97,9 +116,11 @@ impl PsftpClient {
         }
 
         // Fallback to checking PATH
-        if let Ok(output) = std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
-            .arg(if cfg!(windows) { "psftp.exe" } else { "psftp" })
-            .output()
+        if let Ok(output) = crate::hidden::std_command(
+            std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
+                .arg(if cfg!(windows) { "psftp.exe" } else { "psftp" }),
+        )
+        .output()
         {
             if output.status.success() {
                 let line = String::from_utf8_lossy(&output.stdout);
@@ -207,32 +228,50 @@ impl PsftpClient {
             .map_err(|e| PlinkyError::ProcessError(format!("Failed to write psftp batch file: {e}")))?;
 
         let has_saved_session = putty_compat::sessions::read_session(session_name).is_ok();
-        let mut cmd = Command::new(Self::find_binary()?);
-        cmd.args(Self::build_psftp_args(session_name, has_saved_session, explicit_target, pw_guard.path()))
-            .arg("-b")
-            .arg(batch.path())
-            .kill_on_drop(true)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let child = cmd
-            .spawn()
-            .map_err(|e| PlinkyError::ProcessError(format!("Failed to start psftp: {e}")))?;
+        let binary = Self::find_binary()?;
+        // Every SFTP action is its own psftp process and its own SSH
+        // connection, so browsing a few folders and downloading opens several
+        // in seconds. A server that limits new connections (ufw's `limit`,
+        // fail2ban, sshd's MaxStartups) drops some of them: reported as
+        // "listing works, the download times out, the third try worked". A
+        // connection that never got as far as the server's file system has
+        // done nothing there, so it is tried again, after a pause.
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let mut cmd = Command::new(&binary);
+            cmd.args(Self::build_psftp_args(session_name, has_saved_session, explicit_target, pw_guard.path()))
+                .arg("-b")
+                .arg(batch.path())
+                .kill_on_drop(true)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            // No console window for psftp: on Windows it opened a blank one.
+            crate::hidden::tokio_command(&mut cmd);
+            let child = cmd
+                .spawn()
+                .map_err(|e| PlinkyError::ProcessError(format!("Failed to start psftp: {e}")))?;
 
-        let output = match limit {
-            Some(d) => timeout(d, child.wait_with_output()).await.map_err(|_| {
-                PlinkyError::ProcessError(format!("SFTP operation timed out after {} seconds", d.as_secs()))
-            })?,
-            None => child.wait_with_output().await,
-        }
-        .map_err(|e| PlinkyError::ProcessError(format!("psftp failed: {e}")))?;
+            let output = match limit {
+                Some(d) => timeout(d, child.wait_with_output()).await.map_err(|_| {
+                    PlinkyError::ProcessError(format!("SFTP operation timed out after {} seconds", d.as_secs()))
+                })?,
+                None => child.wait_with_output().await,
+            }
+            .map_err(|e| PlinkyError::ProcessError(format!("psftp failed: {e}")))?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        if output.status.success() {
-            return Ok(stdout);
+            let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            if output.status.success() {
+                return Ok(stdout);
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if attempt < CONNECT_ATTEMPTS && never_connected(&stdout, &stderr) {
+                tokio::time::sleep(Duration::from_secs(2 * attempt as u64)).await;
+                continue;
+            }
+            return Err(PlinkyError::ProcessError(describe_failure(&stdout, &stderr)));
         }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(PlinkyError::ProcessError(describe_failure(&stdout, &stderr)))
     }
 
     fn quick() -> Option<Duration> {
@@ -653,6 +692,19 @@ mod tests {
 #[cfg(test)]
 mod describe_failure_tests {
     use super::*;
+
+    #[test]
+    fn a_dropped_connection_attempt_is_retried_but_a_failure_after_login_is_not() {
+        // A server limiting new connections: the Windows text from the report.
+        assert!(never_connected("", "FATAL ERROR: Network error: Connection timed out\n"));
+        assert!(never_connected("", "FATAL ERROR: Server unexpectedly closed network connection\n"));
+        // Logged in, then lost: the action may have run, so it isn't repeated.
+        assert!(!never_connected("Remote working directory is /root\n", "FATAL ERROR: Network error: Connection timed out\n"));
+        // Permanent, or not the network.
+        assert!(!never_connected("", "FATAL ERROR: Network error: Connection refused\n"));
+        assert!(!never_connected("", "FATAL ERROR: Cannot confirm a host key in batch mode\n"));
+        assert!(!never_connected("", "FATAL ERROR: Configured password was not accepted\n"));
+    }
 
     // Verbatim plink/psftp 0.81 batch output for a swapped server key.
     const CHANGED: &str = "WARNING - POTENTIAL SECURITY BREACH!\nThe host key does not match the one Plink has cached for\nthis server:\n  127.0.0.1 (port 2230)\nThe new ssh-ed25519 key fingerprint is:\n  ssh-ed25519 255 SHA256:3O68y3/hYcPWT0PvUA6iAW4Hke8MxUWDn1JMiSW6EGo\nConnection abandoned.\nFATAL ERROR: Cannot confirm a host key in batch mode\n";

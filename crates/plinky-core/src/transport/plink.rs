@@ -470,9 +470,11 @@ impl PlinkTransport {
         }
 
         // Fallback to checking PATH
-        if let Ok(output) = std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
-            .arg(if cfg!(windows) { "plink.exe" } else { "plink" })
-            .output()
+        if let Ok(output) = crate::hidden::std_command(
+            std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
+                .arg(if cfg!(windows) { "plink.exe" } else { "plink" }),
+        )
+        .output()
         {
             if output.status.success() {
                 let line = String::from_utf8_lossy(&output.stdout);
@@ -505,7 +507,7 @@ impl PlinkTransport {
         };
 
         let path_str = path.to_string_lossy().to_string();
-        let output = match std::process::Command::new(&path).arg("-V").output() {
+        let output = match crate::hidden::std_command(std::process::Command::new(&path).arg("-V")).output() {
             Ok(out) => out,
             Err(e) => {
                 return PuttyInfo {
