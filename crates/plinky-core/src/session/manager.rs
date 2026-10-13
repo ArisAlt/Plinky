@@ -1024,24 +1024,6 @@ impl SessionRegistry {
         Ok(())
     }
 
-    /// What the registry holds for a session, for tests and diagnostics:
-    /// whether it exists, its state, whether its transport is alive and a
-    /// page is attached, and the end of its scrollback.
-    pub fn debug_state(&self, id: &str) -> String {
-        let mut lock = self.sessions.lock().unwrap();
-        let Some(s) = lock.get_mut(id) else { return format!("{id}: not in the registry") };
-        let (all, _) = s.scrollback.get_since(0);
-        let tail = String::from_utf8_lossy(&all[all.len().saturating_sub(160)..]).into_owned();
-        format!(
-            "{id}: state {:?}, alive {}, attached {}, unacked {}, ended listeners {}, scrollback ends {tail:?}",
-            s.state_machine.state(),
-            s.transport.is_alive(),
-            s.subscriber.lock().unwrap().is_some(),
-            s.flow.unacked(),
-            self.ended_tx.receiver_count(),
-        )
-    }
-
     /// Whether the session's process has exited or the session was closed.
     pub fn is_session_ended(&self, id: &str) -> bool {
         let mut lock = self.sessions.lock().unwrap();

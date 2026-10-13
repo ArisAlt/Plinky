@@ -292,21 +292,6 @@ fn watch_connection(app: &tauri::AppHandle, id: String) {
     });
 }
 
-/// What the backend holds for a session (SessionRegistry::debug_state).
-/// Debug builds only, for the e2e suite: it shows scrollback.
-#[cfg(debug_assertions)]
-#[tauri::command]
-fn session_debug(registry: State<'_, Arc<SessionRegistry>>, session_id: String) -> String {
-    registry.debug_state(&session_id)
-}
-
-#[cfg(not(debug_assertions))]
-#[tauri::command]
-fn session_debug(session_id: String) -> String {
-    let _ = session_id;
-    String::new()
-}
-
 #[tauri::command]
 fn is_session_connected(connected: State<'_, ConnectedSessions>, session_id: String) -> bool {
     connected.0.lock().unwrap().contains(&session_id)
@@ -1828,7 +1813,6 @@ pub fn run() {
             take_open_requests,
             is_session_connected,
             is_session_ended,
-            session_debug,
             set_session_locked,
             pick_script_file,
             run_script,

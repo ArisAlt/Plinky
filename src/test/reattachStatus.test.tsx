@@ -29,6 +29,8 @@ vi.mock('@xterm/addon-webgl', () => ({ WebglAddon: function WebglAddon() { retur
 const bridge = vi.hoisted(() => ({
   attachInfo: null as null | { is_live: boolean; replay: string },
   liveChunk: null as null | ((chunk: Uint8Array) => void),
+  // Output the backend sends while the attach is still in flight.
+  duringAttach: null as null | string,
 }));
 
 vi.mock('../services/tauriBridge', async (orig) => ({
@@ -37,6 +39,7 @@ vi.mock('../services/tauriBridge', async (orig) => ({
     bridge.liveChunk = onData;
     const a = bridge.attachInfo;
     if (!a) return null; // nothing to reattach to: the view starts a session
+    if (bridge.duringAttach) onData(new TextEncoder().encode(bridge.duringAttach));
     return {
       session_id: id,
       replay_data: Array.from(new TextEncoder().encode(a.replay)),
@@ -120,6 +123,20 @@ describe('switching back to a logged-in SSH tab', () => {
     const statuses = await mountAttached({ is_live: true, replay: LOGIN });
     await act(async () => { bridge.liveChunk!(new TextEncoder().encode('\r\x1b[Kops@server:~$ ')); });
     expect(statuses.at(-1)).toBe('live');
+  });
+});
+
+describe('a session that ends while its tab attaches', () => {
+  beforeEach(() => { bridge.attachInfo = null; bridge.liveChunk = null; bridge.duringAttach = null; });
+  // The attach's answer is from before the end. On Windows an attach with a
+  // full scrollback took ~270 ms; a router that hung up in that window had
+  // its tab set back to live by the older answer, with no Reconnect (e2e
+  // suite on a Windows runner).
+
+  it('ends disconnected, not live from the attach\'s older answer', async () => {
+    bridge.duringAttach = '\r\n[Thyrion: Session closed]\r\n';
+    const statuses = await mountAttached({ is_live: true, replay: 'R1>' });
+    expect(statuses.at(-1)).toBe('disconnected');
   });
 });
 

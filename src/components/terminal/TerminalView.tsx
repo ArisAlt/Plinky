@@ -8,7 +8,6 @@ import { terminalManager } from '../../services/terminalManager';
 import { 
   startTerminalSession, 
   attachTerminalSession,
-  trace,
   startSessionLog,
   stopSessionLog,
   sessionLogStatus,
@@ -938,7 +937,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         term.writeln(`\r\n\x1b[33m[Thyrion: ${mismatch}]\x1b[0m`);
       }
       if (text.includes('[Thyrion: Session closed') || text.includes('FATAL ERROR:')) {
-        trace('notice', tab.id, disposed ? 'disposed view' : 'live view');
         endedRef.current = true;
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);
@@ -1110,8 +1108,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // Attempt to reattach to existing session or start a new PTY session.
     // A console tab opened in the background (T-020) may still be starting:
     // wait for it, then attach, instead of starting a second session.
+    //
+    // Output that arrives while the attach is in flight is held and drawn
+    // after the replay. The backend starts sending it the moment it hands
+    // over the replay, and the page can hear it first: on Windows an attach
+    // with a full scrollback took ~270 ms, a router that hung up in that
+    // window had its "Session closed" drawn, then overwritten by the older
+    // replay, and the tab set back to live from the attach's older answer
+    // (e2e suite on a Windows runner).
+    let attaching = true;
+    const heldDuringAttach: Uint8Array[] = [];
+    const onAttachedChunk = (chunk: Uint8Array) => {
+      if (attaching) heldDuringAttach.push(chunk);
+      else handleIncomingChunk(chunk);
+    };
+    const flushHeld = () => {
+      attaching = false;
+      for (const chunk of heldDuringAttach.splice(0)) handleIncomingChunk(chunk);
+    };
     (backgroundStartOf(tab.id) ?? Promise.resolve())
-      .then(() => (disposed ? null : attachTerminalSession(tab.id, 0, handleIncomingChunk)))
+      .then(() => (disposed ? null : attachTerminalSession(tab.id, 0, onAttachedChunk)))
       .then((attachInfo) => {
         if (disposed) return;
         if (attachInfo) {
@@ -1140,7 +1156,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           // login still pending, and a refused console showed the amber key.
           onUpdateTab(tab.id, { status: attachInfo.ended ? 'disconnected' : attachInfo.is_live ? 'live' : 'preauth' });
           reachedLiveRef.current = attachInfo.is_live;
+          // Newer than everything above: a hang-up in it has the last word.
+          flushHeld();
         } else {
+          attaching = false;
           startFresh();
         }
       });

@@ -379,9 +379,8 @@ export const tests = [
     await app.key('Ctrl+Tab');
     await sleep(300);
     const tabs = await app.tabs();
-    // TEMP (ci/e2e-windows): both sessions' ids, for the hang-up diagnostic.
-    ctx.diagIds = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => `${el.dataset.tabId}${el.dataset.tabActive === 'true' ? '*' : ''}`));
     assert.deepEqual(tabs.map((t) => t.status), ['live', 'live']);
+    void ctx;
   }],
 
   ['Ctrl+Shift+W asks before closing a connected tab', async ({ app, r1 }) => {
@@ -405,19 +404,9 @@ export const tests = [
     await waitUntil(() => r1.open === open - 1, { what: 'the connection to close', timeoutMs: 3000 });
   }],
 
-  ['when the router hangs up the tab says so at once, and Reconnect works', async ({ app, r1, ctx }) => {
+  ['when the router hangs up the tab says so at once, and Reconnect works', async ({ app, r1 }) => {
     const before = r1.connections;
-    const openBefore = r1.open;
     r1.hangUp();
-    if (process.platform === 'win32') {
-      // TEMP (ci/e2e-windows): did the backend see the hang-up?
-      await sleep(1500);
-      const ids = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => el.dataset.tabId));
-      const both = (ctx.diagIds ?? []).map((x) => x.replace('*', ''));
-      const ended = await Promise.all(both.map((id) => app.invoke('session_debug', { sessionId: id })));
-      console.log('      DIAG trace', JSON.stringify(await app.run(() => (window.__thyrionTrace ?? []).slice(-40)), null, 1));
-      console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs before close', JSON.stringify(ctx.diagIds), 'backend', JSON.stringify(ended, null, 1), 'tabs now', JSON.stringify(ids), JSON.stringify(await app.tabs()));
-    }
     await app.waitForTab('R1', 'disconnected', { timeoutMs: 3000 });
     await app.waitFor(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Reconnect' && window.__e2e.visible(x));
