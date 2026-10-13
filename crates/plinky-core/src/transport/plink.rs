@@ -253,6 +253,29 @@ impl LocalEcho {
         out
     }
 }
+/// What Thyrion prints when it holds a Ctrl+Z back (Windows only).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const CTRL_Z_NOTICE: &str =
+    "\r\n\x1b[33m[Thyrion: Ctrl+Z can't be sent through plink on Windows yet: it would stop all typing in this tab]\x1b[0m\r\n";
+
+/// `data` without its Ctrl+Z bytes, and whether there were any.
+///
+/// plink.exe reads its keyboard with ReadFile on a console, and Windows'
+/// console reports a read that starts with Ctrl+Z as end of input: plink
+/// then sends EOF and never reads again, so everything typed after it was
+/// lost while the tab still looked connected. Measured on a Windows runner:
+/// Ctrl+Z alone, after a pause, and behind other text in the same write all
+/// ended input, with the console's processed-input mode off (0x0200). Until
+/// plink stops reading from the console (telnet and raw done natively, SSH
+/// through a pipe), the byte is held back and the user told.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn hold_back_ctrl_z(data: &[u8]) -> (std::borrow::Cow<'_, [u8]>, bool) {
+    if !data.contains(&0x1a) {
+        return (std::borrow::Cow::Borrowed(data), false);
+    }
+    (std::borrow::Cow::Owned(data.iter().copied().filter(|&b| b != 0x1a).collect()), true)
+}
+
 
 /// Enter as PuTTY sends it where it edits the line itself (a server that
 /// negotiated no echo): CR LF. PuTTY ends such a line with CR LF on raw
@@ -312,11 +335,6 @@ mod win_console {
     }
 
     fn record(what: String) {
-        // TEMP (ci/e2e-windows): the Ctrl+Z investigation reads these in
-        // the e2e app log.
-        if std::env::var_os("THYRION_DEBUG_CONSOLE").is_some() {
-            eprintln!("console-mode: {what}");
-        }
         if let Ok(mut s) = LAST.lock() {
             *s = what;
         }
@@ -735,6 +753,18 @@ impl Transport for PlinkTransport {
 
     fn write(&mut self, data: &[u8]) -> Result<()> {
         let mut data = std::borrow::Cow::Borrowed(data);
+        #[cfg(windows)]
+        {
+            let (kept, held) = hold_back_ctrl_z(&data);
+            if held {
+                self.child.inject(CTRL_Z_NOTICE.as_bytes().to_vec());
+                let kept = kept.into_owned();
+                if kept.is_empty() {
+                    return Ok(());
+                }
+                data = std::borrow::Cow::Owned(kept);
+            }
+        }
         #[cfg(unix)]
         if self.char_mode {
             if let Some(fd) = self.master.as_raw_fd() {
@@ -790,6 +820,17 @@ impl Transport for PlinkTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ctrl_z_is_held_back_and_reported_and_the_rest_goes_through() {
+        assert_eq!(hold_back_ctrl_z(b"show clock\r"), (std::borrow::Cow::Borrowed(&b"show clock\r"[..]), false));
+        let (kept, held) = hold_back_ctrl_z(b"\x1a");
+        assert!(held);
+        assert!(kept.is_empty());
+        let (kept, held) = hold_back_ctrl_z(b"a\x1ab");
+        assert!(held);
+        assert_eq!(&*kept, b"ab");
+    }
 
     #[test]
     fn enter_becomes_crlf_and_everything_else_is_left_alone() {

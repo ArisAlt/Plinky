@@ -50,9 +50,13 @@ async function bytesFor(app, r1, key) {
   await waitUntil(() => r1.received.length > 0, { what: `any bytes for ${key}`, timeoutMs: 2000 });
   await sleep(100); // the rest of an escape sequence
   const got = Buffer.from(r1.received);
-  // Leave the console at an empty prompt for the next test.
+  // Leave the console at an empty prompt for the next test. Wait for this
+  // Ctrl+C itself, past the key's own bytes: for Ctrl+C under test, "any
+  // 03" was already there, and on Windows the reset arrived in the next
+  // test's bytes ('03 1b 5b 41' for Up).
+  const before = got.length;
   await app.key('Ctrl+C');
-  await r1.waitForBytes('\x03');
+  await waitUntil(() => r1.received.subarray(before).includes(0x03), { what: 'the reset Ctrl+C', timeoutMs: 2000 });
   return got;
 }
 
@@ -151,7 +155,22 @@ export const tests = [
   }],
 
   ['Ctrl+Z reaches the router (Cisco: leave configuration mode)', async ({ app, r1 }) => {
-    assert.equal(hex(await bytesFor(app, r1, 'Ctrl+Z')), '1a');
+    if (process.platform !== 'win32') {
+      assert.equal(hex(await bytesFor(app, r1, 'Ctrl+Z')), '1a');
+      return;
+    }
+    // Windows, for now: plink.exe's console input ends at a Ctrl+Z and never
+    // reads again (plink.rs, hold_back_ctrl_z). Thyrion holds it back, says
+    // so, and typing goes on working.
+    await app.run((e) => e.focusTerminal());
+    r1.clear();
+    await app.key('Ctrl+Z');
+    await app.waitForScreen("Ctrl+Z can't be sent through plink on Windows", { timeoutMs: 3000 });
+    await app.type('x');
+    await r1.waitForBytes('x', { timeoutMs: 3000 });
+    assert.ok(!r1.received.includes(0x1a), 'no Ctrl+Z reached the router');
+    await app.key('Ctrl+C');
+    await r1.waitForBytes('\x03');
   }],
 
   ['Ctrl+Shift+6 sends Ctrl+^ (Cisco: abort a ping or traceroute), like PuTTY', async ({ app, r1 }) => {
