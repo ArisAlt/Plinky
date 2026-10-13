@@ -81,6 +81,26 @@ Get the latest version from the
 
 ---
 
+## Code signing policy
+
+Windows releases are to be signed through SignPath's program for open-source
+projects, from the first release after the project is accepted:
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/),
+certificate by [SignPath Foundation](https://signpath.org/).
+
+- Every release is built from this repository by GitHub Actions
+  ([release.yml](.github/workflows/release.yml)); nothing built anywhere else
+  is signed.
+- Committers and reviewers: [ArisAlt](https://github.com/ArisAlt).
+- Approvers (each signing request is approved by hand):
+  [ArisAlt](https://github.com/ArisAlt).
+
+Privacy: Thyrion connects only to the hosts you open sessions to. It sends
+nothing anywhere else unless you ask it to.
+
+---
+
 ## Reporting problems
 
 Bugs and ideas: [open an issue](https://github.com/ArisAlt/Thyrion/issues/new/choose).

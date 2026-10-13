@@ -95,6 +95,14 @@ jobs:
     # The Linux job creates the release (and, on a manual run, the tag);
     # two jobs creating the same release at once can race.
     needs: release-linux
+    env:
+      # Windows code signing through SignPath (free for open-source projects).
+      # With no token the release is built unsigned, as before. The token is
+      # a secret; the organization id and slugs are repository variables.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'thyrion' }}
+      SIGNPATH_POLICY_SLUG: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -117,8 +125,97 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      # Unsigned: one step, as before.
       - name: Build Tauri Desktop Bundles
+        if: env.SIGNPATH_API_TOKEN == ''
         run: npx tauri build
+
+      # Signed: the installers carry thyrion.exe inside them, so the program
+      # is signed first and the installers are built around the signed one,
+      # then signed themselves. Signing only the finished installers would
+      # leave the program they install unsigned.
+      - name: Build the program (signed release)
+        if: env.SIGNPATH_API_TOKEN != ''
+        run: npx tauri build --no-bundle
+
+      - name: Collect the program for signing
+        if: env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path to-sign/program | Out-Null
+          Copy-Item target/release/thyrion.exe to-sign/program/thyrion.exe
+
+      - name: Upload the program for signing
+        if: env.SIGNPATH_API_TOKEN != ''
+        id: program-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: program-unsigned
+          path: to-sign/program/
+
+      - name: Sign the program (SignPath)
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ env.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: program
+          github-artifact-id: ${{ steps.program-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed/program
+
+      - name: Put the signed program back and build the installers around it
+        if: env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          Copy-Item signed/program/thyrion.exe target/release/thyrion.exe -Force
+          npx tauri bundle
+          # tauri bundle must package the program as it is, not rebuild it.
+          $sig = Get-AuthenticodeSignature target/release/thyrion.exe
+          if ($sig.Status -ne 'Valid') { throw "thyrion.exe is not signed after bundling: $($sig.Status)" }
+
+      - name: Collect the installers for signing
+        if: env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path to-sign/installers | Out-Null
+          Copy-Item target/release/bundle/msi/*.msi to-sign/installers/
+          Copy-Item target/release/bundle/nsis/*.exe to-sign/installers/
+
+      - name: Upload the installers for signing
+        if: env.SIGNPATH_API_TOKEN != ''
+        id: installers-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-unsigned
+          path: to-sign/installers/
+
+      - name: Sign the installers (SignPath)
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ env.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: installers
+          github-artifact-id: ${{ steps.installers-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed/installers
+
+      - name: Put the signed installers back
+        if: env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          Copy-Item signed/installers/*.msi target/release/bundle/msi/ -Force
+          Copy-Item signed/installers/*.exe target/release/bundle/nsis/ -Force
+          foreach ($f in Get-ChildItem target/release/bundle/msi/*.msi, target/release/bundle/nsis/*.exe) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            if ($sig.Status -ne 'Valid') { throw "$($f.Name) is not signed: $($sig.Status)" }
+            Write-Host "$($f.Name): signed by $($sig.SignerCertificate.Subject)"
+          }
 
       - name: Package Portable Windows Archive
         shell: pwsh

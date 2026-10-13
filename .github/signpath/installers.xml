@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installers": the second signing request
+     of a Windows release (release.yml), the MSI and the NSIS setup built
+     around the already signed thyrion.exe. Paste into SignPath under the
+     project's artifact configurations with the slug "installers". -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <msi-file path="*.msi">
+      <authenticode-sign />
+    </msi-file>
+    <pe-file path="*-setup.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
