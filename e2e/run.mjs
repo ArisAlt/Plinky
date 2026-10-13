@@ -49,8 +49,9 @@ function preflight() {
   }
   if (flag('--build')) {
     console.log(color.dim('building the app for testing (debug, frontend embedded)...'));
+    // npx is npx.cmd on Windows, which Node starts only through a shell.
     const r = spawnSync('npx', ['tauri', 'build', '--debug', '--no-bundle', '--ignore-version-mismatches'], {
-      cwd: root, stdio: ['ignore', 'inherit', 'inherit'],
+      cwd: root, stdio: ['ignore', 'inherit', 'inherit'], shell: isWindows,
     });
     if (r.status !== 0) throw new Error('the build failed');
   }
