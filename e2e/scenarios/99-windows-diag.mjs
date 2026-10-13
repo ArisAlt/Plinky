@@ -7,8 +7,9 @@ export const title = 'DIAG: Ctrl+Z on Windows';
 
 export async function setup() {
   if (process.platform !== 'win32') return { skip: 'Windows diagnostics' };
-  const consoles = await Promise.all(['A', 'B', 'C', 'D'].map((n) => startConsole({ name: n })));
+  const consoles = await Promise.all(['A', 'B', 'C', 'D', 'E'].map((n) => startConsole({ name: n })));
   return {
+    env: { THYRION_DEBUG_CONSOLE: '1' },
     args: consoles.flatMap((c) => ['--telnet', '127.0.0.1', String(c.port), '--title', c.name]),
     state: { consoles },
     cleanup: () => Promise.all(consoles.map((c) => c.stop())),
@@ -45,5 +46,12 @@ export const tests = [
     await probe(app, consoles[1], "write 'a'+^Z", async (a, id) => a.invoke('write_terminal_input', { sessionId: id, data: [0x61, 0x1a] }));
     await probe(app, consoles[2], 'write ^Z alone', async (a, id) => a.invoke('write_terminal_input', { sessionId: id, data: [0x1a] }));
     await probe(app, consoles[3], 'key Ctrl+Shift+6', async (a) => a.key('Ctrl+Shift+6'));
+    await probe(app, consoles[4], "'b', pause, then ^Z alone", async (a, id) => {
+      await a.invoke('write_terminal_input', { sessionId: id, data: [0x62] });
+      await sleep(700);
+      await a.invoke('write_terminal_input', { sessionId: id, data: [0x1a] });
+    });
+    const fs = await import('node:fs');
+    console.log(fs.readFileSync(app.log, 'utf8').split(/\r?\n/).filter((l) => l.includes('console-mode')).map((l) => `      ${l}`).join('\n'));
   }, { timeoutMs: 60000 }],
 ];

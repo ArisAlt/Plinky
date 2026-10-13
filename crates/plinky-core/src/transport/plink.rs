@@ -312,6 +312,11 @@ mod win_console {
     }
 
     fn record(what: String) {
+        // TEMP (ci/e2e-windows): the Ctrl+Z investigation reads these in
+        // the e2e app log.
+        if std::env::var_os("THYRION_DEBUG_CONSOLE").is_some() {
+            eprintln!("console-mode: {what}");
+        }
         if let Ok(mut s) = LAST.lock() {
             *s = what;
         }
