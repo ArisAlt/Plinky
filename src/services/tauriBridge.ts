@@ -823,19 +823,35 @@ export function writeTerminalInput(sessionId: string, data: Uint8Array): Promise
   return next;
 }
 
-export async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
-  if (isTauriEnvironment()) {
+// Resizes go in order too, for the same reason as writes: two sent while a
+// tab settled (85 then 84 columns) could land the other way round, and the
+// router was told 85 while the screen showed 84 (e2e suite on a Windows
+// runner). Only the latest size is sent; one superseded while it waited is
+// skipped.
+const resizeChains = new Map<string, Promise<void>>();
+const latestSize = new Map<string, string>();
+
+export function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
+  if (!isTauriEnvironment()) return Promise.resolve();
+  const size = `${cols}x${rows}`;
+  latestSize.set(sessionId, size);
+  const next = (resizeChains.get(sessionId) ?? Promise.resolve()).then(async () => {
+    if (latestSize.get(sessionId) !== size) return;
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('resize_terminal', {
-        sessionId,
-        cols,
-        rows,
-      });
+      await invoke('resize_terminal', { sessionId, cols, rows });
     } catch (e) {
       console.warn("Failed to invoke resize_terminal via Tauri:", e);
     }
-  }
+  });
+  resizeChains.set(sessionId, next);
+  next.then(() => {
+    if (resizeChains.get(sessionId) === next) {
+      resizeChains.delete(sessionId);
+      latestSize.delete(sessionId);
+    }
+  });
+  return next;
 }
 
 // Tab ids whose session was explicitly closed. A start_terminal_session call

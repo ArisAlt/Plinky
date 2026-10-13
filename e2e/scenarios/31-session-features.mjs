@@ -22,14 +22,6 @@ export const tests = [
     await app.waitFor(() => !!document.querySelector('[data-session-row="Core R5"]'), [], { what: 'the session in the list' });
     await app.run((e) => e.dblclick(document.querySelector('[data-session-row="Core R5"]')));
     await app.waitForTab('Core R5', 'live', { timeoutMs: 5000 });
-    if (process.platform === 'win32') {
-      // TEMP (ci/e2e-windows): what Thyrion read back, and what R5 got.
-      const list = await app.invoke('list_putty_sessions');
-      const mine = list.find((x) => x.name === 'Core R5');
-      console.log('      DIAG logon setting', JSON.stringify(mine?.extra?.PlinkyLogonActions));
-      await sleep(3000);
-      console.log('      DIAG R5 received', JSON.stringify(r5.text()), 'lines', JSON.stringify(r5.lines));
-    }
     await r5.waitForLine('show clock', { timeoutMs: 8000 });
     assert.deepEqual(r5.lines, ['terminal length 0', 'show clock']);
     await sleep(500);

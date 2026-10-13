@@ -406,7 +406,15 @@ export const tests = [
 
   ['when the router hangs up the tab says so at once, and Reconnect works', async ({ app, r1 }) => {
     const before = r1.connections;
+    const openBefore = r1.open;
     r1.hangUp();
+    if (process.platform === 'win32') {
+      // TEMP (ci/e2e-windows): did the backend see the hang-up?
+      await sleep(1500);
+      const ids = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => el.dataset.tabId));
+      const ended = await Promise.all(ids.map((id) => app.invoke('is_session_ended', { sessionId: id })));
+      console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs', JSON.stringify(ids), 'ended', JSON.stringify(ended), 'status', JSON.stringify(await app.tabs()));
+    }
     await app.waitForTab('R1', 'disconnected', { timeoutMs: 3000 });
     await app.waitFor(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Reconnect' && window.__e2e.visible(x));
