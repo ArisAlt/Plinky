@@ -219,7 +219,8 @@ jobs:
           $env:TEMP = $dir
           $env:TMP = $dir
           plink -V
-          npm run e2e -- --build --keep
+          npm run e2e -- --build --only 99-windows
+          npm run e2e -- --keep
 
       - name: Keep the app logs of a failed run
         if: failure()
