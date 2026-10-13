@@ -796,18 +796,31 @@ export async function detachTerminalSession(sessionId: string): Promise<void> {
   }
 }
 
-export async function writeTerminalInput(sessionId: string, data: Uint8Array): Promise<void> {
-  if (isTauriEnvironment()) {
+// Each tab's writes, one after another. Every keystroke is its own IPC
+// request, and nothing kept them in order: on Windows (WebView2) requests
+// are handled concurrently, and typing reached the device scrambled --
+// `set /a 40+2` became `set40+2 /a`, `show users` became `ssehros` (e2e
+// suite on a Windows runner). A write now starts only after the one before
+// it finished.
+const writeChains = new Map<string, Promise<void>>();
+
+export function writeTerminalInput(sessionId: string, data: Uint8Array): Promise<void> {
+  if (!isTauriEnvironment()) return Promise.resolve();
+  const bytes = Array.from(data);
+  const next = (writeChains.get(sessionId) ?? Promise.resolve()).then(async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('write_terminal_input', {
-        sessionId,
-        data: Array.from(data),
-      });
+      await invoke('write_terminal_input', { sessionId, data: bytes });
     } catch (e) {
       console.warn("Failed to invoke write_terminal_input via Tauri:", e);
     }
-  }
+  });
+  writeChains.set(sessionId, next);
+  // Forget a finished chain, so closed tabs leave nothing behind.
+  next.then(() => {
+    if (writeChains.get(sessionId) === next) writeChains.delete(sessionId);
+  });
+  return next;
 }
 
 export async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
