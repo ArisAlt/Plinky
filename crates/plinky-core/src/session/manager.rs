@@ -138,16 +138,20 @@ pub struct SessionRegistry {
     /// stay locked.
     locked: Arc<Mutex<std::collections::HashSet<String>>>,
     prompt_tx: broadcast::Sender<PromptEvent>,
+    /// Ids of sessions that ended by themselves (see `subscribe_ended`).
+    ended_tx: broadcast::Sender<String>,
     sync_router: Arc<Mutex<crate::sync::router::SyncInputRouter>>,
 }
 
 impl SessionRegistry {
     pub fn new() -> Self {
         let (prompt_tx, _) = broadcast::channel(64);
+        let (ended_tx, _) = broadcast::channel(64);
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             locked: Arc::new(Mutex::new(std::collections::HashSet::new())),
             prompt_tx,
+            ended_tx,
             sync_router: Arc::new(Mutex::new(crate::sync::router::SyncInputRouter::new())),
         }
     }
@@ -155,6 +159,16 @@ impl SessionRegistry {
     /// Subscribes to host key prompt events across all active sessions.
     pub fn subscribe_prompts(&self) -> broadcast::Receiver<PromptEvent> {
         self.prompt_tx.subscribe()
+    }
+
+    /// Hears the id of every session that ends by itself: its process
+    /// exited, its connection dropped, or a fatal error closed it. Not a
+    /// session the user closed. The page marks the tab disconnected from
+    /// this. The notice in the session's output only reaches a tab whose
+    /// view is attached, so a tab in the background, whose router hung up,
+    /// stayed "live" (e2e suite on a Windows runner).
+    pub fn subscribe_ended(&self) -> broadcast::Receiver<String> {
+        self.ended_tx.subscribe()
     }
 
     /// Spawns a local shell session.
@@ -304,6 +318,7 @@ impl SessionRegistry {
                         });
                     }
                     PreAuthAction::Closed(reason) => {
+                        let _ = registry_clone.ended_tx.send(id_for_task.clone());
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
                             let msg = match reason {
                                 CloseReason::AuthFailed(err) => {
@@ -613,6 +628,7 @@ impl SessionRegistry {
                         });
                     }
                     PreAuthAction::Closed(reason) => {
+                        let _ = registry_clone.ended_tx.send(id_for_task.clone());
                         if let Some(tx) = sub_clone.lock().unwrap().as_ref() {
                             let msg = match reason {
                                 CloseReason::AuthFailed(err) => {
@@ -712,6 +728,7 @@ impl SessionRegistry {
             session.state_machine.terminate();
             session.scrollback.push(notice);
         }
+        let _ = self.ended_tx.send(id.to_string());
         if let Some(tx) = subscriber.lock().unwrap().as_ref() {
             let _ = tx.send(notice.to_vec());
         }

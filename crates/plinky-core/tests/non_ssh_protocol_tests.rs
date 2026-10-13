@@ -408,3 +408,38 @@ async fn a_refused_console_says_so_and_ends() {
     assert!(registry.is_session_ended(id));
     assert_eq!(registry.is_connected(id), Some(false));
 }
+
+/// A console that hangs up is announced as ended, for the tab: the notice
+/// in its output reaches only a tab whose view is attached, and a tab in
+/// the background stayed "live" after its router hung up.
+#[tokio::test]
+async fn a_console_that_hangs_up_is_announced_as_ended() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (hang_up_tx, hang_up_rx) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        if let Ok((sock, _)) = listener.accept() {
+            let _ = hang_up_rx.recv_timeout(Duration::from_secs(5));
+            drop(sock);
+        }
+    });
+
+    let registry = SessionRegistry::new();
+    let mut ended = registry.subscribe_ended();
+    let (tx, _rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let target = plinky_core::transport::plink::ExplicitTarget {
+        hostname: "127.0.0.1".into(),
+        port,
+        username: None,
+        protocol: plinky_core::transport::plink::TargetProtocol::Telnet,
+    };
+    let id = "hangup-r7";
+    registry.create_plink_session(id, "R7 (plinky-test, not saved)", Some(target), None, 80, 24, tx).unwrap();
+    // No view: the session has nobody to print its notice to.
+    registry.detach_session(id).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    hang_up_tx.send(()).unwrap();
+    let got = tokio::time::timeout(Duration::from_secs(5), ended.recv()).await;
+    assert_eq!(got.ok().and_then(|r| r.ok()).as_deref(), Some(id));
+    assert!(registry.is_session_ended(id));
+}

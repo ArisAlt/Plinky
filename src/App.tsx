@@ -265,10 +265,13 @@ export const App: React.FC = () => {
         : t
     )));
   };
-  // And one whose plink exited before connecting (refused, unreachable) is
-  // disconnected: behind the front tab it kept spinning "connecting".
+  // And one whose session ended is disconnected, wherever it was: refused
+  // before connecting (behind the front tab it kept spinning "connecting"),
+  // or hung up later. The notice in its output reaches only a tab whose view
+  // is attached, and a tab in the background whose router hung up stayed
+  // "live" with no Reconnect (e2e suite on a Windows runner).
   const markEnded = (id: string) => {
-    setTabs(prev => prev.map(t => (t.id === id && t.status === 'connecting' ? { ...t, status: 'disconnected' } : t)));
+    setTabs(prev => prev.map(t => (t.id === id && t.status !== 'disconnected' ? { ...t, status: 'disconnected' } : t)));
   };
   useEffect(() => {
     let disposed = false;

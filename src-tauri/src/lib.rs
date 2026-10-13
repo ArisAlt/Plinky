@@ -1779,6 +1779,21 @@ pub fn run() {
                     }
                 });
             }
+            // Every session that ends by itself, for the tab, whether or not
+            // its view is on screen (SessionRegistry::subscribe_ended).
+            let ended_handle = app.handle().clone();
+            let mut ended_rx = reg_for_setup.subscribe_ended();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    match ended_rx.recv().await {
+                        Ok(id) => {
+                            let _ = ended_handle.emit("session:ended", &id);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(_) => break,
+                    }
+                }
+            });
             let app_handle = app.handle().clone();
             let mut rx = reg_for_setup.subscribe_prompts();
             // tauri::async_runtime::spawn, NOT tokio::spawn: setup() runs
