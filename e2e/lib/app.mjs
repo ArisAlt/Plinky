@@ -11,15 +11,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { Inspector } from './inspector.mjs';
+import os from 'node:os';
+import { Inspector, CdpInspector } from './inspector.mjs';
+import { isWindows, killTree } from './windows.mjs';
 import { installHelpers } from './page.mjs';
 import { freePort, waitUntil } from './fixtures.mjs';
 
 export async function launchApp({ binary, display, home, args = [], env = {}, log: logFile }) {
-  const runtime = fs.mkdtempSync('/tmp/pe2e-'); // short: socket paths are limited to 108 bytes
+  // Short: socket paths are limited to 108 bytes. (Windows has no sockets
+  // here; the folder is only cleaned up.)
+  const runtime = fs.mkdtempSync(isWindows ? path.join(os.tmpdir(), 'pe2e-') : '/tmp/pe2e-');
   const port = await freePort();
   const log = logFile ?? path.join(home, 'app.log');
-  const appEnv = {
+  // On Windows the app needs the system's own variables (SystemRoot, the
+  // user's folders) and WebView2 is told to open its DevTools port; the
+  // profile is reset by run.mjs instead (lib/windows.mjs).
+  const appEnv = isWindows ? {
+    ...process.env,
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+    ...display.env,
+    ...env,
+  } : {
     PATH: process.env.PATH,
     LANG: process.env.LANG || 'C.UTF-8',
     HOME: home,
@@ -36,13 +48,15 @@ export async function launchApp({ binary, display, home, args = [], env = {}, lo
   for (const [k, v] of Object.entries(appEnv)) if (v === undefined) delete appEnv[k];
 
   const out = fs.openSync(log, 'a');
-  const child = spawn(binary, args, { env: appEnv, stdio: ['ignore', out, out], detached: true });
+  // Its own process group on Unix, so stop() ends plink with it; Windows
+  // ends the tree with taskkill instead.
+  const child = spawn(binary, args, { env: appEnv, stdio: ['ignore', out, out], detached: !isWindows });
   let exited = null;
   child.on('exit', (code, signal) => { exited = { code, signal }; });
 
   let inspector;
   try {
-    inspector = await Inspector.connect(port, { timeoutMs: 30000 });
+    inspector = await (isWindows ? CdpInspector : Inspector).connect(port, { timeoutMs: 30000 });
   } catch (e) {
     child.kill('SIGKILL');
     throw new Error(`${e.message}\n--- app log ---\n${fs.readFileSync(log, 'utf8').slice(-3000)}`);
@@ -105,7 +119,10 @@ export async function launchApp({ binary, display, home, args = [], env = {}, lo
 
     async stop() {
       inspector.close();
-      if (!exited) {
+      if (!exited && isWindows) {
+        killTree(child.pid);
+        await waitUntil(() => exited, { timeoutMs: 5000 }).catch(() => {});
+      } else if (!exited) {
         try { process.kill(-child.pid, 'SIGTERM'); } catch { /* gone */ }
         await waitUntil(() => exited, { timeoutMs: 3000 }).catch(() => {
           try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ }

@@ -123,3 +123,84 @@ export class Inspector {
     try { this.ws.close(); } catch { /* already closed */ }
   }
 }
+
+/**
+ * The same, for WebView2 on Windows: Chromium's DevTools protocol. The app
+ * is started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS carrying
+ * --remote-debugging-port; the page is listed at /json/list and spoken to
+ * directly (no Target wrapping), and Runtime.evaluate can await a promise.
+ */
+export class CdpInspector {
+  constructor(ws) {
+    this.ws = ws;
+    this.nextId = 1;
+    this.pending = new Map();
+    ws.onmessage = (m) => {
+      const msg = JSON.parse(String(m.data));
+      const waiter = msg.id !== undefined && this.pending.get(msg.id);
+      if (!waiter) return;
+      this.pending.delete(msg.id);
+      if (msg.error) waiter.reject(new Error(msg.error.message));
+      else waiter.resolve(msg.result);
+    };
+    ws.onclose = () => {
+      for (const { reject } of this.pending.values()) reject(new Error('the app closed the DevTools connection'));
+      this.pending.clear();
+    };
+  }
+
+  static async connect(port, { timeoutMs = 30000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let url = null;
+    while (!url) {
+      try {
+        const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+        // The app's own page, not a DevTools or service-worker target.
+        url = pages.find((p) => p.type === 'page' && !p.url.startsWith('devtools:'))?.webSocketDebuggerUrl ?? null;
+      } catch { /* not listening yet */ }
+      if (!url) {
+        if (Date.now() > deadline) throw new Error(`no page on DevTools port ${port} after ${timeoutMs} ms`);
+        await sleep(200);
+      }
+    }
+    const ws = new WebSocket(url);
+    await new Promise((resolve, reject) => {
+      ws.onopen = resolve;
+      ws.onerror = () => reject(new Error('could not open the DevTools socket'));
+    });
+    return new CdpInspector(ws);
+  }
+
+  send(method, params = {}) {
+    const id = this.nextId++;
+    const reply = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    this.ws.send(JSON.stringify({ id, method, params }));
+    return reply;
+  }
+
+  async evaluate(expression, { timeoutMs = 15000 } = {}) {
+    const wrapped = `(async () => { const v = await (${expression}); return JSON.stringify(v === undefined ? null : v); })()`;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`the page did not answer within ${timeoutMs} ms`)), timeoutMs);
+    });
+    const run = async () => {
+      const r = await this.send('Runtime.evaluate', {
+        expression: wrapped, awaitPromise: true, returnByValue: true, userGesture: true,
+      });
+      if (r.exceptionDetails) {
+        throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text ?? 'page threw');
+      }
+      return JSON.parse(r.result.value);
+    };
+    try {
+      return await Promise.race([run(), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  close() {
+    try { this.ws.close(); } catch { /* already closed */ }
+  }
+}

@@ -15,6 +15,13 @@ const has = (bin) => {
 };
 
 export async function startDisplay({ runDir, visible = false, width = 1280, height = 860 }) {
+  // A Windows CI runner's own desktop is a session nobody watches. On
+  // anyone's own Windows machine, windows would open on their desktop, so
+  // there --visible is needed (and the suite runs on CI only; windows.mjs).
+  if (process.platform === 'win32' && (process.env.CI === 'true' || visible)) {
+    return { kind: 'the Windows desktop', env: {}, stop: () => {} };
+  }
+
   if (visible) {
     return {
       kind: 'your desktop',

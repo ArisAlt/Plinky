@@ -17,13 +17,15 @@ export async function setup({ home }) {
   // The environment the unpacked AppImage gives Thyrion: its AppRun points
   // Python into its own folder. A script's python3 must not inherit it
   // (it died with "No module named 'encodings'").
+  // Linux only: there is no AppImage on Windows, and a PYTHONHOME there
+  // would break the system's Python for real.
   const appDir = path.join(home, 'AppDir');
   return {
-    env: {
+    env: process.platform === 'linux' ? {
       APPDIR: appDir,
       PYTHONHOME: path.join(appDir, 'usr'),
       PYTHONPATH: `${path.join(appDir, 'usr/share/pyshared')}/:`,
-    },
+    } : {},
     args: ['--telnet', '127.0.0.1', String(r1.port), '--title', 'R1'],
     state: { r1 },
     cleanup: () => r1.stop(),

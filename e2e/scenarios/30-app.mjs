@@ -19,7 +19,7 @@ export async function setup({ home }) {
   return {
     // A known shell for the local shell tab: bash, with no startup files in
     // the throwaway home.
-    env: { SHELL: '/bin/bash' },
+    env: process.platform === 'win32' ? {} : { SHELL: '/bin/bash' },
     state: { consoles },
     cleanup: () => Promise.all(consoles.map((c) => c.stop())),
   };
@@ -49,9 +49,17 @@ export const tests = [
     }, [], { what: 'Local Shell in the tab menu' });
     await app.waitForTab('Local Shell', 'live', { timeoutMs: 5000 });
     await app.run((e) => e.focusTerminal());
-    await app.type('echo "sum=$((40+2))"');
-    await app.key('Enter');
-    await app.waitForScreen('sum=42', { timeoutMs: 5000 });
+    // The shell does the sum, so the answer can't be the typed line's echo.
+    // Windows' local shell is cmd.exe (COMSPEC): `set /a` prints 42.
+    if (process.platform === 'win32') {
+      await app.type('set /a 40+2');
+      await app.key('Enter');
+      await app.waitForScreen(/^42/m, { timeoutMs: 10000 });
+    } else {
+      await app.type('echo "sum=$((40+2))"');
+      await app.key('Enter');
+      await app.waitForScreen('sum=42', { timeoutMs: 5000 });
+    }
   }],
 
   ['a console GNS3 opens while the app is running becomes a tab in the same window', async ({ app, consoles }) => {

@@ -11,7 +11,8 @@
 //   node e2e/run.mjs --visible        show the windows on your desktop
 //   node e2e/run.mjs --keep           keep the test profiles for inspection
 //
-// Linux only for now. Needs Node 22+, plink, and kwin_wayland or Xvfb; the
+// Linux and Windows (Windows on a CI runner only: lib/windows.mjs). Needs
+// Node 22+, plink, and on Linux kwin_wayland or Xvfb; the
 // SSH tests also need sshd, ssh-keygen and puttygen, and skip without them.
 //
 // The app under test is a debug build (see --build): WebKit's inspector,
@@ -24,6 +25,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startDisplay } from './lib/display.mjs';
 import { launchApp } from './lib/app.mjs';
+import { isWindows, resetProfile, assertThrowawayMachine } from './lib/windows.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -32,14 +34,15 @@ const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
 const option = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
 const only = option('--only')?.toLowerCase();
-const binary = path.resolve(option('--binary') ?? path.join(root, 'target/debug/thyrion'));
+const binary = path.resolve(option('--binary') ?? path.join(root, `target/debug/thyrion${isWindows ? '.exe' : ''}`));
 
 const color = process.stdout.isTTY
   ? { red: (s) => `\x1b[31m${s}\x1b[0m`, green: (s) => `\x1b[32m${s}\x1b[0m`, dim: (s) => `\x1b[2m${s}\x1b[0m`, yellow: (s) => `\x1b[33m${s}\x1b[0m` }
   : { red: (s) => s, green: (s) => s, dim: (s) => s, yellow: (s) => s };
 
 function preflight() {
-  if (process.platform !== 'linux') throw new Error('the end-to-end suite runs on Linux only for now');
+  if (process.platform !== 'linux' && !isWindows) throw new Error('the end-to-end suite runs on Linux and Windows');
+  if (isWindows) assertThrowawayMachine();
   if (typeof WebSocket === 'undefined') throw new Error(`Node 22 or newer is needed (this is ${process.version})`);
   try { execFileSync('plink', ['-V'], { stdio: 'ignore' }); } catch (e) {
     if (e.code === 'ENOENT') throw new Error('plink is not on PATH: install PuTTY');
@@ -79,6 +82,9 @@ async function main() {
       console.log(`\n${scenario.title}`);
 
       const home = fs.mkdtempSync(path.join(runDir, `${path.basename(file, '.mjs')}-`));
+      // Windows keeps sessions and app data in fixed places: clear them so
+      // each scenario starts clean, as a fresh home does on Linux.
+      if (isWindows) resetProfile();
       const ctx = { home, runDir, binary, display, launch: (opts) => launchApp({ binary, display, home, ...opts }) };
       let prepared;
       try {

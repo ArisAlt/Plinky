@@ -6,6 +6,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
+import { isWindows, writeRegistrySession } from './windows.mjs';
 
 const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
 const ECHO = 1, SGA = 3, NAWS = 31;
@@ -246,8 +247,10 @@ export function freePort() {
   });
 }
 
-/** Writes a saved session the way PuTTY on Unix stores one. */
+/** Writes a saved session where PuTTY keeps it: a file under `home` on
+ *  Unix, the registry on Windows. */
 export function writePuttySession(home, name, settings) {
+  if (isWindows) return writeRegistrySession(name, settings);
   const dir = path.join(home, '.putty', 'sessions');
   fs.mkdirSync(dir, { recursive: true });
   const file = encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
