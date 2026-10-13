@@ -27,8 +27,40 @@ export function resetProfile() {
   assertThrowawayMachine();
   try { execFileSync('reg', ['delete', SESSIONS_KEY, '/f'], { stdio: 'ignore' }); } catch { /* none yet */ }
   for (const base of [process.env.APPDATA, process.env.LOCALAPPDATA]) {
-    if (base) fs.rmSync(path.join(base, IDENTIFIER), { recursive: true, force: true });
+    if (base) removeWhenFree(path.join(base, IDENTIFIER));
   }
+}
+
+// WebView2's helper processes outlive the app by a moment and keep its
+// cache open: the first run failed with EBUSY on Cache_Data\index. Wait for
+// them, and on the runner end any that are left.
+function removeWhenFree(dir) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (e) {
+      if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(e.code) || attempt >= 20) throw e;
+      if (attempt === 10) {
+        try { execFileSync('taskkill', ['/IM', 'msedgewebview2.exe', '/F'], { stdio: 'ignore' }); } catch { /* none */ }
+      }
+      execFileSync('powershell', ['-NoProfile', '-Command', 'Start-Sleep -Milliseconds 300'], { stdio: 'ignore' });
+    }
+  }
+}
+
+/** What was running and listening when the app's DevTools port never
+ *  answered: for the CI log. */
+export function windowsDiagnosis(port, child) {
+  const run = (cmd, args) => {
+    try { return execFileSync(cmd, args, { encoding: 'utf8' }); } catch (e) { return `(${cmd} failed: ${e.message})`; }
+  };
+  const tasks = run('tasklist', ['/FO', 'CSV', '/NH']).split(/\r?\n/)
+    .filter((l) => /thyrion|msedgewebview2|plink/i.test(l)).join('\n');
+  const listening = run('netstat', ['-ano', '-p', 'TCP']).split(/\r?\n/)
+    .filter((l) => l.includes(`:${port} `) || l.includes(`:${port}\t`)).join('\n');
+  return `\n--- app process ${child.pid}, exited: ${child.exitCode ?? 'no'} ---\n${tasks || '(no thyrion or WebView2 processes)'}` +
+    `\n--- port ${port} ---\n${listening || '(nothing listening)'}`;
 }
 
 /** PuTTY's escape_registry_key (crates/putty-compat/src/registry.rs), for

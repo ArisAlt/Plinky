@@ -13,7 +13,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { Inspector, CdpInspector } from './inspector.mjs';
-import { isWindows, killTree } from './windows.mjs';
+import { isWindows, killTree, windowsDiagnosis } from './windows.mjs';
 import { installHelpers } from './page.mjs';
 import { freePort, waitUntil } from './fixtures.mjs';
 
@@ -28,7 +28,9 @@ export async function launchApp({ binary, display, home, args = [], env = {}, lo
   // profile is reset by run.mjs instead (lib/windows.mjs).
   const appEnv = isWindows ? {
     ...process.env,
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+    // --remote-allow-origins: Chromium refuses DevTools sockets from an
+    // origin it doesn't know; the suite's socket is local and its own.
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=*`,
     ...display.env,
     ...env,
   } : {
@@ -58,8 +60,9 @@ export async function launchApp({ binary, display, home, args = [], env = {}, lo
   try {
     inspector = await (isWindows ? CdpInspector : Inspector).connect(port, { timeoutMs: 30000 });
   } catch (e) {
-    child.kill('SIGKILL');
-    throw new Error(`${e.message}\n--- app log ---\n${fs.readFileSync(log, 'utf8').slice(-3000)}`);
+    const why = isWindows ? windowsDiagnosis(port, child) : '';
+    if (isWindows) killTree(child.pid); else child.kill('SIGKILL');
+    throw new Error(`${e.message}${why}\n--- app log ---\n${fs.readFileSync(log, 'utf8').slice(-3000)}`);
   }
 
   const app = {
