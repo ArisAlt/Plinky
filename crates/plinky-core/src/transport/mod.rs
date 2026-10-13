@@ -10,6 +10,7 @@ pub mod local;
 pub mod plink;
 pub mod serial;
 pub mod tcp_state;
+pub mod telnet;
 
 /// Handle to a PTY child whose output is being pumped by [`pump_pty_child`].
 pub(crate) struct PtyChild {
@@ -127,6 +128,12 @@ pub trait Transport: Send {
     /// The process that makes the network connection, where there is one
     /// (plink). Used to see when its connection is up (tcp_state.rs).
     fn process_id(&self) -> Option<u32> {
+        None
+    }
+
+    /// Whether the connection is up, for a transport that knows it
+    /// directly (`None`: ask the system about `process_id`'s sockets).
+    fn connected(&self) -> Option<bool> {
         None
     }
 

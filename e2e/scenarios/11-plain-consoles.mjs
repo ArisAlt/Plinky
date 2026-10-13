@@ -10,7 +10,6 @@ export async function setup() {
   const telnet = await startConsole({ name: 'SW1', negotiate: false });
   const raw = await startConsole({ name: 'SW2', negotiate: false });
   return {
-    env: process.platform === 'win32' ? { THYRION_DEBUG_CONSOLE: '1' } : {},
     args: [
       '--telnet', '127.0.0.1', String(telnet.port), '--title', 'SW1',
       '--raw', '127.0.0.1', String(raw.port), '--title', 'SW2',
@@ -44,21 +43,14 @@ const lineTests = (label, stateKey, title) => [
     con.clear();
     await app.type('show vlan');
     await sleep(200);
-    if (process.platform === 'win32') {
-      // TEMP (ci/e2e-windows): the console modes plink set and Thyrion saw.
-      const fs = await import('node:fs');
-      console.log(fs.readFileSync(app.log, 'utf8').split(/\r?\n/).filter((l) => l.includes('console-mode')).map((l) => `      ${l}`).join('\n'));
-      console.log('      DIAG screen', JSON.stringify((await app.screen()).filter((l) => l.trim())), 'device got', JSON.stringify(con.text()));
-    }
     const screen = (await app.screen()).join('\n');
     assert.equal((screen.match(/show vlan/g) ?? []).length, 1, `typed text shows once:\n${screen}`);
     await app.key('Enter');
     await con.waitForLine('show vlan');
     await sleep(150);
-    // PuTTY ends the line CR LF. plink writes every CR as CR NUL on telnet
-    // (RFC 854), which the server reads back as CR: the same CR LF.
-    const want = stateKey === 'telnet' ? 'show vlan\r\0\n' : 'show vlan\r\n';
-    assert.equal(JSON.stringify(con.text()), JSON.stringify(want));
+    // PuTTY ends the line CR LF, on telnet ("Return key sends Telnet New
+    // Line") and raw alike.
+    assert.equal(JSON.stringify(con.text()), JSON.stringify('show vlan\r\n'));
   }],
 
   [`${label}: Backspace edits the line before it is sent`, async ({ app, ...s }) => {

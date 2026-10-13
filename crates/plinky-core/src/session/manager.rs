@@ -6,6 +6,7 @@ use crate::errors::{PlinkyError, Result};
 use crate::transport::Transport;
 use crate::transport::local::LocalTransport;
 use crate::transport::plink::PlinkTransport;
+use crate::transport::telnet::{NetTarget, NetTransport};
 use crate::session::flow::{FlowGate, OUTPUT_WINDOW};
 use crate::session::state_machine::{PreAuthStateMachine, PreAuthAction, SessionState, HostKeyPromptInfo, CloseReason};
 use crate::session::ring_buffer::ScrollbackRingBuffer;
@@ -444,7 +445,12 @@ impl SessionRegistry {
         let (raw_tx, mut raw_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let flow = Arc::new(FlowGate::new(OUTPUT_WINDOW));
         let explicit_target_protocol = explicit_target.as_ref().map(|t| t.protocol);
-        let transport = PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx, flow.clone())?;
+        // Telnet and raw are connected here, not by plink: see telnet.rs.
+        let saved = putty_compat::sessions::read_session(session_name).ok();
+        let transport: Box<dyn Transport> = match NetTarget::for_session(saved.as_ref(), explicit_target.as_ref()) {
+            Some(target) => Box::new(NetTransport::connect(&target, cols, rows, raw_tx, flow.clone())),
+            None => Box::new(PlinkTransport::spawn_session(session_name, explicit_target.as_ref(), login.as_ref(), cols, rows, raw_tx, flow.clone())?),
+        };
         let log_file = log_file_name
             .as_deref()
             .filter(|p| !p.is_empty())
@@ -650,7 +656,7 @@ impl SessionRegistry {
         // target does -- GNS3 opens device consoles as `--telnet host port`.
         let mut state_machine = PreAuthStateMachine::new();
         if starts_live(
-            putty_compat::sessions::read_session(session_name).ok().map(|s| s.protocol).as_deref(),
+            saved.map(|s| s.protocol).as_deref(),
             explicit_target_protocol,
         ) {
             state_machine.force_live();
@@ -659,7 +665,7 @@ impl SessionRegistry {
         let active = ActiveSession {
             id: id_owned.clone(),
             name: session_name.to_string(),
-            transport: Box::new(transport),
+            transport,
             state_machine,
             scrollback: ScrollbackRingBuffer::new(2 * 1024 * 1024),
             subscriber,
@@ -940,6 +946,27 @@ impl SessionRegistry {
     /// The process making the session's connection (plink), if it has one.
     pub fn process_id(&self, id: &str) -> Option<u32> {
         self.sessions.lock().unwrap().get(id)?.transport.process_id()
+    }
+
+    /// Which start of the session `id` is running: a restart under the same
+    /// id is a different instance.
+    pub fn instance_of(&self, id: &str) -> Option<u64> {
+        Some(self.sessions.lock().unwrap().get(id)?.instance)
+    }
+
+    /// Whether the session's connection is up: from the transport where it
+    /// connects by itself, else from the system's view of plink's sockets.
+    /// `None` where neither can tell.
+    pub fn is_connected(&self, id: &str) -> Option<bool> {
+        let pid = {
+            let lock = self.sessions.lock().unwrap();
+            let transport = &lock.get(id)?.transport;
+            if let Some(up) = transport.connected() {
+                return Some(up);
+            }
+            transport.process_id()?
+        };
+        crate::transport::tcp_state::has_established_tcp(pid)
     }
 
     /// Locks a tab read-only, or unlocks it. A locked tab takes no typing,

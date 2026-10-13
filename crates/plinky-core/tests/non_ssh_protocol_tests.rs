@@ -1,8 +1,9 @@
 //! Network engineers live on Serial / Telnet / Raw sessions (switch
-//! consoles, legacy gear). Those protocols have no SSH handshake, so plink
-//! never prints the D9 "Access granted" marker. These tests run real plink
-//! against a local TCP "device" through a saved PuTTY session. Separate test
-//! binary because on Unix it sets PUTTYDIR for the whole process.
+//! consoles, legacy gear). Those protocols have no SSH handshake, so there
+//! is no D9 "Access granted" marker. Telnet and raw are connected by Thyrion
+//! itself (telnet.rs); these tests run it against a local TCP "device",
+//! some through a saved PuTTY session. Separate test binary because on Unix
+//! it sets PUTTYDIR for the whole process.
 use std::io::Write;
 use std::net::TcpListener;
 use std::time::Duration;
@@ -13,9 +14,6 @@ use tokio::sync::{mpsc, Mutex};
 // PUTTYDIR is process-global; serialize the tests that set it.
 static PUTTYDIR_LOCK: Mutex<()> = Mutex::const_new(());
 
-fn plink_available() -> bool {
-    std::process::Command::new("plink").arg("-V").output().is_ok()
-}
 
 /// PuTTY for Windows reads saved sessions only from
 /// HKCU\Software\SimonTatham\PuTTY\Sessions: no PUTTYDIR, and nothing can
@@ -69,10 +67,6 @@ impl Drop for SavedSession {
 }
 
 async fn device_dump_survives(protocol: &str) {
-    if !plink_available() {
-        eprintln!("skipping: plink not installed");
-        return;
-    }
     if !can_save_where_plink_looks() {
         eprintln!("skipping: plink only loads sessions from your real PuTTY registry key; runs on CI only");
         return;
@@ -129,7 +123,7 @@ async fn device_dump_survives(protocol: &str) {
         }
     }
     let text = String::from_utf8_lossy(&buf);
-    assert!(!text.contains("no valid host name"), "plink couldn't find the saved session");
+    assert!(!text.contains("FATAL ERROR"), "the saved session didn't connect: {text}");
     assert!(!text.contains("PreAuth buffer exceeded"), "{protocol} session was force-closed mid-output");
     assert!(text.contains("END_OF_RUNNING_CONFIG"), "full device output must arrive (got {} bytes)", buf.len());
     assert!(
@@ -177,10 +171,6 @@ fn telnet_data(raw: &[u8]) -> Vec<u8> {
 #[tokio::test]
 async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     use std::io::Read;
-    if !plink_available() {
-        eprintln!("skipping: plink not installed");
-        return;
-    }
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let (got_tx, got_rx) = std::sync::mpsc::channel::<Vec<u8>>();
@@ -204,7 +194,7 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
                 if telnet_data(&got).contains(&0x03) { break; }
             }
             let _ = got_tx.send(got);
-            // Stay connected: a closed socket would end plink by itself.
+            // Stay connected: a closed socket would end the session by itself.
             std::thread::sleep(Duration::from_secs(3));
         }
     });
@@ -221,7 +211,7 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     registry
         .create_plink_session(id, "R1 (plinky-test, not saved)", Some(target), None, 80, 24, tx)
         .unwrap();
-    // Wait for the prompt, so plink has settled its terminal modes.
+    // Wait for the prompt: the console is connected.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     let mut seen = Vec::new();
     while !String::from_utf8_lossy(&seen).contains("Router>") {
@@ -242,33 +232,26 @@ async fn telnet_console_gets_ctrl_c_and_arrows_as_typed() {
     let got = telnet_data(&got);
     let arrow = |c: u8| got.windows(3).any(|w| w == [0x1b, b'[', c] || w == [0x1b, b'O', c]);
     let context = format!(
-        "console connected: {}; console got {got:?}; plink printed {:?}; console setup: {:?}",
+        "console connected: {}; console got {got:?}; screen got {:?}",
         accepted.load(std::sync::atomic::Ordering::SeqCst),
         String::from_utf8_lossy(&seen),
-        plinky_core::transport::plink::console_setup_report(),
     );
     for (c, name) in [(b'A', "Up"), (b'B', "Down"), (b'C', "Right"), (b'D', "Left")] {
         assert!(arrow(c), "{name} must reach the console as typed; {context}");
     }
     assert!(got.contains(&0x03), "Ctrl+C must reach the console; {context}");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    assert!(registry.is_session_live(id), "Ctrl+C must not kill plink");
+    assert!(registry.is_session_live(id), "Ctrl+C must not end the session");
     let _ = registry.close_session(id);
 }
 
 /// A GNS3 router console sends nothing until something happens on the
 /// device: measured on a GNS3 IOS console, 0 bytes in the first 5 s. Thyrion
 /// waited for output before it stopped showing "Connecting to host:port",
-/// so a saved console session looked like it took ~10 s to connect. plink's
-/// own socket shows the connection is up while not one byte has arrived.
-#[cfg(any(target_os = "linux", windows))]
+/// so a saved console session looked like it took ~10 s to connect. Thyrion
+/// connects consoles itself (telnet.rs) and knows the moment it has.
 #[tokio::test]
 async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
-    use plinky_core::transport::tcp_state::has_established_tcp;
-    if !plink_available() {
-        eprintln!("skipping: plink not installed");
-        return;
-    }
     // The router: accepts, then says nothing.
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -290,12 +273,10 @@ async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
     registry
         .create_plink_session(id, "R3 (plinky-test, not saved)", Some(target), None, 80, 24, tx)
         .unwrap();
-    let pid = registry.process_id(id).expect("plink's process id");
-
     let started = std::time::Instant::now();
     let mut connected = false;
     while started.elapsed() < Duration::from_secs(3) {
-        if has_established_tcp(pid) == Some(true) {
+        if registry.is_connected(id) == Some(true) {
             connected = true;
             break;
         }
@@ -306,50 +287,17 @@ async fn a_silent_console_is_seen_connected_before_it_prints_anything() {
     while let Ok(chunk) = rx.try_recv() {
         printed.extend_from_slice(&chunk);
     }
-    assert!(connected, "plink's connection was never seen established");
+    assert!(connected, "the connection was never seen established");
     // No login on a console: its keys are set up from the first one.
     assert_eq!(registry.has_begun(id), Some(true), "a telnet console has no login to wait for");
     assert!(took < Duration::from_secs(1), "seen only after {took:?}");
-    // Windows' pseudo-console announces its own modes when plink starts
-    // (ESC[?9001h ESC[?1004h, seen on CI): terminal setup, not the device.
     let text = String::from_utf8_lossy(&printed);
-    let without_setup = strip_control_sequences(&text);
-    assert!(without_setup.trim().is_empty(), "the console printed nothing, yet got {text:?}");
+    assert!(text.trim().is_empty(), "the console printed nothing, yet got {text:?}");
     let _ = registry.close_session(id);
-}
-
-/// Text with CSI sequences (ESC [ ... final letter) removed.
-#[cfg(any(target_os = "linux", windows))]
-fn strip_control_sequences(text: &str) -> String {
-    let mut out = String::new();
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' && chars.peek() == Some(&'[') {
-            chars.next();
-            for c in chars.by_ref() {
-                if c.is_ascii_alphabetic() || c == '~' {
-                    break;
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-#[cfg(any(target_os = "linux", windows))]
-#[test]
-fn pseudo_console_setup_is_not_device_output() {
-    // Exactly what Windows CI's plink printed on a silent console.
-    assert_eq!(strip_control_sequences("\u{1b}[?9001h\u{1b}[?1004h"), "");
-    // A device's own text stays, colours or not.
-    assert_eq!(strip_control_sequences("\u{1b}[1mR1#\u{1b}[0m"), "R1#");
 }
 
 /// What a console receives for "show vlan" and Enter. `negotiate` offers
 /// WILL ECHO and WILL SUPPRESS-GO-AHEAD on connect, as IOS behind GNS3 does.
-#[cfg(unix)]
 async fn line_end_sent(protocol: plinky_core::transport::plink::TargetProtocol, negotiate: bool) -> Vec<u8> {
     use std::io::Read;
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -397,9 +345,9 @@ async fn line_end_sent(protocol: plinky_core::transport::plink::TargetProtocol, 
     registry
         .create_plink_session(&id, "SW1 (plinky-test, not saved)", Some(target), None, 80, 24, tx)
         .unwrap();
-    // Let plink connect and settle its terminal modes (a console that
-    // negotiates nothing prints nothing to wait for).
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    // Let it connect and negotiate (a console that negotiates nothing
+    // prints nothing to wait for).
+    tokio::time::sleep(Duration::from_millis(500)).await;
     registry.write_input(&id, b"show vlan").unwrap();
     registry.write_input(&id, b"\r").unwrap();
     let got = tokio::task::spawn_blocking(move || got_rx.recv_timeout(Duration::from_secs(8)).unwrap_or_default())
@@ -412,32 +360,51 @@ async fn line_end_sent(protocol: plinky_core::transport::plink::TargetProtocol, 
 }
 
 /// A console server that negotiates nothing (ser2net and similar): PuTTY
-/// edits the line locally there and ends it with CR LF. plink's own local
-/// editing turned Enter into a bare LF (its pty maps CR to NL), measured as
-/// "show vlan\n" at the console. Raw now gets CR LF exactly; telnet gets
-/// CR NUL LF, since plink writes every CR as CR NUL (RFC 854), which the
-/// telnet server reads as CR.
-#[cfg(unix)]
+/// ends the line with CR LF there. plink's own local editing turned Enter
+/// into a bare LF (its pty maps CR to NL), measured as "show vlan\n" at the
+/// console.
 #[tokio::test]
 async fn enter_on_a_console_that_negotiates_nothing_ends_the_line_with_crlf() {
     use plinky_core::transport::plink::TargetProtocol;
-    if !plink_available() {
-        eprintln!("skipping: plink not installed");
-        return;
-    }
     assert_eq!(line_end_sent(TargetProtocol::Raw, false).await, b"\r\n");
-    assert_eq!(line_end_sent(TargetProtocol::Telnet, false).await, b"\r\0\n");
+    assert_eq!(line_end_sent(TargetProtocol::Telnet, false).await, b"\r\n");
 }
 
-/// A console that echoes (IOS behind GNS3) keeps plink's own Enter, CR NUL:
-/// an extra LF there would be read as a second Enter.
-#[cfg(unix)]
+/// A console that echoes (IOS behind GNS3) gets the telnet newline, CR LF,
+/// as PuTTY sends it ("Return key sends Telnet New Line"): one Enter, not
+/// a CR and a second line end.
 #[tokio::test]
-async fn enter_on_an_echoing_console_is_left_as_plink_sends_it() {
+async fn enter_on_an_echoing_console_is_one_telnet_newline() {
     use plinky_core::transport::plink::TargetProtocol;
-    if !plink_available() {
-        eprintln!("skipping: plink not installed");
-        return;
+    assert_eq!(line_end_sent(TargetProtocol::Telnet, true).await, b"\r\n");
+}
+
+/// A console nobody listens on: the tab says why, as plink did, and the
+/// session ends instead of sitting at "connecting".
+#[tokio::test]
+async fn a_refused_console_says_so_and_ends() {
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let registry = SessionRegistry::new();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let target = plinky_core::transport::plink::ExplicitTarget {
+        hostname: "127.0.0.1".into(),
+        port,
+        username: None,
+        protocol: plinky_core::transport::plink::TargetProtocol::Telnet,
+    };
+    let id = "refused-r9";
+    registry.create_plink_session(id, "R9 (plinky-test, not saved)", Some(target), None, 80, 24, tx).unwrap();
+    let mut text = Vec::new();
+    // Windows retries a refused connect for about 2 s before it gives up.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while !String::from_utf8_lossy(&text).contains("Session closed") {
+        match tokio::time::timeout_at(deadline, rx.recv()).await {
+            Ok(Some(chunk)) => text.extend_from_slice(&chunk),
+            _ => break,
+        }
     }
-    assert_eq!(line_end_sent(TargetProtocol::Telnet, true).await, b"\r\0");
+    let text = String::from_utf8_lossy(&text);
+    assert!(text.contains("FATAL ERROR: Network error: Connection refused"), "got {text:?}");
+    assert!(registry.is_session_ended(id));
+    assert_eq!(registry.is_connected(id), Some(false));
 }

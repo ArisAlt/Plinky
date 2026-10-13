@@ -8,9 +8,13 @@ page is [README.md](../README.md).
 ## 1. Overview
 
 Thyrion is a desktop terminal and session manager built on PuTTY's
-command-line tools. SSH, telnet and raw connections are made by `plink`, file
-transfers by `psftp`; Thyrion does not implement SSH itself. Serial consoles
-use a native serial transport so they can send Break.
+command-line tools. SSH connections are made by `plink`, file transfers by
+`psftp`; Thyrion does not implement SSH itself. Telnet and raw consoles are
+connected by Thyrion (`transport/telnet.rs`): through plink.exe on Windows they
+had no local echo, a fixed 80x24 window and lost all input after a Ctrl+Z. A
+saved telnet session that uses a proxy still goes through plink, and
+`THYRION_TELNET_VIA_PLINK=1` sends them all through plink as before. Serial
+consoles use a native serial transport so they can send Break.
 
 Thyrion reads and writes PuTTY's own saved sessions (`~/.putty/sessions` or
 `PUTTYDIR` on Linux, the registry on Windows) and adds tabs, split layouts, a
@@ -47,7 +51,8 @@ flowchart TD
         SyncRouter["SyncInputRouter (Live-Only Filtering & Paste Guard)"]
         SessionMgr["Session Manager & Scrollback Ring Buffers"]
         ShellBootstrap["Shell Integration Bootstrap (OSC 133 + OSC 7)"]
-        PlinkRunner["Plink Transport (plink: SSH / telnet / raw)"]
+        PlinkRunner["Plink Transport (plink: SSH)"]
+        NetRunner["Telnet / Raw Transport (native)"]
     end
 
     subgraph PuTTY_Subsystem ["crates/putty-compat (Standalone PuTTY Crate)"]

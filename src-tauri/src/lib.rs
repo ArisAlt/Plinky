@@ -244,16 +244,16 @@ async fn ack_terminal_output(
 struct ConnectedSessions(std::sync::Mutex<std::collections::HashSet<String>>);
 
 /// Tells the page, as `session:connected`, when a session's TCP connection
-/// is up, by watching plink's own socket (tcp_state.rs). A console that
+/// is up: told by the transport for telnet and raw, which Thyrion connects
+/// itself, and seen on plink's own socket otherwise (tcp_state.rs). A console that
 /// prints nothing until something happens on the device otherwise showed
 /// "Connecting to host:port" long after it had connected: measured on a
 /// GNS3 IOS console, 0 bytes in the first 5 s. Linux and Windows can tell;
 /// where it can't be told the watcher stops at once and the page waits for
 /// output, as before.
 fn watch_connection(app: &tauri::AppHandle, id: String) {
-    use plinky_core::transport::tcp_state::has_established_tcp;
     let registry = app.state::<Arc<SessionRegistry>>().inner().clone();
-    let Some(pid) = registry.process_id(&id) else { return };
+    let Some(instance) = registry.instance_of(&id) else { return };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         // A connect that fails takes the OS's connect timeout; a session
@@ -262,26 +262,26 @@ fn watch_connection(app: &tauri::AppHandle, id: String) {
         let deadline = started + std::time::Duration::from_secs(120);
         while tokio::time::Instant::now() < deadline {
             // Closed or restarted under the same id: this watch is over.
-            if registry.process_id(&id) != Some(pid) {
+            if registry.instance_of(&id) != Some(instance) {
                 return;
             }
-            // plink exited before it connected (refused, unreachable). A
-            // tab behind the front one has no view to hear it, and kept its
-            // "connecting" spinner; on Windows the table then showed no
-            // rows forever rather than ending this loop.
+            // The connect failed (refused, unreachable). A tab behind the
+            // front one has no view to hear it, and kept its "connecting"
+            // spinner; on Windows the table then showed no rows forever
+            // rather than ending this loop.
             if registry.is_session_ended(&id) {
                 let _ = app.emit("session:ended", &id);
                 return;
             }
-            match has_established_tcp(pid) {
+            match registry.is_connected(&id) {
                 Some(true) => {
                     app.state::<ConnectedSessions>().0.lock().unwrap().insert(id.clone());
                     let _ = app.emit("session:connected", &id);
                     return;
                 }
                 // Every 10 ms while a connect is still quick; after a second
-                // (a slow or unreachable host), every 100 ms: each look reads
-                // the system's connection and process tables.
+                // (a slow or unreachable host), every 100 ms: for plink each
+                // look reads the system's connection and process tables.
                 Some(false) => {
                     let pause = if started.elapsed() < std::time::Duration::from_secs(1) { 10 } else { 100 };
                     tokio::time::sleep(std::time::Duration::from_millis(pause)).await

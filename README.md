@@ -3,9 +3,9 @@
 **A desktop terminal and session manager built on PuTTY.**
 
 Thyrion is for system administrators, network engineers and anyone who works
-over SSH, telnet or serial consoles. PuTTY's own tools make the connections
-and transfer the files; Thyrion adds tabs, split screens, a file browser, a
-password vault and a few everyday time-savers.
+over SSH, telnet or serial consoles. PuTTY's own tools make the SSH
+connections and transfer the files; Thyrion adds tabs, split screens, a file
+browser, a password vault and a few everyday time-savers.
 
 It uses the sessions you have already saved in PuTTY, so there is nothing to
 import. Sessions you add or change in Thyrion are saved in the same place, so

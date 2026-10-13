@@ -100,14 +100,13 @@ export const tests = [
   }],
 
   ['Enter ends the line with a telnet newline and nothing else', async ({ app, r1 }) => {
-    // PuTTY sends CR LF ("Return key sends Telnet New Line"); plink sends
-    // CR NUL. Both are a telnet newline. A bare LF or a doubled line end
-    // would run the command twice on a router.
+    // CR LF, as PuTTY sends it ("Return key sends Telnet New Line"). A bare
+    // LF or a doubled line end would run the command twice on a router.
     r1.clear();
     await command(app, r1, 'ping 192.0.2.1');
     await sleep(150);
     const tail = r1.text().slice('ping 192.0.2.1'.length);
-    assert.ok(tail === '\r\n' || tail === '\r\0', `line end was ${JSON.stringify(tail)}`);
+    assert.equal(JSON.stringify(tail), JSON.stringify('\r\n'));
     assert.deepEqual(r1.lines, ['ping 192.0.2.1']);
   }],
 
@@ -154,23 +153,14 @@ export const tests = [
     );
   }],
 
-  ['Ctrl+Z reaches the router (Cisco: leave configuration mode)', async ({ app, r1 }) => {
-    if (process.platform !== 'win32') {
-      assert.equal(hex(await bytesFor(app, r1, 'Ctrl+Z')), '1a');
-      return;
-    }
-    // Windows, for now: plink.exe's console input ends at a Ctrl+Z and never
-    // reads again (plink.rs, hold_back_ctrl_z). Thyrion holds it back, says
-    // so, and typing goes on working.
-    await app.run((e) => e.focusTerminal());
+  ['Ctrl+Z reaches the router (Cisco: leave configuration mode), and typing goes on', async ({ app, r1 }) => {
+    // Through plink.exe on Windows, a Ctrl+Z ended its console input for
+    // good: the tab looked connected and took no more typing. Consoles are
+    // connected by Thyrion itself now (telnet.rs).
+    assert.equal(hex(await bytesFor(app, r1, 'Ctrl+Z')), '1a');
     r1.clear();
-    await app.key('Ctrl+Z');
-    await app.waitForScreen("Ctrl+Z can't be sent through plink on Windows", { timeoutMs: 3000 });
     await app.type('x');
     await r1.waitForBytes('x', { timeoutMs: 3000 });
-    assert.ok(!r1.received.includes(0x1a), 'no Ctrl+Z reached the router');
-    await app.key('Ctrl+C');
-    await r1.waitForBytes('\x03');
   }],
 
   ['Ctrl+Shift+6 sends Ctrl+^ (Cisco: abort a ping or traceroute), like PuTTY', async ({ app, r1 }) => {
@@ -417,18 +407,6 @@ export const tests = [
   ['when the router hangs up the tab says so at once, and Reconnect works', async ({ app, r1 }) => {
     const before = r1.connections;
     r1.hangUp();
-    if (process.platform === 'win32') {
-      // TEMP (ci/e2e-windows): what the tab goes through after a hang-up.
-      const seen = [];
-      for (let i = 0; i < 30; i++) {
-        const t = (await app.tabs()).find((x) => x.title === 'R1');
-        const last = seen.at(-1);
-        if (!last || last.s !== t?.status) seen.push({ ms: i * 100, s: t?.status });
-        await sleep(100);
-      }
-      console.log('      DIAG hang-up statuses', JSON.stringify(seen), 'connections', before, '->', r1.connections);
-      console.log('      DIAG screen', JSON.stringify((await app.screen()).filter((l) => l.trim()).slice(-4)));
-    }
     await app.waitForTab('R1', 'disconnected', { timeoutMs: 3000 });
     await app.waitFor(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Reconnect' && window.__e2e.visible(x));

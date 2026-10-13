@@ -194,7 +194,7 @@ fn take_over_line_discipline(fd: std::os::unix::io::RawFd, d: &mut LineDisciplin
 /// typed (never the prompt), other control keys as ^C and the like, and
 /// nothing for arrow and function keys, which only move the device's cursor.
 #[derive(Default)]
-struct LocalEcho {
+pub(crate) struct LocalEcho {
     /// Characters typed on this line, so Backspace stops at the prompt.
     col: usize,
     /// 0: text; 1: after ESC; 2: inside an escape sequence.
@@ -203,7 +203,7 @@ struct LocalEcho {
 }
 
 impl LocalEcho {
-    fn echo(&mut self, typed: &[u8]) -> Vec<u8> {
+    pub(crate) fn echo(&mut self, typed: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         for &b in typed {
             match self.esc {
@@ -335,10 +335,6 @@ mod win_console {
     }
 
     fn record(what: String) {
-        // TEMP (ci/e2e-windows): the plain-console echo investigation.
-        if std::env::var_os("THYRION_DEBUG_CONSOLE").is_some() {
-            eprintln!("console-mode: {what}");
-        }
         if let Ok(mut s) = LAST.lock() {
             *s = what;
         }
