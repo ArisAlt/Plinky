@@ -379,8 +379,9 @@ export const tests = [
     await app.key('Ctrl+Tab');
     await sleep(300);
     const tabs = await app.tabs();
+    // TEMP (ci/e2e-windows): both sessions' ids, for the hang-up diagnostic.
+    ctx.diagIds = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => `${el.dataset.tabId}${el.dataset.tabActive === 'true' ? '*' : ''}`));
     assert.deepEqual(tabs.map((t) => t.status), ['live', 'live']);
-    void ctx;
   }],
 
   ['Ctrl+Shift+W asks before closing a connected tab', async ({ app, r1 }) => {
@@ -404,7 +405,7 @@ export const tests = [
     await waitUntil(() => r1.open === open - 1, { what: 'the connection to close', timeoutMs: 3000 });
   }],
 
-  ['when the router hangs up the tab says so at once, and Reconnect works', async ({ app, r1 }) => {
+  ['when the router hangs up the tab says so at once, and Reconnect works', async ({ app, r1, ctx }) => {
     const before = r1.connections;
     const openBefore = r1.open;
     r1.hangUp();
@@ -412,8 +413,9 @@ export const tests = [
       // TEMP (ci/e2e-windows): did the backend see the hang-up?
       await sleep(1500);
       const ids = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => el.dataset.tabId));
-      const ended = await Promise.all(ids.map((id) => app.invoke('is_session_ended', { sessionId: id })));
-      console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs', JSON.stringify(ids), 'ended', JSON.stringify(ended), 'status', JSON.stringify(await app.tabs()));
+      const both = (ctx.diagIds ?? []).map((x) => x.replace('*', ''));
+      const ended = await Promise.all(both.map((id) => app.invoke('is_session_ended', { sessionId: id })));
+      console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs before close', JSON.stringify(ctx.diagIds), 'ended', JSON.stringify(ended), 'tabs now', JSON.stringify(ids), JSON.stringify(await app.tabs()));
     }
     await app.waitForTab('R1', 'disconnected', { timeoutMs: 3000 });
     await app.waitFor(() => {

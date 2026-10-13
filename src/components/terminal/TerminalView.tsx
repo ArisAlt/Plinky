@@ -774,6 +774,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
     markSize();
+    // Registered here, before anything fits the terminal: the first fit
+    // comes before the other resize handler below exists.
+    term.onResize(markSize);
     const highlighter = new KeywordHighlighter(term, tab.activeHighlighting !== false);
     highlighterRef.current = highlighter;
     highlighter.setTheme(terminalThemeRef.current.theme, !!terminalThemeRef.current.light);
@@ -1210,7 +1213,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
 
     term.onResize(({ cols, rows }) => {
-      markSize();
       if (isLivePtyRef.current) {
         resizeTerminal(tab.id, cols, rows);
       }
