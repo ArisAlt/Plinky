@@ -13,6 +13,31 @@ export const isWindows = process.platform === 'win32';
 const IDENTIFIER = 'com.thyrion.desktop';
 export const SESSIONS_KEY = 'HKCU\\Software\\SimonTatham\\PuTTY\\Sessions';
 
+/** WebView2's DevTools port in the test build. WebView2 ignores
+ *  WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS once the app passes arguments of
+ *  its own, as Tauri always does (measured on the runner: app and WebView2
+ *  up, nothing listening), so the port is set in the test build's window
+ *  config (testBuildConfig) and is fixed. Never in a release build: with it
+ *  any local program could drive the page, the vault included. */
+export const DEVTOOLS_PORT = 9333;
+
+/** A `tauri build --config` overlay for the test build: the window as
+ *  tauri.conf.json has it, plus WebView2's DevTools port. Tauri's own
+ *  default arguments are kept, since setting any replaces them. */
+export function testBuildConfig(confPath, outPath) {
+  const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
+  const windows = conf.app.windows.map((w) => ({
+    ...w,
+    additionalBrowserArgs: [
+      '--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection',
+      `--remote-debugging-port=${DEVTOOLS_PORT}`,
+      '--remote-allow-origins=*',
+    ].join(' '),
+  }));
+  fs.writeFileSync(outPath, JSON.stringify({ app: { windows } }, null, 2));
+  return outPath;
+}
+
 export function assertThrowawayMachine() {
   if (process.env.CI !== 'true') {
     throw new Error(

@@ -25,7 +25,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startDisplay } from './lib/display.mjs';
 import { launchApp } from './lib/app.mjs';
-import { isWindows, resetProfile, assertThrowawayMachine } from './lib/windows.mjs';
+import { isWindows, resetProfile, assertThrowawayMachine, testBuildConfig } from './lib/windows.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -49,8 +49,12 @@ function preflight() {
   }
   if (flag('--build')) {
     console.log(color.dim('building the app for testing (debug, frontend embedded)...'));
+    // On Windows the test build also opens WebView2's DevTools port.
+    const extra = isWindows
+      ? ['--config', testBuildConfig(path.join(root, 'src-tauri/tauri.conf.json'), path.join(os.tmpdir(), 'thyrion-e2e.conf.json'))]
+      : [];
     // npx is npx.cmd on Windows, which Node starts only through a shell.
-    const r = spawnSync('npx', ['tauri', 'build', '--debug', '--no-bundle', '--ignore-version-mismatches'], {
+    const r = spawnSync('npx', ['tauri', 'build', '--debug', '--no-bundle', '--ignore-version-mismatches', ...extra], {
       cwd: root, stdio: ['ignore', 'inherit', 'inherit'], shell: isWindows,
     });
     if (r.status !== 0) throw new Error('the build failed');

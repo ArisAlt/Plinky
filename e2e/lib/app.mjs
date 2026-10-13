@@ -13,7 +13,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { Inspector, CdpInspector } from './inspector.mjs';
-import { isWindows, killTree, windowsDiagnosis } from './windows.mjs';
+import { isWindows, killTree, windowsDiagnosis, DEVTOOLS_PORT } from './windows.mjs';
 import { installHelpers } from './page.mjs';
 import { freePort, waitUntil } from './fixtures.mjs';
 
@@ -21,16 +21,13 @@ export async function launchApp({ binary, display, home, args = [], env = {}, lo
   // Short: socket paths are limited to 108 bytes. (Windows has no sockets
   // here; the folder is only cleaned up.)
   const runtime = fs.mkdtempSync(isWindows ? path.join(os.tmpdir(), 'pe2e-') : '/tmp/pe2e-');
-  const port = await freePort();
+  const port = isWindows ? DEVTOOLS_PORT : await freePort();
   const log = logFile ?? path.join(home, 'app.log');
   // On Windows the app needs the system's own variables (SystemRoot, the
-  // user's folders) and WebView2 is told to open its DevTools port; the
-  // profile is reset by run.mjs instead (lib/windows.mjs).
+  // user's folders); its DevTools port is in the test build (windows.mjs)
+  // and the profile is reset by run.mjs.
   const appEnv = isWindows ? {
     ...process.env,
-    // --remote-allow-origins: Chromium refuses DevTools sockets from an
-    // origin it doesn't know; the suite's socket is local and its own.
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=*`,
     ...display.env,
     ...env,
   } : {
