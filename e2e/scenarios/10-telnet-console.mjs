@@ -414,8 +414,8 @@ export const tests = [
       await sleep(1500);
       const ids = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => el.dataset.tabId));
       const both = (ctx.diagIds ?? []).map((x) => x.replace('*', ''));
-      const ended = await Promise.all(both.map((id) => app.invoke('is_session_ended', { sessionId: id })));
-      console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs before close', JSON.stringify(ctx.diagIds), 'ended', JSON.stringify(ended), 'tabs now', JSON.stringify(ids), JSON.stringify(await app.tabs()));
+      const ended = await Promise.all(both.map((id) => app.invoke('session_debug', { sessionId: id })));
+      console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs before close', JSON.stringify(ctx.diagIds), 'backend', JSON.stringify(ended, null, 1), 'tabs now', JSON.stringify(ids), JSON.stringify(await app.tabs()));
     }
     await app.waitForTab('R1', 'disconnected', { timeoutMs: 3000 });
     await app.waitFor(() => {
