@@ -69,6 +69,9 @@ export const tests = [
     assert.ok(second.exited, 'the second launch hands over and exits');
     await app.waitForTab('R1', 'live', { timeoutMs: 5000 });
     assert.equal((await app.tabs()).length, before + 1);
+    // A console tab is ready as soon as it opens; the connection follows it
+    // (on Windows a moment later than on Linux).
+    await waitUntil(() => r1.connections === 1, { what: 'R1 connected', timeoutMs: 5000 });
     assert.equal(r1.connections, 1);
   }],
 
@@ -95,8 +98,12 @@ export const tests = [
       '--telnet', '127.0.0.1', String(consoles[0].port), '--title', 'R1 again',
     ]);
     await app.waitForTab('R1 again', 'live', { timeoutMs: 5000 });
-    await sleep(1500);
-    const behind = (await app.tabs()).find((t) => t.title === 'Down');
+    // Refused takes ~2 s on Windows (it retries the connect before giving
+    // up), at once on Linux: wait for it, without opening the tab.
+    const behind = await waitUntil(async () => {
+      const t = (await app.tabs()).find((x) => x.title === 'Down');
+      return t && t.status !== 'connecting' ? t : null;
+    }, { what: 'the tab behind to settle', timeoutMs: 8000 }).catch(async () => (await app.tabs()).find((t) => t.title === 'Down'));
     await app.run((e) => e.click(e.tabEl('Down')));
     await sleep(1000);
     const opened = (await app.tabs()).find((t) => t.title === 'Down');
@@ -113,8 +120,8 @@ export const tests = [
     });
     const started = Date.now();
     await app.waitForTab('Core R4', 'live', { timeoutMs: 3000 });
-    assert.equal(r4.connections, 1);
     assert.ok(Date.now() - started < 2000);
+    await waitUntil(() => r4.connections === 1, { what: 'Core R4 connected', timeoutMs: 5000 });
     assert.doesNotMatch(await app.screenText(), /connecting/i);
   }],
 
