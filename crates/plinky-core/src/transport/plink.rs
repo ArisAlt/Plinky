@@ -360,6 +360,56 @@ mod win_console {
         fn SetConsoleMode(handle: isize, mode: u32) -> i32;
         fn CloseHandle(handle: isize) -> i32;
         fn SetConsoleCtrlHandler(handler: Option<Handler>, add: i32) -> i32;
+        fn SetConsoleCP(code_page: u32) -> i32;
+        fn SetConsoleOutputCP(code_page: u32) -> i32;
+    }
+
+    const CP_UTF8: u32 = 65001;
+
+    /// plink's console in UTF-8, both ways, once it starts.
+    ///
+    /// A pseudo console starts in the system's OEM code page (437 on an
+    /// English Windows), and plink writes the device's bytes to it as they
+    /// come: UTF-8 from a router showed as code page 437, "Καλημέρα" as
+    /// "╬Ü╬▒╬╗╬╖╬╝╬¡╧ü╬▒" (e2e suite on a Windows runner), and what was typed
+    /// went to plink in that code page too.
+    pub(super) fn use_utf8(pid: u32) {
+        HANDLER.call_once(|| {
+            // SAFETY: registers a plain function with no captured state.
+            unsafe { SetConsoleCtrlHandler(Some(swallow), 1) };
+        });
+        let _one = ATTACH.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: plain Win32 calls; the console is freed on every path
+        // after attaching, and our own given back if it was freed.
+        unsafe {
+            let mut freed = false;
+            // plink's console may not take an attach the very moment it
+            // starts; a few tries cover that.
+            let mut attached = false;
+            for _ in 0..20 {
+                if AttachConsole(pid) != 0 {
+                    attached = true;
+                    break;
+                }
+                if GetLastError() == ERROR_ACCESS_DENIED && !freed {
+                    FreeConsole();
+                    freed = true;
+                    continue;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if !attached {
+                record(format!("utf-8 for {pid}: attach failed: error {}", GetLastError()));
+            } else {
+                let input = SetConsoleCP(CP_UTF8) != 0;
+                let output = SetConsoleOutputCP(CP_UTF8) != 0;
+                record(format!("utf-8 for {pid}: input {input}, output {output}"));
+                FreeConsole();
+            }
+            if freed {
+                AttachConsole(ATTACH_PARENT_PROCESS);
+            }
+        }
     }
 
     /// A process is attached to one console at a time.
@@ -717,6 +767,10 @@ impl PlinkTransport {
             .map_err(|e| PlinkyError::PtyError(e.to_string()))?;
 
         let pid = child.process_id();
+        #[cfg(windows)]
+        if let Some(pid) = pid {
+            win_console::use_utf8(pid);
+        }
         let child = super::pump_pty_child(reader, child, out_tx, flow);
 
         if let Some(file) = pwfile {
