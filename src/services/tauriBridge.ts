@@ -679,7 +679,32 @@ export async function startTerminalSession(
   return { started: false };
 }
 
-export async function attachTerminalSession(
+// A tab's attach and detach, one after another. Switching away from a tab
+// and back detaches its session and attaches it again; the two raced (in
+// the page, and as IPC requests WebView2 handles concurrently), the detach
+// could land last, and the session's output then went only to scrollback:
+// the tab took no more output and never heard the device hang up (e2e
+// suite on a Windows runner).
+const attachChains = new Map<string, Promise<unknown>>();
+
+function attachInOrder<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+  const next = (attachChains.get(sessionId) ?? Promise.resolve()).catch(() => {}).then(task);
+  attachChains.set(sessionId, next);
+  next.finally(() => {
+    if (attachChains.get(sessionId) === next) attachChains.delete(sessionId);
+  }).catch(() => {});
+  return next;
+}
+
+export function attachTerminalSession(
+  sessionId: string,
+  fromSeq: number,
+  onData: (chunk: Uint8Array) => void
+): Promise<AttachInfo | null> {
+  return attachInOrder(sessionId, () => attachNow(sessionId, fromSeq, onData));
+}
+
+async function attachNow(
   sessionId: string,
   fromSeq: number,
   onData: (chunk: Uint8Array) => void
@@ -785,15 +810,17 @@ export async function ackTerminalOutput(sessionId: string, bytes: number): Promi
 }
 
 /** The tab left the screen: its session keeps running into scrollback. */
-export async function detachTerminalSession(sessionId: string): Promise<void> {
-  if (isTauriEnvironment()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('detach_terminal_session', { sessionId });
-    } catch {
-      // Already closed: nothing to detach.
+export function detachTerminalSession(sessionId: string): Promise<void> {
+  return attachInOrder(sessionId, async () => {
+    if (isTauriEnvironment()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('detach_terminal_session', { sessionId });
+      } catch {
+        // Already closed: nothing to detach.
+      }
     }
-  }
+  });
 }
 
 // Each tab's writes, one after another. Every keystroke is its own IPC

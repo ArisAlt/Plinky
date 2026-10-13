@@ -764,6 +764,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
 
     term.open(containerRef.current);
+    // The size xterm itself uses, for anything outside that needs it exact
+    // (the e2e suite compares it with the size the device was told; a
+    // size worked out from pixel widths can be a column off).
+    const markSize = () => {
+      if (term.element) {
+        term.element.dataset.cols = String(term.cols);
+        term.element.dataset.rows = String(term.rows);
+      }
+    };
+    markSize();
     const highlighter = new KeywordHighlighter(term, tab.activeHighlighting !== false);
     highlighterRef.current = highlighter;
     highlighter.setTheme(terminalThemeRef.current.theme, !!terminalThemeRef.current.light);
@@ -1200,6 +1210,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
 
     term.onResize(({ cols, rows }) => {
+      markSize();
       if (isLivePtyRef.current) {
         resizeTerminal(tab.id, cols, rows);
       }

@@ -87,6 +87,8 @@ export function installHelpers() {
     /** Columns and rows the terminal on screen shows. */
     termSize() {
       const term = activeXterm();
+      // The size xterm uses, where the page marks it (TerminalView).
+      if (term?.dataset.cols) return { cols: Number(term.dataset.cols), rows: Number(term.dataset.rows) };
       const rows = term?.querySelectorAll('.xterm-rows > div');
       const span = term?.querySelector('.xterm-char-measure-element');
       const screenEl = term?.querySelector('.xterm-screen');
