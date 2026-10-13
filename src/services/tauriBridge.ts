@@ -687,6 +687,14 @@ export async function startTerminalSession(
 // suite on a Windows runner).
 const attachChains = new Map<string, Promise<unknown>>();
 
+// TEMP (ci/e2e-windows): what the page did with a session, for the hang-up
+// investigation. Read by the e2e suite.
+export function trace(...what: unknown[]) {
+  const w = window as any;
+  (w.__thyrionTrace ??= []).push(`${Date.now() % 100000} ${what.map(String).join(' ')}`);
+  if (w.__thyrionTrace.length > 300) w.__thyrionTrace.shift();
+}
+
 function attachInOrder<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
   const next = (attachChains.get(sessionId) ?? Promise.resolve()).catch(() => {}).then(task);
   attachChains.set(sessionId, next);
@@ -701,7 +709,13 @@ export function attachTerminalSession(
   fromSeq: number,
   onData: (chunk: Uint8Array) => void
 ): Promise<AttachInfo | null> {
-  return attachInOrder(sessionId, () => attachNow(sessionId, fromSeq, onData));
+  trace('attach queued', sessionId);
+  return attachInOrder(sessionId, async () => {
+    trace('attach start', sessionId);
+    const info = await attachNow(sessionId, fromSeq, onData);
+    trace('attach done', sessionId, info ? 'ok' : 'null');
+    return info;
+  });
 }
 
 async function attachNow(
@@ -811,11 +825,14 @@ export async function ackTerminalOutput(sessionId: string, bytes: number): Promi
 
 /** The tab left the screen: its session keeps running into scrollback. */
 export function detachTerminalSession(sessionId: string): Promise<void> {
+  trace('detach queued', sessionId);
   return attachInOrder(sessionId, async () => {
+    trace('detach start', sessionId);
     if (isTauriEnvironment()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('detach_terminal_session', { sessionId });
+        trace('detach done', sessionId);
       } catch {
         // Already closed: nothing to detach.
       }

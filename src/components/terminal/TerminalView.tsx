@@ -8,6 +8,7 @@ import { terminalManager } from '../../services/terminalManager';
 import { 
   startTerminalSession, 
   attachTerminalSession,
+  trace,
   startSessionLog,
   stopSessionLog,
   sessionLogStatus,
@@ -937,6 +938,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         term.writeln(`\r\n\x1b[33m[Thyrion: ${mismatch}]\x1b[0m`);
       }
       if (text.includes('[Thyrion: Session closed') || text.includes('FATAL ERROR:')) {
+        trace('notice', tab.id, disposed ? 'disposed view' : 'live view');
         endedRef.current = true;
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);

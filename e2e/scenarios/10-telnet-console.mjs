@@ -415,6 +415,7 @@ export const tests = [
       const ids = await app.run(() => [...document.querySelectorAll('[data-tab-id]')].map((el) => el.dataset.tabId));
       const both = (ctx.diagIds ?? []).map((x) => x.replace('*', ''));
       const ended = await Promise.all(both.map((id) => app.invoke('session_debug', { sessionId: id })));
+      console.log('      DIAG trace', JSON.stringify(await app.run(() => (window.__thyrionTrace ?? []).slice(-40)), null, 1));
       console.log('      DIAG hang-up open', openBefore, '->', r1.open, 'tabs before close', JSON.stringify(ctx.diagIds), 'backend', JSON.stringify(ended, null, 1), 'tabs now', JSON.stringify(ids), JSON.stringify(await app.tabs()));
     }
     await app.waitForTab('R1', 'disconnected', { timeoutMs: 3000 });

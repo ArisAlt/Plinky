@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PuttySession, TerminalTab, SyncChannel, SplitLayoutMode } from './types/session';
-import { listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded, setSessionLocked } from './services/tauriBridge';
+import { trace, listPuttySessions, writePuttySession, writeTerminalInput, closeTerminalSession, SHOW_HOST_KEYS_EVENT, takeOpenRequests, listenOpenRequests, startSessionInBackground, OpenRequest, listenSessionConnected, isSessionConnected, listenSessionEnded, isSessionEnded, setSessionLocked } from './services/tauriBridge';
 import { tabColorHex, TAB_COLORS } from './services/tabColors';
 import { newId } from './services/ids';
 import { tabForOpenRequest, throttle } from './services/cliOpen';
@@ -271,6 +271,7 @@ export const App: React.FC = () => {
   // is attached, and a tab in the background whose router hung up stayed
   // "live" with no Reconnect (e2e suite on a Windows runner).
   const markEnded = (id: string) => {
+    trace('ended event', id);
     setTabs(prev => prev.map(t => (t.id === id && t.status !== 'disconnected' ? { ...t, status: 'disconnected' } : t)));
   };
   useEffect(() => {
