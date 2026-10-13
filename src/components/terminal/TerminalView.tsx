@@ -621,6 +621,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     highlighterRef.current?.setEnabled(tab.activeHighlighting !== false);
   }, [tab.activeHighlighting]);
   const reachedLiveRef = useRef(false);
+  // The session's process has ended ("[Thyrion: Session closed"). Output
+  // after that can't mean it is live again: on Windows the pseudo console
+  // repaints once plink exits, and for a telnet or raw console "any output
+  // means connected" turned a hung-up tab back to live 100 ms after it went
+  // disconnected -- no Reconnect button, and typing went nowhere (e2e suite
+  // on a Windows runner). Only a reconnect clears it.
+  const endedRef = useRef(false);
   // The tab's broadcast channel, for a reconnect to put the session back on.
   const syncChannelRef = useRef(tab.syncChannel);
   syncChannelRef.current = tab.syncChannel;
@@ -917,6 +924,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         term.writeln(`\r\n\x1b[33m[Thyrion: ${mismatch}]\x1b[0m`);
       }
       if (text.includes('[Thyrion: Session closed') || text.includes('FATAL ERROR:')) {
+        endedRef.current = true;
         onUpdateTab(tab.id, { status: 'disconnected' });
         setDetectedPasswordPrompt(null);
         // A FATAL ERROR after the session was live is a dropped connection
@@ -929,6 +937,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           scheduleAutoReconnectRef.current();
         }
         reachedLiveRef.current = false;
+      } else if (endedRef.current) {
+        // A process that has ended: nothing it printed last changes it.
       } else if (isPreauthPattern && !reachedLiveRef.current) {
         // Only before the login is over. After it, text that looks like a
         // login is the session's own output: Windows' pseudo-console
@@ -1072,6 +1082,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (disposed) return;
       recentOutputRef.current = '';
       reachedLiveRef.current = false; // a new login, shown as one
+      endedRef.current = false; // a new process
       typedRef.current = { line: '', submitted: null };
       autoLoginSentRef.current = { user: false, password: false };
       commandRunRef.current = false; // a new connection logs in again

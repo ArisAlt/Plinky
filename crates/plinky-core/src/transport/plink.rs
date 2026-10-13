@@ -335,6 +335,10 @@ mod win_console {
     }
 
     fn record(what: String) {
+        // TEMP (ci/e2e-windows): the plain-console echo investigation.
+        if std::env::var_os("THYRION_DEBUG_CONSOLE").is_some() {
+            eprintln!("console-mode: {what}");
+        }
         if let Ok(mut s) = LAST.lock() {
             *s = what;
         }

@@ -70,6 +70,22 @@ impl ActiveSession {
         }
     }
 
+    /// Starts a session's logon actions, caught up with what it has
+    /// already printed.
+    ///
+    /// The script used to be set only after the spawn returned, and a
+    /// device that shows its prompt the moment it connects had printed it
+    /// by then: the script waited for a prompt that never came again, and
+    /// no logon action was typed (e2e suite on a Windows runner, where the
+    /// prompt won that race every time).
+    fn start_logon(&mut self, script: super::expect::Expect, locked: bool) {
+        self.logon = Some(script);
+        let seen = self.scrollback.to_vec();
+        if !seen.is_empty() {
+            self.run_logon(&seen, locked);
+        }
+    }
+
     fn feed_tap(&mut self, chunk: &[u8]) {
         if let Some(tap) = &self.tap {
             if let Err(std::sync::mpsc::TrySendError::Disconnected(_)) = tap.try_send(chunk.to_vec()) {
@@ -948,9 +964,10 @@ impl SessionRegistry {
 
     /// The session's logon actions, run once its login is over.
     pub fn set_logon_actions(&self, id: &str, script: super::expect::Expect) -> Result<()> {
+        let locked = self.is_input_locked(id);
         let mut lock = self.sessions.lock().unwrap();
         let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
-        session.logon = Some(script);
+        session.start_logon(script, locked);
         Ok(())
     }
 
@@ -1052,5 +1069,82 @@ impl SessionRegistry {
     pub fn is_session_live(&self, id: &str) -> bool {
         let lock = self.sessions.lock().unwrap();
         lock.get(id).map(|s| s.state_machine.is_live()).unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+mod logon_tests {
+    use super::*;
+
+    /// Records what is written to it.
+    struct Recorder(Arc<Mutex<Vec<u8>>>);
+
+    impl Transport for Recorder {
+        fn write(&mut self, data: &[u8]) -> Result<()> {
+            self.0.lock().unwrap().extend_from_slice(data);
+            Ok(())
+        }
+        fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+        fn kill(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn is_alive(&mut self) -> bool {
+            true
+        }
+    }
+
+    fn session(written: Arc<Mutex<Vec<u8>>>) -> ActiveSession {
+        let mut state_machine = PreAuthStateMachine::new();
+        state_machine.force_live();
+        ActiveSession {
+            id: "t".into(),
+            name: "R5".into(),
+            transport: Box::new(Recorder(written)),
+            state_machine,
+            scrollback: ScrollbackRingBuffer::new(4096),
+            subscriber: Arc::new(Mutex::new(None)),
+            log: None,
+            flow: Arc::new(FlowGate::new(1 << 20)),
+            instance: 0,
+            jump_login: None,
+            expect: None,
+            tap: None,
+            logon: None,
+        }
+    }
+
+    fn actions() -> crate::session::expect::Expect {
+        crate::session::expect::logon_actions(&[(">".into(), "terminal length 0".into())]).unwrap()
+    }
+
+    #[test]
+    fn a_prompt_printed_before_the_logon_actions_were_set_still_starts_them() {
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let mut s = session(written.clone());
+        // The device greeted before the script was in place.
+        s.scrollback.push(b"\r\nR5>");
+        s.start_logon(actions(), false);
+        assert_eq!(String::from_utf8_lossy(&written.lock().unwrap()), "terminal length 0\r");
+    }
+
+    #[test]
+    fn a_locked_tab_types_no_logon_action_even_after_the_prompt() {
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let mut s = session(written.clone());
+        s.scrollback.push(b"\r\nR5>");
+        s.start_logon(actions(), true);
+        assert!(written.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn with_nothing_printed_yet_the_logon_actions_wait_for_the_prompt() {
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let mut s = session(written.clone());
+        s.start_logon(actions(), false);
+        assert!(written.lock().unwrap().is_empty());
+        s.run_logon(b"\r\nR5>", false);
+        assert_eq!(String::from_utf8_lossy(&written.lock().unwrap()), "terminal length 0\r");
     }
 }
