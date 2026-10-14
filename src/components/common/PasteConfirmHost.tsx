@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ClipboardPaste, Eye } from 'lucide-react';
 import {
   setPasteConfirmListener, setPasteConfirmMode, PasteRequest,
@@ -36,7 +36,10 @@ export const PasteConfirmHost: React.FC = () => {
     setReq(null);
   };
 
-  useEffect(() => {
+  // A layout effect: Escape works from the moment the window is on screen.
+  // A plain effect runs after the paint, and an Escape in between was lost:
+  // the window stayed open (e2e suite, Linux CI).
+  useLayoutEffect(() => {
     if (!req) return;
     const back = document.activeElement as HTMLElement | null;
     pasteRef.current?.focus();
