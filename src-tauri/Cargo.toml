@@ -1,6 +1,6 @@
 [package]
 name = "thyrion"
-version = "0.2.5"
+version = "0.2.6"
 description = "Thyrion - a terminal and session manager built on PuTTY"
 edition = "2021"
 license = "GPL-3.0-only"
