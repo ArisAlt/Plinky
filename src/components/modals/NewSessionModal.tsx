@@ -70,6 +70,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [isNetworkDevice, setIsNetworkDevice] = useState(false);
   const [vaultEnablePassword, setVaultEnablePassword] = useState('');
   const [vaultSaveError, setVaultSaveError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   // The vault entry this session already uses, when editing. Its password
   // isn't shown: left blank, it stays as it is.
   const [savedVaultKey, setSavedVaultKey] = useState<string | null>(null);
@@ -174,6 +175,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     unlockDeclined.current = false;
     refreshPorts();
     setVaultSaveError(null);
+    setNameError(null);
     vaultListEntriesMeta().then(setVaultEntries).catch(() => {});
     void checkVault();
     if (editingSession) {
@@ -356,6 +358,18 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     const sessionName = name.trim() || hostname.trim() || (protocol === 'Serial' ? serialLine.trim() : '');
     if (!sessionName) return;
     setVaultSaveError(null);
+    // Saving writes PuTTY's session of that name, whatever was there: a new
+    // session, or a rename, onto a name already saved replaced that other
+    // session without a word (e2e suite). Compared without case: Windows
+    // keeps sessions in the registry, where R1 and r1 are the same key.
+    const taken = savedSessions.find(s =>
+      s.name.toLowerCase() === sessionName.toLowerCase()
+      && s.name !== editingSession?.name);
+    if (taken) {
+      setNameError(`A session named "${taken.name}" is already saved. Choose another name, or change that session instead.`);
+      setTab('general');
+      return;
+    }
 
     // Writing or checking a vault entry needs it unlocked: ask, then carry on.
     const needsVault = (useVault && vaultMode === 'new') || (!!jumpPassword && enableJumpHost);
@@ -829,9 +843,12 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   type="text"
                   placeholder={(isSerial ? serialLine.trim() : hostname.trim()) || (isSerial ? 'e.g. core-sw1 console' : 'Defaults to the host name')}
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={e => { setName(e.target.value); setNameError(null); }}
                   className="w-full bg-plinky-950 border border-plinky-700 rounded px-2.5 py-1.5 text-slate-100 placeholder-plinky-muted focus:outline-none focus:border-sky-500"
                 />
+                {nameError && (
+                  <p role="alert" className="text-rose-400 text-meta">{nameError}</p>
+                )}
                 {editingSession && name.trim() !== editingSession.name && (
                   <p className="text-amber-400 text-meta">
                     Changing the name saves a new session. "{editingSession.name}" stays as it is.
