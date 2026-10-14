@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { UI_THEMES, applyUiTheme, initUiTheme, contrast, findUiTheme, getUiTheme } from '../themes/uiThemes';
+import { UI_THEMES, applyUiTheme, initUiTheme, contrast, luminance, findUiTheme, getUiTheme } from '../themes/uiThemes';
 import { TERMINAL_THEMES, setTerminalTheme, getTerminalThemeId, findTerminalTheme, MATCH_INTERFACE, DEFAULT_TERMINAL_THEME } from '../themes/terminalThemes';
 import { TERMINAL_FONTS, primaryFamily } from '../themes/fonts';
 
@@ -18,11 +18,15 @@ describe('interface themes', () => {
     expect(col('plinky', 'white')).toBe('#ffffff');
   });
 
-  it('includes the ABtools palettes by name, then Classic Light', () => {
-    expect(UI_THEMES.map(t => t.name)).toEqual([
-      'Thyrion', 'Neutral Slate', 'Tokyo Night', 'Catppuccin Mocha', 'Nord',
-      'Gruvbox Dark', 'Bchips Violet', 'Dracula', 'GitHub Light', 'Classic Light',
-    ]);
+  it('offers the five themes the owner kept: Thyrion, two darker, two classic light', () => {
+    expect(UI_THEMES.map(t => t.name)).toEqual(['Thyrion', 'Midnight', 'Graphite', 'Classic Light', 'Classic Grey']);
+  });
+
+  it('the darker themes are darker than the default, and light ones are marked light', () => {
+    const bg = (id: string) => luminance(hexOf(findUiTheme(id).vars['--c-plinky-950']));
+    for (const id of ['midnight', 'graphite']) expect(bg(id)).toBeLessThan(bg('plinky'));
+    expect(hexOf(findUiTheme('graphite').vars['--c-plinky-950'])).toBe('#000000');
+    expect(UI_THEMES.filter(t => t.light).map(t => t.name)).toEqual(['Classic Light', 'Classic Grey']);
   });
 
   it('has a Classic Light terminal: black on white, light', () => {
@@ -53,12 +57,20 @@ describe('interface themes', () => {
   }
 
   it('applies by setting variables, marks light themes, and is remembered', () => {
-    applyUiTheme('github-light');
-    expect(document.documentElement.style.getPropertyValue('--c-plinky-950')).toBe('246 248 250');
+    applyUiTheme('classic-grey');
+    expect(document.documentElement.style.getPropertyValue('--c-plinky-950')).toBe('212 208 200');
     expect(document.documentElement.style.colorScheme).toBe('light');
     applyUiTheme('plinky', false);
     initUiTheme();
-    expect(document.documentElement.dataset.uiTheme).toBe('github-light');
+    expect(document.documentElement.dataset.uiTheme).toBe('classic-grey');
+  });
+
+  it('a theme removed in v0.2.6 loads the nearest one kept, not a broken look', () => {
+    for (const [old, now] of [['github-light', 'classic-light'], ['dracula', 'plinky'], ['gruvbox-dark', 'plinky'], ['nord', 'plinky']]) {
+      localStorage.setItem('plinky_ui_theme', old);
+      initUiTheme();
+      expect(document.documentElement.dataset.uiTheme).toBe(now);
+    }
   });
 
   it('an unknown saved theme falls back to Thyrion', () => {
@@ -135,12 +147,12 @@ describe('match interface', () => {
     });
   });
 
-  it('under GitHub Light the terminal is light too', () => {
+  it('under a light interface the terminal is light too', () => {
     // A design review's run: a black terminal slab inside a white window.
-    applyUiTheme('github-light', false);
+    applyUiTheme('classic-grey', false);
     const t = findTerminalTheme(MATCH_INTERFACE);
-    expect(t.theme.background).toBe('#f6f8fa');
     expect(t.light).toBe(true);
+    expect(luminance(t.theme.background!)).toBeGreaterThan(0.5);
   });
 
   for (const ui of UI_THEMES) {

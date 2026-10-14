@@ -60,7 +60,8 @@ that is already open. Set GNS3's console command to
   `Thyrion Logs/<folder>/<session>/<date_time>.log`. Turn it on for all
   sessions in Settings > Logging, or per session in its settings.
 - **Manage tunnels and host keys** from one place.
-- **Make it yours.** Ten interface themes (including a classic light look),
+- **Make it yours.** Five interface themes (Thyrion, two darker ones
+  including true black, and two classic light looks),
   seventeen terminal colour schemes, and programming fonts built in, so they
   work offline.
 

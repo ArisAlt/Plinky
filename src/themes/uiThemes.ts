@@ -5,9 +5,12 @@ import { useEffect, useState } from 'react';
 // so a theme swaps the variables and every existing class follows it.
 //
 // "Thyrion" is the look the app always had: Tailwind's own slate/sky/emerald/
-// amber/rose/cyan values, byte for byte. The others are the palettes from
-// ABtools' AbtoolsGui.py (same names, same keys), expanded into full shade
-// scales by mixing each colour toward the theme's text or background.
+// amber/rose/cyan values, byte for byte. The others are palettes (ABtools'
+// AbtoolsGui.py keys), expanded into full shade scales by mixing each colour
+// toward the theme's text or background.
+//
+// Five, chosen by the owner from fifteen (2026-10): seven dark palettes were
+// near-copies of one another, dark blue-grey with another accent.
 
 export type Shade = 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950;
 export const SHADES: Shade[] = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
@@ -179,82 +182,6 @@ export function expandPalette(id: string, name: string, p: Palette): UiTheme {
   };
 }
 
-// ── ABtools' palettes (AbtoolsGui.py THEMES), verbatim ───────────────────────
-const ABTOOLS: Record<string, Palette> = {
-  'Neutral Slate': {
-    bg: '#0c0e12', surface: '#151821', field: '#1c202c', border: '#2c3242',
-    fg: '#e6eaf2', muted: '#8892a4',
-    accent: '#3b82f6', accent_hover: '#2563eb', accent_active: '#1d4ed8',
-    neutral: '#202533', neutral_hover: '#2b3245',
-    danger: '#f87171', danger_hover: '#dc2626', disabled: '#161922',
-    log_green: '#4ade80', log_red: '#f87171', log_yellow: '#fbbf24',
-    log_blue: '#60a5fa', log_cyan: '#22d3ee', log_magenta: '#c084fc',
-  },
-  'Tokyo Night': {
-    bg: '#16161e', surface: '#1f2335', field: '#24283b', border: '#363b54',
-    fg: '#c0caf5', muted: '#7aa2f7',
-    accent: '#7aa2f7', accent_hover: '#668ee0', accent_active: '#547bc8',
-    neutral: '#292e42', neutral_hover: '#3b4261',
-    danger: '#f7768e', danger_hover: '#e05a73', disabled: '#1c1f2e',
-    log_green: '#9ece6a', log_red: '#f7768e', log_yellow: '#e0af68',
-    log_blue: '#7aa2f7', log_cyan: '#7dcfff', log_magenta: '#bb9af7',
-  },
-  'Catppuccin Mocha': {
-    bg: '#181825', surface: '#1e1e2e', field: '#252538', border: '#36374f',
-    fg: '#cdd6f4', muted: '#a6adc8',
-    accent: '#89b4fa', accent_hover: '#74a3f0', accent_active: '#5f92e6',
-    neutral: '#313244', neutral_hover: '#45475a',
-    danger: '#f38ba8', danger_hover: '#e07396', disabled: '#222233',
-    log_green: '#a6e3a1', log_red: '#f38ba8', log_yellow: '#f9e2af',
-    log_blue: '#89b4fa', log_cyan: '#94e2d5', log_magenta: '#cba6f7',
-  },
-  Nord: {
-    bg: '#242933', surface: '#2e3440', field: '#3b4252', border: '#434c5e',
-    fg: '#eceff4', muted: '#98a4b8',
-    accent: '#88c0d0', accent_hover: '#77b2c2', accent_active: '#5e81ac',
-    neutral: '#3b4252', neutral_hover: '#4c566a',
-    danger: '#bf616a', danger_hover: '#a54e57', disabled: '#2c333f',
-    log_green: '#a3be8c', log_red: '#d4939a', log_yellow: '#ebcb8b',
-    log_blue: '#81a1c1', log_cyan: '#88c0d0', log_magenta: '#b48ead',
-  },
-  'Gruvbox Dark': {
-    bg: '#1d2021', surface: '#282828', field: '#32302f', border: '#4a4440',
-    fg: '#ebdbb2', muted: '#a89984',
-    accent: '#fabd2f', accent_hover: '#e6a800', accent_active: '#d79921',
-    neutral: '#3c3836', neutral_hover: '#504945',
-    danger: '#fb4934', danger_hover: '#cc241d', disabled: '#252525',
-    log_green: '#b8bb26', log_red: '#fb4934', log_yellow: '#fabd2f',
-    log_blue: '#83a598', log_cyan: '#8ec07c', log_magenta: '#d3869b',
-  },
-  'Bchips Violet': {
-    bg: '#121324', surface: '#1a1c36', field: '#232548', border: '#353765',
-    fg: '#e2e8f0', muted: '#939bb5',
-    accent: '#8b5cf6', accent_hover: '#7c3aed', accent_active: '#6d28d9',
-    neutral: '#26284d', neutral_hover: '#36396b',
-    danger: '#ef4444', danger_hover: '#dc2626', disabled: '#1e203b',
-    log_green: '#22c55e', log_red: '#ef4444', log_yellow: '#f59e0b',
-    log_blue: '#60a5fa', log_cyan: '#22d3ee', log_magenta: '#a78bfa',
-  },
-  Dracula: {
-    bg: '#21222c', surface: '#282a36', field: '#343746', border: '#44475a',
-    fg: '#f8f8f2', muted: '#a0a6bd',
-    accent: '#bd93f9', accent_hover: '#aa7df2', accent_active: '#915de6',
-    neutral: '#343746', neutral_hover: '#44475a',
-    danger: '#ff5555', danger_hover: '#e04444', disabled: '#1e1f29',
-    log_green: '#50fa7b', log_red: '#ff5555', log_yellow: '#f1fa8c',
-    log_blue: '#8be9fd', log_cyan: '#8be9fd', log_magenta: '#ff79c6',
-  },
-  'GitHub Light': {
-    bg: '#f6f8fa', surface: '#ffffff', field: '#f0f2f5', border: '#d0d7de',
-    fg: '#1f2328', muted: '#656d76',
-    accent: '#0969da', accent_hover: '#0858b7', accent_active: '#064593',
-    neutral: '#eaeef2', neutral_hover: '#dfe5eb',
-    danger: '#cf222e', danger_hover: '#a40e26', disabled: '#f3f4f6',
-    log_green: '#1a7f37', log_red: '#cf222e', log_yellow: '#9a6700',
-    log_blue: '#0969da', log_cyan: '#0550ae', log_magenta: '#8250df',
-  },
-};
-
 // ── Classic desktop ──────────────────────────────────────────────────────────
 // The light Windows chrome: grey toolbars, a white session list, the system
 // blue for selection.
@@ -268,22 +195,65 @@ const CLASSIC: Record<string, Palette> = {
     log_green: '#107c10', log_red: '#c42b1c', log_yellow: '#8a5d00',
     log_blue: '#0078d7', log_cyan: '#006b75', log_magenta: '#881798',
   },
+  // PuTTY's own look: the silver-grey Windows panels of its configuration
+  // window, white fields, navy title-bar blue.
+  'Classic Grey': {
+    bg: '#d4d0c8', surface: '#ece9e3', field: '#ffffff', border: '#9d9a93',
+    fg: '#000000', muted: '#4b4a47',
+    accent: '#0a246a', accent_hover: '#0c2c80', accent_active: '#0a246a',
+    neutral: '#e0ddd6', neutral_hover: '#d6d2ca',
+    danger: '#b00000', danger_hover: '#8c0000', disabled: '#dedbd4',
+    log_green: '#006400', log_red: '#b00000', log_yellow: '#7a5500',
+    log_blue: '#0a246a', log_cyan: '#00616b', log_magenta: '#7a1f7a',
+  },
+};
+
+// ── Darker ───────────────────────────────────────────────────────────────────
+// For dim rooms and long sessions: darker than the default.
+const DARKER: Record<string, Palette> = {
+  // Near-black blue-grey, the default's colours a step down.
+  Midnight: {
+    bg: '#05070b', surface: '#0b0f16', field: '#10151e', border: '#1f2733',
+    fg: '#e3e8ef', muted: '#8691a2',
+    accent: '#3b8eea', accent_hover: '#2f7bd4', accent_active: '#1f62b3',
+    neutral: '#141a24', neutral_hover: '#1c2431',
+    danger: '#f47174', danger_hover: '#d64045', disabled: '#0e131b',
+    log_green: '#4cc38a', log_red: '#f47174', log_yellow: '#e8b44c',
+    log_blue: '#5aa2f0', log_cyan: '#3fc5d8', log_magenta: '#b38cf2',
+  },
+  // True black and neutral greys: OLED screens, and the darkest room.
+  Graphite: {
+    bg: '#000000', surface: '#0a0a0a', field: '#111111', border: '#262626',
+    fg: '#e4e4e4', muted: '#8c8c8c',
+    accent: '#5e9cf5', accent_hover: '#4a88e0', accent_active: '#2f6bc4',
+    neutral: '#161616', neutral_hover: '#202020',
+    danger: '#f26d6d', danger_hover: '#d24444', disabled: '#0d0d0d',
+    log_green: '#5ccb7e', log_red: '#f26d6d', log_yellow: '#e2b54a',
+    log_blue: '#6aa5f5', log_cyan: '#4cc4cc', log_magenta: '#bf8cf0',
+  },
 };
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 export const UI_THEMES: UiTheme[] = [
   PLINKY,
-  ...Object.entries(ABTOOLS).map(([name, p]) => expandPalette(slug(name), name, p)),
+  ...Object.entries(DARKER).map(([name, p]) => expandPalette(slug(name), name, p)),
   ...Object.entries(CLASSIC).map(([name, p]) => expandPalette(slug(name), name, p)),
 ];
 export const DEFAULT_UI_THEME = 'plinky';
 
 // ── applying and remembering ─────────────────────────────────────────────────
 const KEY = 'plinky_ui_theme';
-// Themes renamed since they shipped: a choice saved under the old id still
-// loads. "securecrt" was v0.1.9-v0.1.11's name for Classic Light.
-const RENAMED: Record<string, string> = { securecrt: 'classic-light' };
+// Themes renamed or removed since they shipped: a choice saved under the old
+// id loads the nearest one kept. "securecrt" was v0.1.9-v0.1.11's name for
+// Classic Light; the dark blue-greys removed in v0.2.6 were closest to
+// Thyrion's own, GitHub Light to Classic Light.
+const RENAMED: Record<string, string> = {
+  securecrt: 'classic-light',
+  'github-light': 'classic-light',
+  'neutral-slate': 'plinky', 'tokyo-night': 'plinky', 'catppuccin-mocha': 'plinky', nord: 'plinky',
+  'gruvbox-dark': 'plinky', 'bchips-violet': 'plinky', dracula: 'plinky',
+};
 const EVENT = 'plinky:ui-theme';
 let current = DEFAULT_UI_THEME;
 
