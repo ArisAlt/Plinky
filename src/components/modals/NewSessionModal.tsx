@@ -96,6 +96,8 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [autoLogin, setAutoLogin] = useState(false);
   // Paste line delay in ms ('' or 0 = paste normally).
   const [pasteDelay, setPasteDelay] = useState('');
+  // Automatic log (PlinkyAutoLog): follow Settings > Logging, always, never.
+  const [autoLog, setAutoLog] = useState<'global' | 'always' | 'never'>('global');
   // Connection (T-016): PuTTY's keepalive settings and Thyrion's auto-reconnect.
   const [keepalive, setKeepalive] = useState('');
   const [tcpKeepalives, setTcpKeepalives] = useState(false);
@@ -238,6 +240,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setAutoLogin(extra.PlinkyAutoLogin === '1');
       const delay = pasteLineDelayFrom(extra);
       setPasteDelay(delay ? String(delay) : '');
+      setAutoLog(extra.PlinkyAutoLog === '1' ? 'always' : extra.PlinkyAutoLog === '0' ? 'never' : 'global');
       const ka = keepaliveSecondsFrom(extra);
       setKeepalive(ka ? String(ka) : '');
       setTcpKeepalives(extra.TCPKeepalives === '1');
@@ -288,6 +291,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       setAutoEnable(false);
       setAutoLogin(false);
       setPasteDelay('');
+      setAutoLog('global');
       setKeepalive('');
       setTcpKeepalives(false);
       setAutoReconnect(false);
@@ -556,6 +560,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     const pasteLineDelayMs = pasteLineDelayFrom({ PlinkyPasteLineDelayMs: pasteDelay });
     if (pasteLineDelayMs > 0) extra.PlinkyPasteLineDelayMs = String(pasteLineDelayMs);
     else delete extra.PlinkyPasteLineDelayMs;
+    if (autoLog === 'always') extra.PlinkyAutoLog = '1';
+    else if (autoLog === 'never') extra.PlinkyAutoLog = '0';
+    else delete extra.PlinkyAutoLog;
     if (autoLogin && (protocol === 'Telnet' || protocol === 'Serial')) extra.PlinkyAutoLogin = '1';
     else delete extra.PlinkyAutoLogin;
 
@@ -594,7 +601,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     ...(protocol === 'SSH' ? [{ id: 'jump' as const, label: 'Jump Host', on: enableJumpHost }] : []),
     ...(isSerial ? [{ id: 'serial' as const, label: 'Serial' }] : []),
     { id: 'appearance', label: 'Appearance', on: !!(lookScheme || lookFont || lookSize) },
-    { id: 'advanced', label: 'Advanced', on: (!isSerial && (parseInt(keepalive, 10) > 0 || autoReconnect)) || parseInt(pasteDelay, 10) > 0 || logonActions.some(a => a.send.trim()) },
+    { id: 'advanced', label: 'Advanced', on: (!isSerial && (parseInt(keepalive, 10) > 0 || autoReconnect)) || parseInt(pasteDelay, 10) > 0 || autoLog !== 'global' || logonActions.some(a => a.send.trim()) },
   ];
   // Switching protocol can take away the tab that was open (Jump Host).
   const tab: SessionTab = visibleTabs.some(t => t.id === pickedTab) ? pickedTab : 'general';
@@ -1497,6 +1504,27 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                   </label>
                 </div>
               )}
+
+              {/* Automatic log (session/autolog.rs) */}
+              <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1 text-meta">
+                <label className="flex items-center justify-between space-x-2">
+                  <span className="text-slate-300 font-medium">Log this session</span>
+                  <select
+                    value={autoLog}
+                    onChange={e => setAutoLog(e.target.value as typeof autoLog)}
+                    aria-label="Log this session"
+                    className="bg-plinky-900 border border-plinky-700 rounded px-2 py-0.5 text-slate-100 text-xs focus:outline-none focus:border-sky-500"
+                  >
+                    <option value="global">As in Settings</option>
+                    <option value="always">Always</option>
+                    <option value="never">Never</option>
+                  </select>
+                </label>
+                <p className="text-plinky-muted">
+                  Each connection is saved to its own file, in Settings' log folder under this session's folder and
+                  name: {(folder.trim() || 'Saved Sessions')}/{(name.trim() || hostname.trim() || 'session')}/date_time.log.
+                </p>
+              </div>
 
               {/* Paste line delay (T-015) */}
               <div className="p-2.5 bg-plinky-950/70 border border-plinky-800 rounded-md space-y-1 text-meta">

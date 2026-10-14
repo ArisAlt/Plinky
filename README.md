@@ -55,8 +55,10 @@ that is already open. Set GNS3's console command to
   a tab in one Thyrion window.
 - **Save time.** Reusable command snippets with fill-in values, highlighted IPs
   and keywords, clickable links, and point-and-click cursor editing.
-- **Keep a record.** Log any session straight to a file of your choice as it
-  happens.
+- **Keep a record.** Log any session straight to a file as it happens, or
+  have every session logged automatically, each connection to its own file:
+  `Thyrion Logs/<folder>/<session>/<date_time>.log`. Turn it on for all
+  sessions in Settings > Logging, or per session in its settings.
 - **Manage tunnels and host keys** from one place.
 - **Make it yours.** Ten interface themes (including a classic light look),
   seventeen terminal colour schemes, and programming fonts built in, so they

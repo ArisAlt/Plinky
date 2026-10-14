@@ -10,6 +10,7 @@ import { detectPutty, PuttyDetectInfo, vaultIsInitialized, vaultDestroy } from '
 import { usePasteConfirmMode, setPasteConfirmMode, PasteConfirmMode } from '../../services/pasteConfirm';
 import { SHORTCUT_LIST } from '../../services/shortcuts';
 import { TerminalSchemePreview } from '../common/TerminalSchemePreview';
+import { LoggingSettingsSection } from './LoggingSettingsSection';
 import { SCROLLBACK_CHOICES, DEFAULT_SCROLLBACK, setScrollback, useScrollback } from '../../services/scrollback';
 
 const PASTE_OPTIONS: { mode: PasteConfirmMode; label: string; hint: string }[] = [
@@ -384,6 +385,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </dl>
             <p className="text-meta text-plinky-muted">Ctrl+C and Ctrl+V go to the device, as in PuTTY.</p>
           </div>
+
+          {/* Section: Logging (session/autolog.rs) */}
+          <LoggingSettingsSection isOpen={isOpen} />
 
           {/* Section: Scripts (src-tauri/src/scripts.rs, scripting/plinky.py) */}
           <div className="space-y-3">

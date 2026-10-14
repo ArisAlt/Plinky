@@ -1036,7 +1036,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         tab.port,
         tab.username,
         (tab as any).logFileName,
-        targetProtocolOf(tab.protocol)
+        targetProtocolOf(tab.protocol),
+        tab.title
       ).then(({ started, error }) => {
         if (disposed) {
           // Tab closed while the spawn was in flight: its close ran as a

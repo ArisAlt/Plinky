@@ -26,6 +26,9 @@ serialport = { version = "4.10", default-features = false }
 tempfile = "3.10"
 # Export the vault to a KeePass (KDBX4) database.
 keepass = { version = "0.15", features = ["save_kdbx4"] }
+# Local time for automatic log names (session/autolog.rs). Already built
+# for keepass with these features: nothing new is downloaded.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [target.'cfg(windows)'.dependencies]
 # Overlapped serial I/O, as PuTTY does it (transport/serial.rs). The version

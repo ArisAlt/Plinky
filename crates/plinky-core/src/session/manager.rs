@@ -941,6 +941,24 @@ impl SessionRegistry {
         Ok(out)
     }
 
+    /// Starts a log that holds the session from its first byte: what the
+    /// session printed before the log opened (a few milliseconds of it, for
+    /// a log opened as the session starts) is written first.
+    pub fn start_log_from_start(&self, id: &str, path: &std::path::Path, mode: super::log::LogMode) -> Result<std::path::PathBuf> {
+        let mut log = super::log::SessionLog::open(path, mode)
+            .map_err(|e| PlinkyError::ProcessError(format!("Couldn't open the log file {}: {e}", path.display())))?;
+        let mut lock = self.sessions.lock().unwrap();
+        let session = lock.get_mut(id).ok_or_else(|| PlinkyError::SessionNotFound(id.to_string()))?;
+        let (so_far, _) = session.scrollback.get_since(0);
+        if !so_far.is_empty() {
+            log.write(&so_far)
+                .map_err(|e| PlinkyError::ProcessError(format!("Couldn't write the log file {}: {e}", path.display())))?;
+        }
+        let out = log.path().to_path_buf();
+        session.log = Some(log);
+        Ok(out)
+    }
+
     /// Stops logging. The file is closed and stays where it is.
     pub fn stop_log(&self, id: &str) {
         if let Some(s) = self.sessions.lock().unwrap().get_mut(id) {

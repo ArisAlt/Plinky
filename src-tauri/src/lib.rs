@@ -334,6 +334,8 @@ async fn start_terminal_session(
     log_file_name: Option<String>,
     // For a target that isn't a saved session: GNS3 consoles are telnet.
     protocol: Option<plinky_core::transport::plink::TargetProtocol>,
+    // The tab's title, for filing the automatic log of an unsaved session.
+    title: Option<String>,
 ) -> Result<(), String> {
     let putty_log = if is_local || log_file_name.as_deref().is_some_and(|n| !n.is_empty()) {
         None
@@ -341,6 +343,13 @@ async fn start_terminal_session(
         putty_compat::sessions::read_session(&session_name)
             .ok()
             .and_then(|s| putty_session_log(&s, unix_now()))
+    };
+    // A log the session already has (a file given, PuTTY's own setting)
+    // comes first; otherwise the automatic one, if it gets one.
+    let auto_log = if putty_log.is_some() || log_file_name.as_deref().is_some_and(|n| !n.is_empty()) {
+        None
+    } else {
+        auto_log_for(&app, &session_name, title.as_deref(), is_local)
     };
     let logon = if is_local {
         None
@@ -365,6 +374,13 @@ async fn start_terminal_session(
         // milliseconds can reach the page before the log. A log that can't
         // be opened doesn't stop the session.
         if let Err(e) = registry.start_log(&session_id, &path, mode) {
+            eprintln!("thyrion: {}", shown(e));
+        }
+    }
+    if let Some((path, mode)) = auto_log {
+        // From the session's first byte. A log that can't be opened (a
+        // folder that's gone, a full disk) doesn't stop the session.
+        if let Err(e) = registry.start_log_from_start(&session_id, &path, mode) {
             eprintln!("thyrion: {}", shown(e));
         }
     }
@@ -567,6 +583,121 @@ fn session_log_status(registry: State<'_, Arc<SessionRegistry>>, session_id: Str
     registry
         .log_status(&session_id)
         .map(|(path, bytes)| SessionLogInfo { path: path.display().to_string(), bytes })
+}
+
+/// Where the automatic-log setting is kept: the backend's own file, since a
+/// GNS3 console starts (and may need logging) before the page exists.
+fn logging_settings_file(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("logging.json"))
+}
+
+fn logging_settings(app: &tauri::AppHandle) -> plinky_core::session::autolog::LoggingSettings {
+    logging_settings_file(app)
+        .map(|f| plinky_core::session::autolog::LoggingSettings::load(&f))
+        .unwrap_or_default()
+}
+
+/// Documents/Thyrion Logs, where the manual log's dialog opens too.
+fn default_logs_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path()
+        .document_dir()
+        .or_else(|_| app.path().home_dir())
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("Thyrion Logs")
+}
+
+/// The automatic log for a session about to start, if it gets one:
+/// `<log folder>/<session folder>/<session>/<local time>.log`. A saved
+/// session's `PlinkyAutoLog` decides for it, the global setting for the
+/// rest; one that isn't saved (a GNS3 console, a quick connect, the local
+/// shell) goes under "Unsaved", by its tab's title: a GNS3 console's session
+/// name is telnet://host:port (cli.rs), the title is the device.
+fn auto_log_for(
+    app: &tauri::AppHandle,
+    session_name: &str,
+    title: Option<&str>,
+    is_local: bool,
+) -> Option<(std::path::PathBuf, plinky_core::session::log::LogMode)> {
+    use plinky_core::session::autolog::{log_path, session_choice, wanted, Stamp};
+    let settings = logging_settings(app);
+    let saved = (!is_local).then(|| putty_compat::sessions::read_session(session_name).ok()).flatten();
+    if !wanted(&settings, saved.as_ref().and_then(|s| session_choice(&s.extra))) {
+        return None;
+    }
+    // A saved session with no folder of its own is listed under "Saved
+    // Sessions": its logs go there too.
+    let folder = saved.as_ref().map(|s| s.extra.get("PlinkyFolder").cloned().unwrap_or_else(|| "Saved Sessions".into()));
+    let dir = settings.dir.clone().unwrap_or_else(|| default_logs_dir(app));
+    let name = match (&saved, title.map(str::trim).filter(|t| !t.is_empty())) {
+        (None, Some(title)) => title,
+        _ => session_name,
+    };
+    Some((log_path(&dir, folder.as_deref(), name, Stamp::now_local()), settings.mode))
+}
+
+/// The automatic-log setting, as Settings shows it.
+#[derive(serde::Serialize)]
+struct LoggingSettingsView {
+    enabled: bool,
+    /// The folder in use, the default one included.
+    dir: String,
+    /// Whether that folder is the default.
+    default_dir: bool,
+    mode: plinky_core::session::log::LogMode,
+}
+
+#[tauri::command]
+fn get_logging_settings(app: tauri::AppHandle) -> LoggingSettingsView {
+    let s = logging_settings(&app);
+    LoggingSettingsView {
+        enabled: s.enabled,
+        default_dir: s.dir.is_none(),
+        dir: s.dir.clone().unwrap_or_else(|| default_logs_dir(&app)).display().to_string(),
+        mode: s.mode,
+    }
+}
+
+/// Saves the automatic-log setting. `dir` empty or absent: the default
+/// folder. Applies to sessions started from now on.
+#[tauri::command]
+fn set_logging_settings(
+    app: tauri::AppHandle,
+    enabled: bool,
+    dir: Option<String>,
+    mode: plinky_core::session::log::LogMode,
+) -> Result<LoggingSettingsView, String> {
+    let file = logging_settings_file(&app).ok_or("No app data folder to keep the setting in")?;
+    let dir = dir.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()).map(std::path::PathBuf::from);
+    if let Some(d) = &dir {
+        // A relative folder would land wherever the app happens to run.
+        if !d.is_absolute() {
+            return Err(format!("Choose a full folder path, not \"{}\"", d.display()));
+        }
+    }
+    plinky_core::session::autolog::LoggingSettings { enabled, dir, mode }
+        .save(&file)
+        .map_err(|e| format!("Couldn't save the logging setting: {e}"))?;
+    Ok(get_logging_settings(app))
+}
+
+/// Asks for the folder automatic logs go to; `None` if the dialog was
+/// cancelled.
+#[tauri::command]
+async fn pick_log_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let start = std::path::PathBuf::from(get_logging_settings(app.clone()).dir);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut dialog = app.dialog().file().set_title("Folder for session logs");
+    if start.is_dir() {
+        dialog = dialog.set_directory(&start);
+    }
+    dialog.pick_folder(move |picked| {
+        let _ = tx.send(picked);
+    });
+    let Some(picked) = rx.await.map_err(|_| "The folder dialog closed unexpectedly".to_string())? else {
+        return Ok(None);
+    };
+    Ok(Some(picked.into_path().map_err(|e| e.to_string())?.display().to_string()))
 }
 
 /// PuTTY's own per-session logging: `LogType` 1 (printable) or 2 (all
@@ -1616,6 +1747,11 @@ async fn start_console_session(app: &tauri::AppHandle, mut req: cli::OpenRequest
     .await
     {
         Ok(()) => {
+            if let Some((path, mode)) = auto_log_for(app, &name, req.title.as_deref(), false) {
+                if let Err(e) = registry.start_log_from_start(&id, &path, mode) {
+                    eprintln!("thyrion: {}", shown(e));
+                }
+            }
             // Free-running into scrollback until a tab attaches.
             let _ = registry.detach_session(&id);
             watch_connection(app, id.clone());
@@ -1835,6 +1971,9 @@ pub fn run() {
             start_terminal_session,
             attach_terminal_session,
             start_session_log,
+            get_logging_settings,
+            set_logging_settings,
+            pick_log_folder,
             stop_session_log,
             session_log_status,
             detach_terminal_session,

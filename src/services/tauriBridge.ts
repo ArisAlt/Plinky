@@ -645,7 +645,10 @@ export async function startTerminalSession(
   port?: number,
   username?: string,
   logFileName?: string,
-  protocol?: TargetProtocol
+  protocol?: TargetProtocol,
+  /** The tab's title: an automatic log of a session that isn't saved is
+   *  filed under it (Unsaved/R1), not under telnet://host:port. */
+  title?: string
 ): Promise<{ started: boolean; error?: string }> {
   if (isTauriEnvironment()) {
     try {
@@ -667,6 +670,7 @@ export async function startTerminalSession(
         username,
         logFileName: logFileName || null,
         protocol: protocol ?? null,
+        title: title ?? null,
       });
       return { started: true };
     } catch (e) {
@@ -848,6 +852,34 @@ export function writeTerminalInput(sessionId: string, data: Uint8Array): Promise
     if (writeChains.get(sessionId) === next) writeChains.delete(sessionId);
   });
   return next;
+}
+
+/** Automatic session logs (Settings > Logging). */
+export interface LoggingSettings {
+  enabled: boolean;
+  /** The folder in use, the default one included. */
+  dir: string;
+  /** Whether that folder is the default (Documents/Thyrion Logs). */
+  default_dir: boolean;
+  mode: 'printable' | 'all';
+}
+
+export async function getLoggingSettings(): Promise<LoggingSettings | null> {
+  if (!isTauriEnvironment()) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<LoggingSettings>('get_logging_settings');
+}
+
+/** `dir` null: the default folder. Applies to sessions started from now on. */
+export async function setLoggingSettings(enabled: boolean, dir: string | null, mode: 'printable' | 'all'): Promise<LoggingSettings> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<LoggingSettings>('set_logging_settings', { enabled, dir, mode });
+}
+
+/** A folder for the logs, from the system's folder dialog; null if cancelled. */
+export async function pickLogFolder(): Promise<string | null> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string | null>('pick_log_folder');
 }
 
 // Resizes go in order too, for the same reason as writes: two sent while a

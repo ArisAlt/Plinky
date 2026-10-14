@@ -9,3 +9,4 @@ pub mod expect;
 pub mod begin_gate;
 pub mod log;
 
+pub mod autolog;

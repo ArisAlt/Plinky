@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SettingsModal } from '../components/modals/SettingsModal';
-import { vaultDestroy, vaultIsInitialized } from '../services/tauriBridge';
+import { vaultDestroy, vaultIsInitialized, setLoggingSettings } from '../services/tauriBridge';
 import { version } from '../../package.json';
 
 // Mock tauriBridge detectPutty
@@ -14,6 +14,11 @@ vi.mock('../services/tauriBridge', () => ({
   }),
   vaultIsInitialized: vi.fn().mockResolvedValue(true),
   vaultDestroy: vi.fn().mockResolvedValue(true),
+  getLoggingSettings: vi.fn().mockResolvedValue({ enabled: false, dir: '/home/ops/Documents/Thyrion Logs', default_dir: true, mode: 'printable' }),
+  setLoggingSettings: vi.fn(async (enabled: boolean, dir: string | null, mode: string) => ({
+    enabled, mode, dir: dir ?? '/home/ops/Documents/Thyrion Logs', default_dir: dir === null,
+  })),
+  pickLogFolder: vi.fn().mockResolvedValue('/srv/logs'),
 }));
 
 describe('SettingsModal Component', () => {
@@ -147,5 +152,41 @@ describe('SettingsModal Component', () => {
     expect(about.textContent).toContain('Thyrion');
     expect(about.textContent).toContain(`v${version}`);
     expect(about.textContent).toContain('Alis');
+  });
+
+  describe('Logging', () => {
+    const renderSettings = () => render(
+      <SettingsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        fontFamily="monospace"
+        onChangeFontFamily={vi.fn()}
+        fontSize={13}
+        onChangeFontSize={vi.fn()}
+        cursorStyle="block"
+        onChangeCursorStyle={vi.fn()}
+        onResetLayout={vi.fn()}
+      />
+    );
+
+    it('shows the folder logs go to and how they are filed', async () => {
+      renderSettings();
+      expect(await screen.findByText('/home/ops/Documents/Thyrion Logs')).toBeInTheDocument();
+      expect(screen.getByText(/<folder>\/<session>\/2026-10-14_16-05-33\.log/)).toBeInTheDocument();
+    });
+
+    it('turns automatic logging on, keeping the default folder and the format', async () => {
+      renderSettings();
+      fireEvent.click(await screen.findByLabelText('Log every session automatically'));
+      await waitFor(() => expect(setLoggingSettings).toHaveBeenCalledWith(true, null, 'printable'));
+    });
+
+    it('a chosen folder is saved, and Default puts it back', async () => {
+      renderSettings();
+      fireEvent.click(await screen.findByText('Choose…'));
+      await waitFor(() => expect(setLoggingSettings).toHaveBeenCalledWith(false, '/srv/logs', 'printable'));
+      fireEvent.click(await screen.findByText('Default'));
+      await waitFor(() => expect(setLoggingSettings).toHaveBeenLastCalledWith(false, null, 'printable'));
+    });
   });
 });

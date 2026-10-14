@@ -3095,6 +3095,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
+ "chrono",
  "keepass",
  "libc",
  "portable-pty",
