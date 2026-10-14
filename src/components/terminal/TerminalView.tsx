@@ -146,6 +146,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const isLivePtyRef = useRef<boolean>(false);
+  // Keys typed before this view has a session to send them to (its attach
+  // or start still in flight). They were dropped: the tab can already show
+  // live (the connection event comes separately), and on Windows, where an
+  // attach takes a few hundred ms, the first Enter typed into a console
+  // just opened never reached the router (e2e suite on a Windows runner).
+  const heldInputRef = useRef<Uint8Array[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isOsc133IntegratedRef = useRef<boolean>(false);
   const isPromptInputRegionRef = useRef<boolean>(true);
@@ -891,9 +897,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // (ADR-006). Only live output counts: a replay was never sent by the
     // backend, so there is nothing to acknowledge.
     const acker = createOutputAcker(tab.id);
+    // The session is there: send what was typed while it wasn't, in order.
+    const goLive = () => {
+      isLivePtyRef.current = true;
+      for (const keys of heldInputRef.current.splice(0)) writeTerminalInput(tab.id, keys);
+    };
     const handleIncomingChunk = (chunk: Uint8Array, live = true) => {
       if (disposed) return;
-      isLivePtyRef.current = true;
+      goLive();
       if (chunk.length > 0) setWaitingSince(null);
       term.write(chunk, () => {
         scheduleHighlight();
@@ -1036,9 +1047,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           return;
         }
         if (started) {
-          isLivePtyRef.current = true;
+          goLive();
         }
         if (!started) {
+          heldInputRef.current = [];
           setWaitingSince(null);
           onUpdateTab(tab.id, { status: 'disconnected' });
           if (isTauriEnvironment()) {
@@ -1131,7 +1143,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       .then((attachInfo) => {
         if (disposed) return;
         if (attachInfo) {
-          isLivePtyRef.current = true;
+          goLive();
           // A session started before this view (a console from GNS3, a
           // background tab) began at 120x32. The resize observer fired
           // before the attach, while nothing was live, so tell it the real
@@ -1221,7 +1233,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (sub && sub !== before && isCommandSubmission(sub.line, recentOutputRef.current)) commandRunRef.current = true;
       if (isLivePtyRef.current) {
         writeTerminalInput(tab.id, new TextEncoder().encode(data));
-      } else if (!isTauriEnvironment()) {
+      } else if (isTauriEnvironment()) {
+        // Held until the session is there (goLive). A bound keeps a tab
+        // that never gets one from collecting a paste forever.
+        const held = heldInputRef.current;
+        if (held.reduce((n, k) => n + k.length, 0) < 64 * 1024) held.push(new TextEncoder().encode(data));
+      } else {
         // Echo input locally for browser preview
         if (data === '\r') {
           term.write('\r\n');
